@@ -1,5 +1,5 @@
 GRUNT = grunt
-GRUNT_FLAGS = --no-color -v 
+GRUNT_FLAGS = --no-color -v --noclosure --desktop=true
 
 OUTPUT_DIR = deploy
 OUTPUT = $(OUTPUT_DIR)
@@ -27,7 +27,7 @@ all: $(WEBAPPS)
 
 $(WEBAPPS): $(WEBAPPS_FILES)
 	mkdir -p $(OUTPUT)/$(WEBAPPS_DIR) && \
-		cp -r -t $(OUTPUT)/$(WEBAPPS_DIR) ../$(WEBAPPS_DIR)/deploy/** 
+		cp -r ../$(WEBAPPS_DIR)/deploy/** $(OUTPUT)/$(WEBAPPS_DIR)
 
 $(WEBAPPS_FILES): $(NODE_MODULES) $(SDKJS_FILES)
 	cd ../$(WEBAPPS_DIR)/build  && \
