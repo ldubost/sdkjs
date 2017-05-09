@@ -128,6 +128,11 @@ var editor;
 
     this.formulasList = null;	// Список всех формул
 
+    if (window.editor == undefined)
+    {
+     window.editor = this;
+    }
+
     this._init();
     return this;
   }
