@@ -206,6 +206,9 @@ function ZBase32Encoder()
 
     this.Encode = function(sData)
     {
+        // Line to add to not obfuscate font names
+        return encodeURIComponent(sData);
+
         var data = this.GetUTF8_fromUTF16(sData);
 
         var encodedResult = "";
