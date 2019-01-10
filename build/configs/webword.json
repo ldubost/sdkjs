@@ -19,6 +19,7 @@
 		"../word/apiDefines.js",
 		"../common/CollaborativeEditingBase.js",
 		"../word/Editor/CollaborativeEditing.js",
+		"../common/macros.js",
 		"../common/apiBase.js",
 		"../common/Private/license.js",
 		"../word/apiCommon.js",
@@ -30,10 +31,13 @@
 		"../common/SerializeChart.js",
 		
 		"../common/FontsFreeType/font_engine.js",
-        "../common/FontsFreeType/FontFile.js",
-		"../common/FontsFreeType/font_map.js",
-        "../common/FontsFreeType/FontManager.js",
-		"../word/Editor/FontClassification.js",
+        "../common/FontsFreeType/font_map.js",
+	    "../common/FontsFreeType/RasterHeapManager.js",
+		"../common/FontsFreeType/GlyphString.js",
+		"../common/FontsFreeType/character.js",
+		"../common/FontsFreeType/FontFile.js",
+		"../common/FontsFreeType/FontManager.js",
+		"../common/FontsFreeType/FontClassification.js",
 		
 		"../common/Drawings/Metafile.js",
 		"../common/FontsFreeType/TextMeasurer.js",
@@ -57,6 +61,7 @@
 		"../common/Drawings/Format/Format.js",
 		"../common/Drawings/Format/GraphicObjectBase.js",
 		"../common/Drawings/Format/Shape.js",
+		"../common/Drawings/Format/CnxShape.js",
 		"../common/Drawings/Format/Path.js",
 		"../common/Drawings/Format/Image.js",
 		"../common/Drawings/Format/GroupShape.js",
@@ -76,6 +81,7 @@
 		"../common/Drawings/TrackObjects/ResizeTracks.js",
 		"../common/Drawings/TrackObjects/RotateTracks.js",
         "../common/Drawings/TrackObjects/Spline.js",
+		"../common/Drawings/TrackObjects/ConnectorTrack.js",
 		"../common/Drawings/DrawingObjectsHandlers.js",
 		"../common/Drawings/TextDrawer.js",
 		
@@ -106,17 +112,22 @@
         "../word/Editor/GraphicObjects/GraphicObjects.js",
         "../word/Editor/GraphicObjects/GraphicPage.js",
         "../word/Editor/GraphicObjects/WrapManager.js",
+		"../word/Editor/DocumentContentElementBase.js",
+		"../word/Editor/ParagraphContentBase.js",
         "../word/Editor/Comments.js",
         "../word/Editor/CommentsChanges.js",
+		"../word/Editor/Bookmarks.js",
         "../word/Editor/Styles.js",
         "../word/Editor/StylesChanges.js",
+		"../word/Editor/RevisionsChange.js",
         "../word/Editor/FlowObjects.js",
-        "../word/Editor/ParagraphContent.js",
-        "../word/Editor/ParagraphContentBase.js",
+        "../word/Editor/ParagraphContent.js",        
         "../word/Editor/Paragraph/ParaTextPr.js",
         "../word/Editor/Paragraph/ParaTextPrChanges.js",
         "../word/Editor/Paragraph/ParaDrawing.js",
         "../word/Editor/Paragraph/ParaDrawingChanges.js",
+		"../word/Editor/Paragraph/ComplexFieldInstruction.js",
+		"../word/Editor/Paragraph/ComplexField.js",
         "../word/Editor/Hyperlink.js",
         "../word/Editor/HyperlinkChanges.js",
         "../word/Editor/Field.js",
@@ -130,11 +141,18 @@
         "../word/Editor/Paragraph_Recalculate.js",
         "../word/Editor/Sections.js",
         "../word/Editor/SectionsChanges.js",
-        "../word/Editor/Numbering.js",
-        "../word/Editor/NumberingChanges.js",
+		"../word/Editor/Numbering/NumberingCommon.js",
+		"../word/Editor/Numbering/NumberingLvl.js",
+		"../word/Editor/Numbering/AbstractNum.js",
+		"../word/Editor/Numbering/AbstractNumChanges.js",
+		"../word/Editor/Numbering/Num.js",
+		"../word/Editor/Numbering/NumChanges.js",
+		"../word/Editor/Numbering/PresentationNumbering.js",
+		"../word/Editor/Numbering/Numbering.js",
         "../word/Editor/HeaderFooter.js",
 		"../word/Editor/DocumentContentBase.js",
         "../word/Editor/Document.js",
+		"../word/Editor/DocumentOutline.js",
         "../word/Editor/DocumentChanges.js",
         "../word/Editor/DocumentContent.js",
         "../word/Editor/DocumentContentChanges.js",
@@ -151,6 +169,10 @@
         "../word/Editor/Table/TableRowChanges.js",
         "../word/Editor/Table/TableCell.js",
         "../word/Editor/Table/TableCellChanges.js",
+        "../word/Editor/StructuredDocumentTags/BlockLevel.js",
+        "../word/Editor/StructuredDocumentTags/InlineLevel.js",
+        "../word/Editor/StructuredDocumentTags/SdtPr.js",
+        "../word/Editor/StructuredDocumentTags/SdtPrChanges.js",
         "../word/Editor/Serialize2.js",
         "../word/Editor/Search.js",        
         "../word/Editor/Spelling.js",
@@ -203,7 +225,6 @@
 		],
 		"common": [
           "../common/Local/common.js",
-		  "../word/Local/documentrenderer.js",
           "../word/Local/api.js"
 		]
       },
@@ -229,7 +250,9 @@
         "../common/FontsFreeType/font_engine.js",
         "../common/FontsFreeType/FontFile.js",
         "../common/FontsFreeType/FontManager.js",
-        "../common/FontsFreeType/TextMeasurer.js",       
+        "../common/FontsFreeType/TextMeasurer.js",    
+		"../common/FontsFreeType/RasterHeapManager.js",
+		"../common/FontsFreeType/GlyphString.js",		
         "../common/Scrolls/iscroll.js",
 		"../common/Scrolls/mobileTouchManagerBase.js",
 		"../word/Drawing/mobileTouchManager.js",
@@ -237,14 +260,12 @@
       ],
       "dst": "../word",
       "externs": [
-        "../common/Build/Externs.js",
-        "../../web-apps/vendor/jquery/jquery.min.js",
-        "../../web-apps/vendor/underscore/underscore-min.js",
-        "../../web-apps/vendor/sockjs/sockjs.min.js",
-        "../../web-apps/vendor/xregexp/xregexp-all-min.js",
-        "../../web-apps/vendor/jszip/jszip.min.js",
-        "../../web-apps/vendor/jszip-utils/jszip-utils.min.js",
-        "../../web-apps/vendor/jsrsasign/jsrsasign-latest-all-min.js"
+        "../common/externs/global.js",
+        "../common/externs/jquery-3.2.js",
+        "../common/externs/xregexp-3.0.0.js",
+        "../common/externs/sockjs.js",
+        "../common/externs/jszip.min.js",
+        "../common/externs/jszip-utils.js"
       ],
       "map": "sdk-all.js.map",
       "log": "../word/Build/Log"
@@ -252,10 +273,5 @@
     "source_map": {
       "url": "http://localhost:8080/sdkjs/word"
     }
-  },
-  "tasks": {
-    "build": [
-      "compile_sdk"
-    ]
   }
 }

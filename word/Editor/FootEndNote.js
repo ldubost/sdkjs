@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2018
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -111,34 +111,22 @@ CFootEndnote.prototype.IsCustomMarkFollows = function()
 CFootEndnote.prototype.AddDefaultFootnoteContent = function(sText)
 {
 	var oStyles    = this.LogicDocument.Get_Styles();
-	var oParagraph = this.Get_ElementByIndex(0);
+	var oParagraph = this.GetElement(0);
 
 	oParagraph.Style_Add(oStyles.GetDefaultFootnoteText());
 	var oRun = new ParaRun(oParagraph, false);
 	oRun.Set_RStyle(oStyles.GetDefaultFootnoteReference());
 	if (sText)
-	{
-		for (var nIndex = 0, nLen = sText.length; nIndex < nLen; ++nIndex)
-		{
-			var nChar = sText.charAt(nIndex);
-
-			if (" " === nChar)
-				oRun.Add_ToContent(nIndex, new ParaSpace(), true);
-			else
-				oRun.Add_ToContent(nIndex, new ParaText(nChar), true);
-		}
-	}
+		oRun.AddText(sText);
 	else
-	{
 		oRun.Add_ToContent(0, new ParaFootnoteRef(this));
-	}
 
 	oParagraph.Add_ToContent(0, oRun);
 	oRun = new ParaRun(oParagraph, false);
 	oRun.Add_ToContent(0, new ParaSpace());
 	oParagraph.Add_ToContent(1, oRun);
 
-	this.Cursor_MoveToEndPos(false);
+	this.MoveCursorToEndPos(false);
 };
 CFootEndnote.prototype.Recalculate_Page = function(PageIndex, bStart)
 {
@@ -149,7 +137,7 @@ CFootEndnote.prototype.GetHint = function()
 {
 	if (true === this.NeedUpdateHint)
 	{
-		var arrParagraphs = this.Get_AllParagraphs({All : true});
+		var arrParagraphs = this.GetAllParagraphs({All : true});
 		this.Hint         = "";
 		for (var nIndex = 0, nCount = arrParagraphs.length; nIndex < nCount; ++nIndex)
 		{

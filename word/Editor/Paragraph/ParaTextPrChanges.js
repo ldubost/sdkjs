@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2018
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -1342,7 +1342,7 @@ CChangesParaTextPrUnifill.prototype.Load = function(Color)
 		&& typeof Unifill.fill.RasterImageId === "string"
 		&& Unifill.fill.RasterImageId.length > 0)
 	{
-		AscCommon.CollaborativeEditing.Add_NewImage(AscCommon.getFullImageSrc2(Unifill.fill.RasterImageId));
+		AscCommon.CollaborativeEditing.Add_NewImage(Unifill.fill.RasterImageId);
 	}
 };
 CChangesParaTextPrUnifill.prototype.Merge = private_ParaTextPrChangesOnMergeValue;

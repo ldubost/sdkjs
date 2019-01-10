@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2018
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -72,10 +72,12 @@
 				}
 				return arr;
 			}();
-			this.recommendedSettings = new asc_CCSVAdvancedOptions (opt["codepage"], /*opt["delimiter"]*/AscCommon.c_oAscCsvDelimiter.Comma); // ToDo разделитель пока только "," http://bugzilla.onlyoffice.com/show_bug.cgi?id=31009
+			this.recommendedSettings = new asc_CCSVAdvancedOptions (opt["codepage"], opt["delimiter"]);
+			this.data = opt["data"];
 		}
 		asc_CCSVOptions.prototype.asc_getCodePages = function(){ return this.codePages;};
 		asc_CCSVOptions.prototype.asc_getRecommendedSettings = function () { return this.recommendedSettings; };
+		asc_CCSVOptions.prototype.asc_getData = function () { return this.data; };
 
 		/** @constructor */
 		function asc_CTXTOptions(opt){
@@ -89,17 +91,22 @@
 				return arr;
 			}();
 			this.recommendedSettings = new asc_CTXTAdvancedOptions (opt["codepage"]);
+			this.data = opt["data"];
 		}
 		asc_CTXTOptions.prototype.asc_getCodePages = function(){ return this.codePages;};
 		asc_CTXTOptions.prototype.asc_getRecommendedSettings = function () { return this.recommendedSettings; };
+		asc_CTXTOptions.prototype.asc_getData = function () { return this.data; };
 
 		/** @constructor */
-		function asc_CCSVAdvancedOptions(codepage,delimiter){
+		function asc_CCSVAdvancedOptions(codepage, delimiter, delimiterChar){
 			this.codePage = codepage;
 			this.delimiter = delimiter;
+			this.delimiterChar = delimiterChar;
 		}
 		asc_CCSVAdvancedOptions.prototype.asc_getDelimiter = function(){return this.delimiter;};
 		asc_CCSVAdvancedOptions.prototype.asc_setDelimiter = function(v){this.delimiter = v;};
+		asc_CCSVAdvancedOptions.prototype.asc_getDelimiterChar = function(){return this.delimiterChar;};
+		asc_CCSVAdvancedOptions.prototype.asc_setDelimiterChar = function(v){this.delimiterChar = v;};
 		asc_CCSVAdvancedOptions.prototype.asc_getCodePage = function(){return this.codePage;};
 		asc_CCSVAdvancedOptions.prototype.asc_setCodePage = function(v){this.codePage = v;};
 		
@@ -122,11 +129,13 @@
 			this.codePageName = null;
 			this.codePage = null;
 			this.text = null;
+			this.lcid = null;
 		}
 		asc_CCodePage.prototype.init = function (encoding) {
 			this.codePageName = encoding["name"];
 			this.codePage = encoding["codepage"];
 			this.text = encoding["text"];
+			this.lcid = encoding["lcid"];
 		};
 		asc_CCodePage.prototype.asc_getCodePageName = function(){return this.codePageName;};
 		asc_CCodePage.prototype.asc_setCodePageName = function(v){this.codePageName = v;};
@@ -134,6 +143,8 @@
 		asc_CCodePage.prototype.asc_setCodePage = function(v){this.codePage = v;};
 		asc_CCodePage.prototype.asc_getText = function(){return this.text;};
 		asc_CCodePage.prototype.asc_setText = function(v){this.text = v;};
+		asc_CCodePage.prototype.asc_getLcid = function(){return this.lcid;};
+		asc_CCodePage.prototype.asc_setLcid = function(v){this.lcid = v;};
 
 		/** @constructor */
 		function asc_CDelimiter(delimiter){
@@ -154,16 +165,12 @@
 		/** @constructor */
 		function asc_CFormula(o){
 			this.name = o.name;
-			this.arg = o.args;
 		}
 		asc_CFormula.prototype.asc_getName = function () {
 			return this.name;
 		};
 		asc_CFormula.prototype.asc_getLocaleName = function () {
 			return AscCommonExcel.cFormulaFunctionToLocale ? AscCommonExcel.cFormulaFunctionToLocale[this.name] : this.name;
-		};
-		asc_CFormula.prototype.asc_getArguments = function () {
-			return this.arg;
 		};
 
 		//----------------------------------------------------------export----------------------------------------------------
@@ -178,15 +185,19 @@
 		prot = asc_CCSVOptions.prototype;
 		prot["asc_getCodePages"]			= prot.asc_getCodePages;
 		prot["asc_getRecommendedSettings"]	= prot.asc_getRecommendedSettings;
+		prot["asc_getData"]	= prot.asc_getData;
 
 		prot = asc_CTXTOptions.prototype;
 		prot["asc_getCodePages"]			= prot.asc_getCodePages;
 		prot["asc_getRecommendedSettings"]	= prot.asc_getRecommendedSettings;
+		prot["asc_getData"]	= prot.asc_getData;
 
 		window["Asc"].asc_CCSVAdvancedOptions = window["Asc"]["asc_CCSVAdvancedOptions"] = asc_CCSVAdvancedOptions;
 		prot = asc_CCSVAdvancedOptions.prototype;
 		prot["asc_getDelimiter"] = prot.asc_getDelimiter;
 		prot["asc_setDelimiter"] = prot.asc_setDelimiter;
+		prot["asc_getDelimiterChar"] = prot.asc_getDelimiterChar;
+		prot["asc_setDelimiterChar"] = prot.asc_setDelimiterChar;
 		prot["asc_getCodePage"] = prot.asc_getCodePage;
 		prot["asc_setCodePage"] = prot.asc_setCodePage;
 
@@ -207,6 +218,8 @@
 		prot["asc_setCodePage"]			= prot.asc_setCodePage;
 		prot["asc_getText"]				= prot.asc_getText;
 		prot["asc_setText"]				= prot.asc_setText;
+		prot["asc_getLcid"]				= prot.asc_getLcid;
+		prot["asc_setLcid"]				= prot.asc_setLcid;
 
 		prot = asc_CDelimiter.prototype;
 		prot["asc_getDelimiterName"]			= prot.asc_getDelimiterName;
@@ -222,6 +235,5 @@
 		prot = asc_CFormula.prototype;
 		prot["asc_getName"]				= prot.asc_getName;
 		prot["asc_getLocaleName"]	= prot.asc_getLocaleName;
-		prot["asc_getArguments"]		= prot.asc_getArguments;
 	}
 )(window);

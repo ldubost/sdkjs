@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2018
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -229,7 +229,7 @@ function sfnt_get_charset_id(face,acharset_encoding,acharset_registry)
         FT_Error = tt_face_find_bdf_prop(face, "CHARSET_ENCODING", encoding);
         if (FT_Error == 0)
         {
-            if (registry.type == BDF_PROPERTY_TYPE_ATOM && encoding.type == BDF_PROPERTY_TYPE_ATOM)
+            if (registry.type == FT_Common.BDF_PROPERTY_TYPE_ATOM && encoding.type == FT_Common.BDF_PROPERTY_TYPE_ATOM)
             {
                 return {enc:encoding.u,reg:registry.u};
             }
@@ -597,6 +597,8 @@ function tt_face_load_font_dir(face, stream)
     face.format_tag = sfnt.format_tag;
 
     face.dir_tables = new Array(face.num_tables);
+    for (var dtNum = 0; dtNum < face.num_tables; dtNum++)
+        face.dir_tables[dtNum] = new TT_Table();
 
     error = stream.Seek(sfnt.offset + 12);
     if (0 == error)
@@ -609,7 +611,6 @@ function tt_face_load_font_dir(face, stream)
     var cur = 0;
     for (var nn = 0; nn < sfnt.num_tables; nn++ )
     {
-        face.dir_tables[cur] = new TT_Table();
         var entry = face.dir_tables[cur];
         entry.Tag      = stream.GetULong();
         entry.CheckSum = stream.GetULong();
@@ -1243,7 +1244,7 @@ function tt_face_get_metrics(face, vertical, gindex)
     var header = (vertical == 1) ? face.vertical : face.horizontal;
 
     var longs_m = null;
-    var k = header.number_Of_HMetrics;
+    var k = (vertical == 1) ? header.number_Of_VMetrics : header.number_Of_HMetrics;
 
     var v1 = 0;
     var v2 = 0;
@@ -2840,7 +2841,7 @@ function tt_cmap4_char_map_linear(cmap, _charcode, next)
     if (next != 0 && gindex != 0)
         return {gindex:gindex,char_code:charcode};
 
-    return {gindex:gindex,char_code:_char_code};
+    return {gindex:gindex,char_code:_charcode};
 }
 function tt_cmap4_char_map_binary(cmap, _charcode, next)
 {
@@ -3659,7 +3660,7 @@ function tt_cmap12_char_map_binary(cmap, _char_code, next)
 
         cmap.valid = 1;
         cmap.cur_charcode = char_code;
-        cmap12.cur_group = mid;
+        cmap.cur_group = mid;
 
         if (gindex == 0)
         {
@@ -3689,7 +3690,7 @@ function tt_cmap12_char_next(cmap, _char_code)
     if (cmap.cur_charcode >= 0xFFFFFFFF)
         return {gindex:gindex,char_code:__char_code};
 
-    if (cmap12.valid == 1 && cmap.cur_charcode == _char_code)
+    if (cmap.valid == 1 && cmap.cur_charcode == _char_code)
     {
         tt_cmap12_next(cmap);
         if (1 == cmap.valid)
@@ -3869,7 +3870,7 @@ function tt_cmap13_char_map_binary(cmap, _char_code, next)
 
         if (gindex == 0)
         {
-            tt_cmap13_next( cmap13 );
+            tt_cmap13_next( cmap );
             if (cmap.valid == 1)
                 gindex = cmap.cur_gindex;
         }
@@ -3906,7 +3907,7 @@ function tt_cmap13_char_next(cmap, _char_code)
             gindex = 0;
     }
     else
-        return tt_cmap13_char_map_binary( cmap, pchar_code, 1 );
+        return tt_cmap13_char_map_binary( cmap, _char_code, 1 );
 
     return {gindex:gindex,char_code:__char_code};
 }
@@ -3919,7 +3920,7 @@ function tt_cmap13_class_rec()
         var p = dublicate_pointer(table);
         var base = p.pos;
 
-        if (bae + 16 > valid.limit)
+        if (base + 16 > valid.limit)
             return FT_Common.FT_Err_Invalid_Table;
 
         p.pos = base + 4;
@@ -4280,13 +4281,13 @@ function tt_cmap14_variant_chars(cmap, memory, variantSelector)
     {
         var __pp = dublicate_pointer(_cmap_data);
         __pp += defOff;
-        return tt_cmap14_get_def_chars(cmap, _p, memory);
+        return tt_cmap14_get_def_chars(cmap, __pp, memory);
     }
     if (dcnt == 0)
     {
         var __pp = dublicate_pointer(_cmap_data);
         __pp += nondefOff;
-        return tt_cmap14_get_nondef_chars(cmap, __p, memory);
+        return tt_cmap14_get_nondef_chars(cmap, __pp, memory);
     }
 
     if (0 != tt_cmap14_ensure(cmap, (dcnt + numMappings + 1), memory))

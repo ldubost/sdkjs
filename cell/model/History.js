@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2018
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -46,7 +46,6 @@ function (window, undefined) {
 	window['AscCH'].historyitem_Workbook_SheetRemove = 2;
 	window['AscCH'].historyitem_Workbook_SheetMove = 3;
 	window['AscCH'].historyitem_Workbook_ChangeColorScheme = 5;
-	window['AscCH'].historyitem_Workbook_AddFont = 6;
 	window['AscCH'].historyitem_Workbook_DefinedNamesChange = 7;
 	window['AscCH'].historyitem_Workbook_DefinedNamesChangeUndo = 8;
 
@@ -65,11 +64,6 @@ function (window, undefined) {
 	window['AscCH'].historyitem_Worksheet_MoveRange = 13;
 	window['AscCH'].historyitem_Worksheet_Rename = 18;
 	window['AscCH'].historyitem_Worksheet_Hide = 19;
-//не добавляем в историю события historyitem_Worksheet_CreateRow, CreateCol, CreateCell - потому что появляется много ошибок(например удаление строк, если снизу были данные и undo)
-//они решают только одну проблему, что когда есть стиль колонки, а мы создаем ячейку, при полном undo не отменится стиль ячейки.
-	window['AscCH'].historyitem_Worksheet_CreateRow = 20;
-	window['AscCH'].historyitem_Worksheet_CreateCol = 21;
-	window['AscCH'].historyitem_Worksheet_CreateCell = 22;
 
 	window['AscCH'].historyitem_Worksheet_ChangeMerge = 25;
 	window['AscCH'].historyitem_Worksheet_ChangeHyperlink = 26;
@@ -94,11 +88,11 @@ function (window, undefined) {
 	window['AscCH'].historyitem_RowCol_Border = 12;
 	window['AscCH'].historyitem_RowCol_ShrinkToFit = 13;
 	window['AscCH'].historyitem_RowCol_Wrap = 14;
-	window['AscCH'].historyitem_RowCol_NumFormat = 15;
 	window['AscCH'].historyitem_RowCol_SetFont = 16;
 	window['AscCH'].historyitem_RowCol_Angle = 17;
 	window['AscCH'].historyitem_RowCol_SetStyle = 18;
 	window['AscCH'].historyitem_RowCol_SetCellStyle = 19;
+	window['AscCH'].historyitem_RowCol_Num = 20;
 
 	window['AscCH'].historyitem_Cell_Fontname = 1;
 	window['AscCH'].historyitem_Cell_Fontsize = 2;
@@ -114,7 +108,6 @@ function (window, undefined) {
 	window['AscCH'].historyitem_Cell_Border = 12;
 	window['AscCH'].historyitem_Cell_ShrinkToFit = 13;
 	window['AscCH'].historyitem_Cell_Wrap = 14;
-	window['AscCH'].historyitem_Cell_Numformat = 15;
 	window['AscCH'].historyitem_Cell_ChangeValue = 16;
 	window['AscCH'].historyitem_Cell_ChangeArrayValueFormat = 17;
 	window['AscCH'].historyitem_Cell_SetStyle = 18;
@@ -123,22 +116,24 @@ function (window, undefined) {
 	window['AscCH'].historyitem_Cell_Angle = 21;
 	window['AscCH'].historyitem_Cell_Style = 22;
 	window['AscCH'].historyitem_Cell_ChangeValueUndo = 23;
+	window['AscCH'].historyitem_Cell_Num = 24;
+	window['AscCH'].historyitem_Cell_SetPivotButton = 25;
+	window['AscCH'].historyitem_Cell_RemoveSharedFormula = 26;
 
 	window['AscCH'].historyitem_Comment_Add = 1;
 	window['AscCH'].historyitem_Comment_Remove = 2;
 	window['AscCH'].historyitem_Comment_Change = 3;
+	window['AscCH'].historyitem_Comment_Coords = 4;
 
-	window['AscCH'].historyitem_AutoFilter_Add		= 1;
-	window['AscCH'].historyitem_AutoFilter_Sort		= 2;
-	window['AscCH'].historyitem_AutoFilter_Empty	= 3;
-	window['AscCH'].historyitem_AutoFilter_ApplyDF	= 4;
-	window['AscCH'].historyitem_AutoFilter_ApplyMF	= 5;
-	window['AscCH'].historyitem_AutoFilter_Move     = 6;
-	window['AscCH'].historyitem_AutoFilter_CleanAutoFilter  = 7;
-	window['AscCH'].historyitem_AutoFilter_Delete   = 8;
+	window['AscCH'].historyitem_AutoFilter_Add = 1;
+	window['AscCH'].historyitem_AutoFilter_Sort = 2;
+	window['AscCH'].historyitem_AutoFilter_Empty = 3;
+	window['AscCH'].historyitem_AutoFilter_Apply = 5;
+	window['AscCH'].historyitem_AutoFilter_Move = 6;
+	window['AscCH'].historyitem_AutoFilter_CleanAutoFilter = 7;
+	window['AscCH'].historyitem_AutoFilter_Delete = 8;
 	window['AscCH'].historyitem_AutoFilter_ChangeTableStyle = 9;
 	window['AscCH'].historyitem_AutoFilter_Change = 10;
-	window['AscCH'].historyitem_AutoFilter_CleanFormat  = 11;
 	window['AscCH'].historyitem_AutoFilter_ChangeTableInfo = 12;
 	window['AscCH'].historyitem_AutoFilter_ChangeTableRef = 13;
 	window['AscCH'].historyitem_AutoFilter_ChangeTableName = 14;
@@ -146,6 +141,26 @@ function (window, undefined) {
 	window['AscCH'].historyitem_AutoFilter_ChangeColumnName = 16;
 	window['AscCH'].historyitem_AutoFilter_ChangeTotalRow = 17;
 
+	window['AscCH'].historyitem_PivotTable_StyleName = 1;
+	window['AscCH'].historyitem_PivotTable_StyleShowRowHeaders = 2;
+	window['AscCH'].historyitem_PivotTable_StyleShowColHeaders = 3;
+	window['AscCH'].historyitem_PivotTable_StyleShowRowStripes = 4;
+	window['AscCH'].historyitem_PivotTable_StyleShowColStripes = 5;
+
+	window['AscCH'].historyitem_SharedFormula_ChangeFormula = 1;
+	window['AscCH'].historyitem_SharedFormula_ChangeShared = 2;
+
+	window['AscCH'].historyitem_Layout_Left = 1;
+	window['AscCH'].historyitem_Layout_Right = 2;
+	window['AscCH'].historyitem_Layout_Top = 3;
+	window['AscCH'].historyitem_Layout_Bottom = 4;
+	window['AscCH'].historyitem_Layout_Width = 5;
+	window['AscCH'].historyitem_Layout_Height = 6;
+	window['AscCH'].historyitem_Layout_FitToWidth = 7;
+	window['AscCH'].historyitem_Layout_FitToHeight = 8;
+	window['AscCH'].historyitem_Layout_GridLines = 9;
+	window['AscCH'].historyitem_Layout_Headings = 10;
+	window['AscCH'].historyitem_Layout_Orientation = 11;
 
 
 function CHistory()
@@ -159,8 +174,6 @@ function CHistory()
 	this.RecIndex = -1;
 	this.lastDrawingObjects = null;
 	this.LastState = null;
-	this.LoadFonts = {};//собираем все загруженные шрифты между моментами сохранения
-	this.HasLoadFonts = false;
 	this.CanNotAddChanges = false;//флаг для отслеживания ошибок добавления изменений без точки:Create_NewPoint->Add->Save_Changes->Add
 
 	this.SavedIndex = null;			// Номер точки отката, на которой произошло последнее сохранение
@@ -188,13 +201,13 @@ CHistory.prototype.Clear = function()
 	this.Points.length = 0;
 	this.TurnOffHistory = 0;
 	this.Transaction = 0;
-	this.LoadFonts = {};
-	this.HasLoadFonts = false;
 
 	this.SavedIndex = null;
   this.ForceSave= false;
   this.UserSavedIndex = null;
 
+	window['AscCommon'].g_specialPasteHelper.SpecialPasteButton_Hide();
+	this.workbook.handlers.trigger("toggleAutoCorrectOptions");
 	this._sendCanUndoRedo();
 };
 /** @returns {boolean} */
@@ -269,7 +282,7 @@ CHistory.prototype.UndoRedoPrepare = function (oRedoObjectParam, bUndo) {
 			}
 		}
 	}
-	if (window["NATIVE_EDITOR_ENJINE"] || !this.workbook.oApi.IsSendDocumentLoadCompleate) {
+	if (window["NATIVE_EDITOR_ENJINE"] || !this.workbook.oApi.isDocumentLoadComplete) {
 		oRedoObjectParam.bChangeActive = true;
 	}
 };
@@ -361,7 +374,7 @@ CHistory.prototype.RedoExecute = function(Point, oRedoObjectParam)
 	}
 };
 CHistory.prototype.UndoRedoEnd = function (Point, oRedoObjectParam, bUndo) {
-	var wsViews, i, oState = null, bCoaut = false;
+	var wsViews, i, oState = null, bCoaut = false, t = this;
 	if (!bUndo && null == Point) {
 		Point = this.Points[this.Index];
 		AscCommon.CollaborativeEditing.Apply_LinkData();
@@ -377,8 +390,9 @@ CHistory.prototype.UndoRedoEnd = function (Point, oRedoObjectParam, bUndo) {
         }
 	}
 
-	/* возвращаем отрисовку. и перерисовываем ячейки с предварительным пересчетом */
-	this.workbook.dependencyFormulas.unlockRecal();
+	AscCommonExcel.executeInR1C1Mode(false, function () {
+		t.workbook.dependencyFormulas.unlockRecal();
+	});
 
 	if (null != Point) {
 		//синхронизация index и id worksheet
@@ -408,7 +422,7 @@ CHistory.prototype.UndoRedoEnd = function (Point, oRedoObjectParam, bUndo) {
 				oRedoObjectParam.oChangeWorksheetUpdate[i],{lockDraw: true, reinitRanges: true});
 
 		for (i in Point.UpdateRigions)
-			this.workbook.handlers.trigger("cleanCellCache", i, {'0': Point.UpdateRigions[i]}, true, oRedoObjectParam.bAddRemoveRowCol);
+			this.workbook.handlers.trigger("cleanCellCache", i, [Point.UpdateRigions[i]]);
 
 		if (oRedoObjectParam.bOnSheetsChanged)
 			this.workbook.handlers.trigger("asc_onSheetsChanged");
@@ -432,7 +446,7 @@ CHistory.prototype.UndoRedoEnd = function (Point, oRedoObjectParam, bUndo) {
             if (Point.SelectionState) {
                 this.workbook.handlers.trigger("setSelectionState", Point.SelectionState);
             } else {
-                this.workbook.handlers.trigger("setSelection", Point.SelectRange.clone(), /*validRange*/false);
+                this.workbook.handlers.trigger("setSelection", Point.SelectRange.clone());
             }
         } else {
             if (null !== oState && oState[0] && oState[0].focus) {
@@ -484,10 +498,9 @@ CHistory.prototype.UndoRedoEnd = function (Point, oRedoObjectParam, bUndo) {
 	if (oRedoObjectParam.bIsOn)
 		this.TurnOn();
 		
-	if(!AscCommonExcel.g_clipboardExcel.pasteStart)
-	{
-		this.workbook.handlers.trigger("hideSpecialPasteOptions");
-	}
+
+	window['AscCommon'].g_specialPasteHelper.SpecialPasteButton_Hide();
+	this.workbook.handlers.trigger("toggleAutoCorrectOptions", null, true);
 };
 CHistory.prototype.Redo = function()
 {
@@ -590,7 +603,7 @@ CHistory.prototype.Set_Additional_ExtendDocumentToPos = function()
 };
 
 
-CHistory.prototype.Check_UninonLastPoints = function()
+CHistory.prototype.CheckUnionLastPoints = function()
 {
 	// Не объединяем точки истории, если на предыдущей точке произошло сохранение
 	if ( this.Points.length < 2)
@@ -686,8 +699,6 @@ CHistory.prototype.Create_NewPoint = function()
 
     // Удаляем ненужные точки
     this.Points.length = this.Index + 1;
-
-	this._addFonts(true);
 };
 
 // Регистрируем новое изменение:
@@ -732,19 +743,31 @@ CHistory.prototype.Add = function(Class, Type, sheetid, range, Data, LocalChange
 		curPoint.UndoSheetId = sheetid;
 	if(1 == curPoint.Items.length)
 		this._sendCanUndoRedo();
+
+	if (Class)
+	{
+		if (Class.IsContentChange && Class.IsContentChange()) {
+			var bAdd = Class.IsAdd();
+			var Count = Class.GetItemsCount();
+
+			var ContentChanges = new AscCommon.CContentChangesElement(bAdd == true ? AscCommon.contentchanges_Add : AscCommon.contentchanges_Remove, Class.Pos, Count, Class);
+			Class.Class.Add_ContentChanges(ContentChanges);
+			AscCommon.CollaborativeEditing.Add_NewDC(Class.Class);
+		}
+	}
+	window['AscCommon'].g_specialPasteHelper.SpecialPasteButton_Hide();
+	this.workbook.handlers.trigger("toggleAutoCorrectOptions");
 };
 
 CHistory.prototype._sendCanUndoRedo = function()
 {
+	if (this.workbook.bCollaborativeChanges) {
+		return;
+	}
+
 	this.workbook.handlers.trigger("setCanUndo", this.Can_Undo());
 	this.workbook.handlers.trigger("setCanRedo", this.Can_Redo());
 	this.workbook.handlers.trigger("setDocumentModified", this.Have_Changes());
-	//скрываю кнопку специальной вставки при каждом действии/undoredo
-	//при выполнении специальной вставки и при сохранении(-1 !== this.Index) не скрываю кнопку 
-	if(!AscCommonExcel.g_clipboardExcel.pasteStart && -1 !== this.Index && !(this.workbook.bUndoChanges || this.workbook.bRedoChanges))
-	{
-		this.workbook.handlers.trigger("hideSpecialPasteOptions");
-	}
 };
 CHistory.prototype.SetSelection = function(range)
 {
@@ -830,52 +853,55 @@ CHistory.prototype.Is_On = function()
 {
 	return (0 === this.TurnOffHistory);
 };
-CHistory.prototype.Reset_SavedIndex = function(IsUserSave) {
-  this.SavedIndex = (null === this.SavedIndex && -1 === this.Index ? null : this.Index);
-  if (this.Is_UserSaveMode()) {
-    if (IsUserSave) {
-      this.UserSavedIndex = this.Index;
-      this.ForceSave  = false;
-    }
-  } else {
-    this.ForceSave  = false;
-  }
-};
-CHistory.prototype.Set_SavedIndex = function(Index) {
-  this.SavedIndex = Index;
-  if (this.Is_UserSaveMode()) {
-    if (null !== this.UserSavedIndex && this.UserSavedIndex > this.SavedIndex) {
-      this.UserSavedIndex = Index;
-      this.ForceSave = true;
-    }
-  } else {
-    this.ForceSave = true;
-  }
-};
-/** @returns {number|null} */
-CHistory.prototype.Get_DeleteIndex = function () {
-	var DeletePointIndex = null !== this.SavedIndex ? Math.min(this.SavedIndex + 1, this.Index + 1) : null;
-	if (null === DeletePointIndex)
-		return null;
-	var DeleteIndex = 0;
-	for (var i = 0; i < DeletePointIndex; ++i) {
-		var point = this.Points[i];
-		for (var j = 0; j < point.Items.length; ++j) {
-			if (!point.Items[j].LocalChange) {//LocalChange изменения не пойдут в совместное редактирование.
-				DeleteIndex += 1;
+	CHistory.prototype.Reset_SavedIndex = function(IsUserSave) {
+		this.SavedIndex = (null === this.SavedIndex && -1 === this.Index ? null : this.Index);
+		if (this.Is_UserSaveMode()) {
+			if (IsUserSave) {
+				this.UserSavedIndex = this.Index;
+				this.ForceSave = false;
+			}
+		} else {
+			this.ForceSave = false;
+		}
+	};
+	CHistory.prototype.Set_SavedIndex = function(Index) {
+		this.SavedIndex = Index;
+		if (this.Is_UserSaveMode()) {
+			if (null !== this.UserSavedIndex && this.UserSavedIndex > this.SavedIndex) {
+				this.UserSavedIndex = Index;
+				this.ForceSave = true;
+			}
+		} else {
+			this.ForceSave = true;
+		}
+	};
+	/** @returns {number|null} */
+	CHistory.prototype.GetDeleteIndex = function() {
+		var DeletePointIndex = this.GetDeletePointIndex();
+		if (null === DeletePointIndex)
+			return null;
+		var DeleteIndex = 0;
+		for (var i = 0; i < DeletePointIndex; ++i) {
+			var point = this.Points[i];
+			for (var j = 0; j < point.Items.length; ++j) {
+				if (!point.Items[j].LocalChange) {//LocalChange изменения не пойдут в совместное редактирование.
+					DeleteIndex += 1;
+				}
 			}
 		}
-	}
-	return DeleteIndex;
-};
-/** @returns {boolean} */
-CHistory.prototype.Have_Changes = function(IsNotUserSave) {
-  var checkIndex = (this.Is_UserSaveMode() && !IsNotUserSave) ? this.UserSavedIndex : this.SavedIndex;
-  if (-1 === this.Index && null === checkIndex && false === this.ForceSave) {
-    return false;
-  }
+		return DeleteIndex;
+	};
+	CHistory.prototype.GetDeletePointIndex = function() {
+		return null !== this.SavedIndex ? Math.min(this.SavedIndex + 1, this.Index + 1) : null;
+	};
+	/** @returns {boolean} */
+	CHistory.prototype.Have_Changes = function(IsNotUserSave) {
+		var checkIndex = (this.Is_UserSaveMode() && !IsNotUserSave) ? this.UserSavedIndex : this.SavedIndex;
+		if (-1 === this.Index && null === checkIndex && false === this.ForceSave) {
+			return false;
+		}
 
-  return (this.Index != checkIndex || true === this.ForceSave);
+		return (this.Index != checkIndex || true === this.ForceSave);
 };
 CHistory.prototype.GetSerializeArray = function()
 {
@@ -894,38 +920,37 @@ CHistory.prototype.GetSerializeArray = function()
 		}
 		aRes.push(aPointChanges);
 	}
-	return aRes;
-};
-CHistory.prototype.loadFonts = function (fonts) {
-    for (var i = 0; i < fonts.length; ++i) {
-		this.LoadFonts[fonts[i].name] = 1;
-		this.HasLoadFonts = true;
-	}
-	this._addFonts(false);
-};
-CHistory.prototype._addFonts = function (isCreateNew) {
-	// Если мы начали транзакцию или мы только создаем точку, то можно добавлять
-	if (this.HasLoadFonts && (isCreateNew || !this.IsEndTransaction())) {
-		var arrFonts = [];
-		for (var i in this.LoadFonts)
-			arrFonts.push(i);
-		this.Add(AscCommonExcel.g_oUndoRedoWorkbook, AscCH.historyitem_Workbook_AddFont, null, null, new AscCommonExcel.UndoRedoData_SingleProperty(arrFonts));
-
-		this.LoadFonts = {};
-		this.HasLoadFonts = false;
-	}
-};
-CHistory.prototype._CheckCanNotAddChanges = function () {
-    try {
-        if (this.CanNotAddChanges) {
-            var tmpErr = new Error();
-            if (tmpErr.stack) {
-                this.workbook.oApi.CoAuthoringApi.sendChangesError(tmpErr.stack);
-            }
-        }
-    } catch (e) {
-    }
-};
+		return aRes;
+	};
+	CHistory.prototype._CheckCanNotAddChanges = function() {
+		try {
+			if (this.CanNotAddChanges) {
+				var tmpErr = new Error();
+				if (tmpErr.stack) {
+					this.workbook.oApi.CoAuthoringApi.sendChangesError(tmpErr.stack);
+				}
+			}
+		} catch (e) {
+		}
+	};
+	/**
+	 * Удаляем изменения из истории, которые сохранены на сервере. Это происходит при подключении второго пользователя
+	 */
+	CHistory.prototype.RemovePointsByDeleteIndex = function()
+	{
+		var DeletePointIndex = this.GetDeletePointIndex();
+		if (null === DeletePointIndex)
+			return;
+		this.Points.splice(0, DeletePointIndex);
+		this.Index = Math.max(this.Index - DeletePointIndex, -1);
+		this.RecIndex = Math.max(this.RecIndex - DeletePointIndex, -1);
+		if (null !== this.SavedIndex) {
+			this.SavedIndex = this.SavedIndex - DeletePointIndex;
+			if (this.SavedIndex < 0) {
+				this.SavedIndex = null;
+			}
+		}
+	};
 
 	//------------------------------------------------------------export--------------------------------------------------
 	window['AscCommon'] = window['AscCommon'] || {};

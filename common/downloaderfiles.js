@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2018
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -41,8 +41,8 @@ function FileHandler() {
 
     this.get = function ( file ) {
         if ( AscCommon.AscBrowser.isAppleDevices ) {
+            //this approach replaces tab, iframe approach do nothing
             var downloadWindow = window.open( file, "_parent", "", false );
-            downloadWindow.document.title = "Downloading...";
             window.focus();
         }
         else {

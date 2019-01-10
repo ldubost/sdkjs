@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2018
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -57,7 +57,7 @@ function CCollaborativeEditing()
 CCollaborativeEditing.prototype = Object.create(AscCommon.CCollaborativeEditingBase.prototype);
 CCollaborativeEditing.prototype.constructor = CCollaborativeEditing;
 
-CCollaborativeEditing.prototype.Send_Changes = function(IsUserSave, AdditionalInfo)
+CCollaborativeEditing.prototype.Send_Changes = function(IsUserSave, AdditionalInfo, IsUpdateInterface, isAfterAskSave)
 {
     // Пересчитываем позиции
     this.Refresh_DCChanges();
@@ -102,85 +102,114 @@ CCollaborativeEditing.prototype.Send_Changes = function(IsUserSave, AdditionalIn
     }
 
 
-    var map = this.Release_Locks();
+    // Пока пользователь сидит один, мы не чистим его локи до тех пор пока не зайдет второй
+	var bCollaborative = this.getCollaborativeEditing();
+		
+	var num_arr = [];
+    if (bCollaborative)
+	{
+		var map = this.Release_Locks();
 
-    var UnlockCount2 = this.m_aNeedUnlock2.length;
-    for ( var Index = 0; Index < UnlockCount2; Index++ )
-    {
-        var Class = this.m_aNeedUnlock2[Index];
-        Class.Lock.Set_Type( AscCommon.locktype_None, false);
-        if(Class.getObjectType && Class.getObjectType() === AscDFH.historyitem_type_Slide)
-        {
-            editor.WordControl.m_oLogicDocument.DrawingDocument.UnLockSlide(Class.num);
-        }
-        if(Class instanceof AscCommonSlide.PropLocker)
-        {
-            var Class2 = AscCommon.g_oTableId.Get_ById(Class.objectId);
-            if(Class2 && Class2.getObjectType && Class2.getObjectType() === AscDFH.historyitem_type_Slide && Class2.deleteLock === Class)
-            {
-                editor.WordControl.m_oLogicDocument.DrawingDocument.UnLockSlide(Class2.num);
-            }
-        }
+		var UnlockCount2 = this.m_aNeedUnlock2.length;
+		for ( var Index = 0; Index < UnlockCount2; Index++ )
+		{
+			var Class = this.m_aNeedUnlock2[Index];
+			Class.Lock.Set_Type( AscCommon.locktype_None, false);
+			if(Class.getObjectType && Class.getObjectType() === AscDFH.historyitem_type_Slide)
+			{
+				editor.WordControl.m_oLogicDocument.DrawingDocument.UnLockSlide(Class.num);
+			}
+			if(Class instanceof AscCommonSlide.PropLocker)
+			{
+				var Class2 = AscCommon.g_oTableId.Get_ById(Class.objectId);
+				if(Class2 && Class2.getObjectType && Class2.getObjectType() === AscDFH.historyitem_type_Slide && Class2.deleteLock === Class)
+				{
+					editor.WordControl.m_oLogicDocument.DrawingDocument.UnLockSlide(Class2.num);
+				}
+			}
 
-        var check_obj = null;
-        if(Class.getObjectType)
-        {
-            if( (Class.getObjectType() === AscDFH.historyitem_type_Shape
-                || Class.getObjectType() === AscDFH.historyitem_type_ImageShape
-                || Class.getObjectType() === AscDFH.historyitem_type_GroupShape
-                || Class.getObjectType() === AscDFH.historyitem_type_GraphicFrame
-                || Class.getObjectType() === AscDFH.historyitem_type_ChartSpace
-                || Class.getObjectType() === AscDFH.historyitem_type_OleObject) && AscCommon.isRealObject(Class.parent))
-            {
-                if(Class.parent && AscFormat.isRealNumber(Class.parent.num))
-                {
-                    map[Class.parent.num] = true;
-                }
+			var check_obj = null;
+			if(Class.getObjectType)
+			{
+				if( (Class.getObjectType() === AscDFH.historyitem_type_Shape
+					|| Class.getObjectType() === AscDFH.historyitem_type_ImageShape
+					|| Class.getObjectType() === AscDFH.historyitem_type_GroupShape
+					|| Class.getObjectType() === AscDFH.historyitem_type_GraphicFrame
+					|| Class.getObjectType() === AscDFH.historyitem_type_ChartSpace
+					|| Class.getObjectType() === AscDFH.historyitem_type_OleObject
+					|| Class.getObjectType() === AscDFH.historyitem_type_Cnx) && AscCommon.isRealObject(Class.parent))
+				{
+					if(Class.parent && AscFormat.isRealNumber(Class.parent.num))
+					{
+						map[Class.parent.num] = true;
+					}
 
-                check_obj =
-                {
-                    "type": c_oAscLockTypeElemPresentation.Object,
-                    "slideId": Class.parent.Get_Id(),
-                    "objId": Class.Get_Id(),
-                    "guid": Class.Get_Id()
-                };
-            }
-            else if(Class.getObjectType() === AscDFH.historyitem_type_Slide)
-            {
-                check_obj =
-                {
-                    "type": c_oAscLockTypeElemPresentation.Slide,
-                    "val": Class.Get_Id(),
-                    "guid": Class.Get_Id()
-                };
-            }
-            if(check_obj)
-                editor.CoAuthoringApi.releaseLocks( check_obj );
-        }
-    }
+					check_obj =
+					{
+						"type": c_oAscLockTypeElemPresentation.Object,
+						"slideId": Class.parent.Get_Id(),
+						"objId": Class.Get_Id(),
+						"guid": Class.Get_Id()
+					};
+				}
+				else if(Class.getObjectType() === AscDFH.historyitem_type_Slide)
+				{
+					check_obj =
+					{
+						"type": c_oAscLockTypeElemPresentation.Slide,
+						"val": Class.Get_Id(),
+						"guid": Class.Get_Id()
+					};
+				}
+				else if(Class instanceof AscCommon.CComment){
+					if(Class.Parent && Class.Parent.slide){
+						if(Class.Parent.slide === editor.WordControl.m_oLogicDocument){
+							check_obj =
+							{
+								"type": c_oAscLockTypeElemPresentation.Slide,
+								"val": editor.WordControl.m_oLogicDocument.commentsLock.Get_Id(),
+								"guid": editor.WordControl.m_oLogicDocument.commentsLock.Get_Id()
+							};
+						}
+						else {
+							check_obj =
+							{
+								"type": c_oAscLockTypeElemPresentation.Object,
+								"slideId": Class.Parent.slide.deleteLock.Get_Id(),
+								"objId": Class.Get_Id(),
+								"guid": Class.Get_Id()
+							};
+							map[Class.Parent.slide.num] = true;
+						}
+					}
+				}
+				if(check_obj)
+					editor.CoAuthoringApi.releaseLocks( check_obj );
+			}
+		}
 
 
-    var num_arr = [];
-    if(editor.WordControl.m_oDrawingDocument.IsLockObjectsEnable)
-    {
-        for(var key in map)
-        {
-            if(map.hasOwnProperty(key))
-            {
-                num_arr.push(parseInt(key, 10));
-            }
-        }
-        num_arr.sort(AscCommon.fSortAscending);
-    }
-    this.m_aNeedUnlock.length  = 0;
-    this.m_aNeedUnlock2.length = 0;
+		if(editor.WordControl.m_oDrawingDocument.IsLockObjectsEnable)
+		{
+			for(var key in map)
+			{
+				if(map.hasOwnProperty(key))
+				{
+					num_arr.push(parseInt(key, 10));
+				}
+			}
+			num_arr.sort(AscCommon.fSortAscending);
+		}
+		this.m_aNeedUnlock.length  = 0;
+		this.m_aNeedUnlock2.length = 0;
+	}
 
     if (0 < aChanges.length || null !== deleteIndex) {
         this.private_OnSendOwnChanges(aChanges2, deleteIndex);
-        editor.CoAuthoringApi.saveChanges(aChanges, deleteIndex, AdditionalInfo, editor.canUnlockDocument2);
+        editor.CoAuthoringApi.saveChanges(aChanges, deleteIndex, AdditionalInfo, editor.canUnlockDocument2, bCollaborative);
         AscCommon.History.CanNotAddChanges = true;
     } else
-        editor.CoAuthoringApi.unLockDocument(true, editor.canUnlockDocument2);
+        editor.CoAuthoringApi.unLockDocument(!!isAfterAskSave, editor.canUnlockDocument2, null, bCollaborative);
 	editor.canUnlockDocument2 = false;
 
     if ( -1 === this.m_nUseType )
@@ -210,6 +239,10 @@ CCollaborativeEditing.prototype.Send_Changes = function(IsUserSave, AdditionalIn
     if(num_arr.length > 0)
     {
         editor.WordControl.m_oDrawingDocument.OnEndRecalculate();
+    }
+    var oSlide = editor.WordControl.m_oLogicDocument.Slides[editor.WordControl.m_oLogicDocument.CurPage];
+    if(oSlide && oSlide.notesShape){
+        editor.WordControl.m_oDrawingDocument.Notes_OnRecalculate(editor.WordControl.m_oLogicDocument.CurPage, oSlide.NotesWidth, oSlide.getNotesHeight());
     }
     editor.WordControl.m_oLogicDocument.Document_UpdateInterfaceState();
     editor.WordControl.m_oLogicDocument.Document_UpdateUndoRedoState();
@@ -271,6 +304,10 @@ CCollaborativeEditing.prototype.Release_Locks = function()
             if(Class instanceof AscCommon.CComment)
             {
                 editor.sync_UnLockComment(Class.Get_Id());
+                if(Class.Parent && Class.Parent.slide && editor.WordControl.m_oLogicDocument !== Class.Parent.slide)
+                {
+                    map_redraw[Class.Parent.slide.num] = true;
+                }
             }
         }
         else if ( AscCommon.locktype_Other3 === CurLockType )
@@ -336,7 +373,7 @@ CCollaborativeEditing.prototype.OnEnd_CheckLock = function()
         editor.CoAuthoringApi.askLock( aIds, this.OnCallback_AskLock );
 
         // Ставим глобальный лок, только во время совместного редактирования
-        if ( true === this.m_bUse )
+        if ( -1 === this.m_nUseType )
 		{
 			this.Set_GlobalLock(true);
 		}
@@ -507,10 +544,10 @@ CCollaborativeEditing.prototype.Update_ForeignCursorsPositions = function()
 {
     var DrawingDocument = editor.WordControl.m_oDrawingDocument;
     var oPresentation = editor.WordControl.m_oLogicDocument;
-    var oCurSlide = oPresentation.Slides[oPresentation.CurPage];
     var oTargetDocContentOrTable;
-    if(oCurSlide){
-        oTargetDocContentOrTable = oCurSlide.graphicObjects.getTargetDocContent(undefined, true);
+    var oCurController = oPresentation.GetCurrentController();
+    if(oCurController){
+        oTargetDocContentOrTable = oCurController.getTargetDocContent(undefined, true);
     }
     if(!oTargetDocContentOrTable){
         for (var UserId in this.m_aForeignCursors){
@@ -538,7 +575,7 @@ CCollaborativeEditing.prototype.Update_ForeignCursorPosition = function(UserId, 
 
     var DrawingDocument = editor.WordControl.m_oDrawingDocument;
     var oPresentation = editor.WordControl.m_oLogicDocument;
-    var Paragraph = Run.Get_Paragraph();
+    var Paragraph = Run.GetParagraph();
     if (!Paragraph || !Paragraph.Parent){
         DrawingDocument.Collaborative_RemoveTarget(UserId);
         return;

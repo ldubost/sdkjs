@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2018
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -112,6 +112,13 @@ var c_oSerShdType = {
     Tint: 2,
     Shade: 3
   };
+	var c_oSerBookmark = {
+		Id: 0,
+		Name: 1,
+		DisplacedByCustomXml: 2,
+		ColFirst: 3,
+		ColLast: 4
+	};
 
 function BinaryCommonWriter(memory)
 {
@@ -123,7 +130,7 @@ BinaryCommonWriter.prototype.WriteItem = function(type, fWrite)
     this.memory.WriteByte(type);
     this.WriteItemWithLength(fWrite);
 };
-BinaryCommonWriter.prototype.WriteItemStart = function(type)
+BinaryCommonWriter.prototype.WriteItemStart = function(type, fWrite)
 {
 	this.memory.WriteByte(type);
     return this.WriteItemWithLengthStart(fWrite);
@@ -162,10 +169,10 @@ BinaryCommonWriter.prototype.WriteBorder = function(border)
         if (null != border.Color)
             color = border.Color;
         else if (null != border.Unifill) {
-            var doc = editor.WordControl.m_oLogicDocument;
+            var doc = window.editor.WordControl.m_oLogicDocument;
             border.Unifill.check(doc.Get_Theme(), doc.Get_ColorMap());
             var RGBA = border.Unifill.getRGBAColor();
-            color = new AscCommonWord.CDocumentColor(RGBA.R, RGBA.G, RGBA.B);
+            color = new window['AscCommonWord'].CDocumentColor(RGBA.R, RGBA.G, RGBA.B);
         }
         if (null != color && !color.Auto)
             this.WriteColor(c_oSerBorderType.Color, color);
@@ -358,6 +365,18 @@ BinaryCommonWriter.prototype.WriteColorTheme = function(unifill, color)
 		}
 	}
 };
+BinaryCommonWriter.prototype.WriteBookmark = function(bookmark) {
+	var oThis = this;
+	if (null !== bookmark.BookmarkId) {
+		this.WriteItem(c_oSerBookmark.Id, function() {
+			oThis.memory.WriteLong(bookmark.BookmarkId);
+		});
+	}
+	if (bookmark.IsStart() && null !== bookmark.BookmarkName) {
+		this.memory.WriteByte(c_oSerBookmark.Name);
+		this.memory.WriteString2(bookmark.BookmarkName);
+	}
+};
 function Binary_CommonReader(stream)
 {
     this.stream = stream;
@@ -544,6 +563,17 @@ Binary_CommonReader.prototype.ReadColorTheme = function(type, length, color)
         res = c_oSerConstants.ReadUnknown;
     return res;
 };
+Binary_CommonReader.prototype.ReadBookmark = function(type, length, bookmark) {
+	var res = c_oSerConstants.ReadOk;
+	if (c_oSerBookmark.Id === type) {
+		bookmark.BookmarkId = this.stream.GetULongLE();
+	} else if (c_oSerBookmark.Name === type) {
+		bookmark.BookmarkName = this.stream.GetString2LE(length);
+	} else {
+		res = c_oSerConstants.ReadUnknown;
+	}
+	return res;
+};
 /** @constructor */
 function FT_Stream2(data, size) {
     this.obj = null;
@@ -616,9 +646,22 @@ FT_Stream2.prototype.GetLongLE = function() {
 FT_Stream2.prototype.GetLong = function() {
 	return this.GetULongLE();
 };
+	var tempHelp = new ArrayBuffer(8);
+	var tempHelpUnit = new Uint8Array(tempHelp);
+	var tempHelpFloat = new Float64Array(tempHelp);
 FT_Stream2.prototype.GetDoubleLE = function() {
 	if (this.cur + 7 >= this.size)
 		return 0;
+	tempHelpUnit[0] = this.GetUChar();
+	tempHelpUnit[1] = this.GetUChar();
+	tempHelpUnit[2] = this.GetUChar();
+	tempHelpUnit[3] = this.GetUChar();
+	tempHelpUnit[4] = this.GetUChar();
+	tempHelpUnit[5] = this.GetUChar();
+	tempHelpUnit[6] = this.GetUChar();
+	tempHelpUnit[7] = this.GetUChar();
+	return tempHelpFloat[0];
+
 	var arr = [];
 	for(var i = 0; i < 8; ++i)
 		arr.push(this.GetUChar());
@@ -706,6 +749,13 @@ FT_Stream2.prototype.GetDouble = function() {
 	dRes /= 100000;
 	return dRes;
 };
+FT_Stream2.prototype.GetBuffer = function(length) {
+	var res = new Array(length);
+	for(var i = 0 ; i < length ;++i){
+		res[i] = this.data[this.cur++]
+	}
+	return res;
+};
 var gc_nMaxRow = 1048576;
 var gc_nMaxCol = 16384;
 var gc_nMaxRow0 = gc_nMaxRow - 1;
@@ -782,6 +832,9 @@ var g_oCellAddressUtils = new CellAddressUtils();
 	};
 	CellBase.prototype.isEqual = function(cell) {
 		return this.row === cell.row && this.col === cell.col;
+	};
+	CellBase.prototype.isEmpty = function() {
+		return 0 === this.row && 0 === this.col;
 	};
 	CellBase.prototype.getName = function() {
 		return g_oCellAddressUtils.colnumToColstr(this.col + 1) + (this.row + 1);
@@ -1165,6 +1218,83 @@ function isRealObject(obj)
       return _ret;
     }
   }
+	function GetUTF16_fromUnicodeChar(code) {
+		if (code < 0x10000) {
+			return String.fromCharCode(code);
+		} else {
+			code -= 0x10000;
+			return String.fromCharCode(0xD800 | ((code >> 10) & 0x03FF)) +
+				String.fromCharCode(0xDC00 | (code & 0x03FF));
+		}
+	};
+	function GetStringUtf8(reader, len) {
+		if (reader.cur + len > reader.size) {
+			return "";
+		}
+		var _res = "";
+
+		var end = reader.cur + len;
+		var val = 0;
+		while (reader.cur < end) {
+			var byteMain = reader.data[reader.cur];
+			if (0x00 == (byteMain & 0x80)) {
+				// 1 byte
+				_res += GetUTF16_fromUnicodeChar(byteMain);
+				++reader.cur;
+			}
+			else if (0x00 == (byteMain & 0x20)) {
+				// 2 byte
+				val = (((byteMain & 0x1F) << 6) |
+				(reader.data[reader.cur + 1] & 0x3F));
+				_res += GetUTF16_fromUnicodeChar(val);
+				reader.cur += 2;
+			}
+			else if (0x00 == (byteMain & 0x10)) {
+				// 3 byte
+				val = (((byteMain & 0x0F) << 12) |
+				((reader.data[reader.cur + 1] & 0x3F) << 6) |
+				(reader.data[reader.cur + 2] & 0x3F));
+
+				_res += GetUTF16_fromUnicodeChar(val);
+				reader.cur += 3;
+			}
+			else if (0x00 == (byteMain & 0x08)) {
+				// 4 byte
+				val = (((byteMain & 0x07) << 18) |
+				((reader.data[reader.cur + 1] & 0x3F) << 12) |
+				((reader.data[reader.cur + 2] & 0x3F) << 6) |
+				(reader.data[reader.cur + 3] & 0x3F));
+
+				_res += GetUTF16_fromUnicodeChar(val);
+				reader.cur += 4;
+			}
+			else if (0x00 == (byteMain & 0x04)) {
+				// 5 byte
+				val = (((byteMain & 0x03) << 24) |
+				((reader.data[reader.cur + 1] & 0x3F) << 18) |
+				((reader.data[reader.cur + 2] & 0x3F) << 12) |
+				((reader.data[reader.cur + 3] & 0x3F) << 6) |
+				(reader.data[reader.cur + 4] & 0x3F));
+
+				_res += GetUTF16_fromUnicodeChar(val);
+				reader.cur += 5;
+			}
+			else {
+				// 6 byte
+				val = (((byteMain & 0x01) << 30) |
+				((reader.data[reader.cur + 1] & 0x3F) << 24) |
+				((reader.data[reader.cur + 2] & 0x3F) << 18) |
+				((reader.data[reader.cur + 3] & 0x3F) << 12) |
+				((reader.data[reader.cur + 4] & 0x3F) << 6) |
+				(reader.data[reader.cur + 5] & 0x3F));
+
+				_res += GetUTF16_fromUnicodeChar(val);
+				reader.cur += 6;
+			}
+		}
+
+		return _res;
+	};
 
   //----------------------------------------------------------export----------------------------------------------------
   window['AscCommon'] = window['AscCommon'] || {};
@@ -1190,6 +1320,7 @@ function isRealObject(obj)
   window['AscCommon'].CellAddress = CellAddress;
   window['AscCommon'].isRealObject = isRealObject;
   window['AscCommon'].FileStream = FileStream;
+	window['AscCommon'].GetStringUtf8 = GetStringUtf8;
   window['AscCommon'].g_nodeAttributeStart = 0xFA;
   window['AscCommon'].g_nodeAttributeEnd = 0xFB;
 })(window);

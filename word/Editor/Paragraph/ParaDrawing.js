@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2018
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -173,6 +173,9 @@ function ParaDrawing(W, H, GraphicObj, DrawingDocument, DocumentContent, Parent)
 	this.ParaMath = null;
 
 	this.SkipOnRecalculate = false;
+	//for clip
+	this.LineTop = null;
+	this.LineBottom = null;
 	//------------------------------------------------------------
 	g_oTableId.Add(this, this.Id);
 
@@ -205,11 +208,11 @@ ParaDrawing.prototype.Set_WidthVisible = function(WidthVisible)
 {
 	this.WidthVisible = WidthVisible;
 };
-ParaDrawing.prototype.Get_SelectedContent = function(SelectedContent)
+ParaDrawing.prototype.GetSelectedContent = function(SelectedContent)
 {
-	if (this.GraphicObj && this.GraphicObj.Get_SelectedContent)
+	if (this.GraphicObj && this.GraphicObj.GetSelectedContent)
 	{
-		this.GraphicObj.Get_SelectedContent(SelectedContent);
+		this.GraphicObj.GetSelectedContent(SelectedContent);
 	}
 };
 ParaDrawing.prototype.Search_GetId = function(bNext, bCurrent)
@@ -229,22 +232,22 @@ ParaDrawing.prototype.CheckCorrect = function(){
 	return true;
 };
 
-ParaDrawing.prototype.Get_AllDrawingObjects = function(DrawingObjects)
+ParaDrawing.prototype.GetAllDrawingObjects = function(DrawingObjects)
 {
 	if (null == DrawingObjects)
 	{
 		DrawingObjects = [];
 	}
-	if (this.GraphicObj.Get_AllDrawingObjects)
+	if (this.GraphicObj.GetAllDrawingObjects)
 	{
-		this.GraphicObj.Get_AllDrawingObjects(DrawingObjects);
+		this.GraphicObj.GetAllDrawingObjects(DrawingObjects);
 	}
 };
 ParaDrawing.prototype.canRotate = function()
 {
 	return isRealObject(this.GraphicObj) && typeof this.GraphicObj.canRotate == "function" && this.GraphicObj.canRotate();
 };
-ParaDrawing.prototype.Get_Paragraph = function()
+ParaDrawing.prototype.GetParagraph = function()
 {
 	return this.Parent;
 };
@@ -360,7 +363,7 @@ ParaDrawing.prototype.Get_Props = function(OtherProps)
 	if (ParentParagraph && undefined !== ParentParagraph.Parent)
 	{
 		var DocContent = ParentParagraph.Parent;
-		if (true === DocContent.Is_DrawingShape() || (DocContent.Get_TopDocumentContent() instanceof CFootEndnote))
+		if (true === DocContent.Is_DrawingShape() || (DocContent.GetTopDocumentContent() instanceof CFootEndnote))
 			Props.CanBeFlow = false;
 	}
 
@@ -830,7 +833,17 @@ ParaDrawing.prototype.CheckWH = function()
 {
 	if (!this.GraphicObj)
 		return;
+	var oldExtW = this.Extent.W;
+	var oldExtH = this.Extent.H;
+	if (this.GraphicObj.spPr && this.GraphicObj.spPr.xfrm
+		&& AscFormat.isRealNumber(this.GraphicObj.spPr.xfrm.extX)
+		&& AscFormat.isRealNumber(this.GraphicObj.spPr.xfrm.extY)){
+		this.Extent.W = this.GraphicObj.spPr.xfrm.extX;
+		this.Extent.H = this.GraphicObj.spPr.xfrm.extY;
+	}
 	this.GraphicObj.recalculate();
+	this.Extent.W = oldExtW;
+	this.Extent.H = oldExtH;
 	var extX, extY, rot;
 	if (this.GraphicObj.spPr && this.GraphicObj.spPr.xfrm )
 	{
@@ -861,25 +874,55 @@ ParaDrawing.prototype.CheckWH = function()
 	}
 	this.setExtent(extX, extY);
 
-	var xc          = this.GraphicObj.localTransform.TransformPointX(this.GraphicObj.extX / 2, this.GraphicObj.extY / 2);
-	var yc          = this.GraphicObj.localTransform.TransformPointY(this.GraphicObj.extX / 2, this.GraphicObj.extY / 2);
-	var oBounds     = this.GraphicObj.bounds;
-	var LineCorrect = 0;
-	if (this.GraphicObj.pen && this.GraphicObj.pen.Fill && this.GraphicObj.pen.Fill.fill)
-	{
-		LineCorrect = (this.GraphicObj.pen.w == null) ? 12700 : parseInt(this.GraphicObj.pen.w);
-		LineCorrect /= 72000.0;
-	}
-    if(!AscFormat.checkNormalRotate(rot)){
-		var t = extX;
-        extX = extY;
-        extY = t;
-	}
 
-	var EEL = (xc - extX / 2) - oBounds.l + LineCorrect;
-	var EET = (yc - extY / 2) - oBounds.t + LineCorrect;
-	var EER = oBounds.r + LineCorrect - (xc + extX / 2);
-	var EEB = oBounds.b + LineCorrect - (yc + extY / 2);
+	var EEL = 0.0, EET = 0.0, EER = 0.0, EEB = 0.0;
+	//if(this.Is_Inline())
+	{
+		var xc          = this.GraphicObj.localTransform.TransformPointX(this.GraphicObj.extX / 2, this.GraphicObj.extY / 2);
+		var yc          = this.GraphicObj.localTransform.TransformPointY(this.GraphicObj.extX / 2, this.GraphicObj.extY / 2);
+		var oBounds     = this.GraphicObj.bounds;
+		var LineCorrect = 0;
+		if (this.GraphicObj.pen && this.GraphicObj.pen.Fill && this.GraphicObj.pen.Fill.fill)
+		{
+			LineCorrect = (this.GraphicObj.pen.w == null) ? 12700 : parseInt(this.GraphicObj.pen.w);
+			LineCorrect /= 72000.0;
+		}
+
+
+		var l = oBounds.l;
+		var r = oBounds.r;
+		var t = oBounds.t;
+		var b = oBounds.b;
+
+		var startX, startY;
+		if(!AscFormat.checkNormalRotate(rot)){
+			var t = extX;
+			extX = extY;
+			extY = t;
+		}
+
+
+		startX = xc - extX/2.0;
+		startY = yc - extY/2.0;
+
+		if(l > startX){
+			l = startX;
+		}
+		if(r < startX + extX){
+			r = startX + extX;
+		}
+		if(t > startY){
+			t = startY;
+		}
+		if(b < startY + extY){
+			b = startY + extY;
+		}
+
+		EEL = (xc - extX / 2) - l + LineCorrect;
+		EET = (yc - extY / 2) - t + LineCorrect;
+		EER = r + LineCorrect - (xc + extX / 2);
+		EEB = b + LineCorrect - (yc + extY / 2);
+	}
 	this.setEffectExtent(EEL, EET, EER, EEB);
 	this.Check_WrapPolygon();
 };
@@ -891,17 +934,22 @@ ParaDrawing.prototype.Check_WrapPolygon = function()
 		this.wrappingPolygon.setArrRelPoints(this.wrappingPolygon.calculate(this.GraphicObj));
 	}
 };
-ParaDrawing.prototype.Draw = function( X, Y, pGraphics, pageIndex, align)
+ParaDrawing.prototype.Draw = function( X, Y, pGraphics, PDSE)
 {
+	var nPageIndex = null;
+	if(AscCommon.isRealObject(PDSE))
+	{
+		nPageIndex = PDSE.Page;
+	}
 	if (pGraphics.Start_Command)
 	{
-		pGraphics.m_aDrawings.push(new AscFormat.ParaDrawingStruct(pageIndex, this));
+		pGraphics.m_aDrawings.push(new AscFormat.ParaDrawingStruct(undefined, this));
 		return;
 	}
 	if (this.Is_Inline())
 	{
-		pGraphics.shapePageIndex = pageIndex;
-		this.draw(pGraphics, pageIndex);
+		pGraphics.shapePageIndex = nPageIndex;
+		this.draw(pGraphics, PDSE);
 		pGraphics.shapePageIndex = null;
 	}
 	if (pGraphics.End_Command)
@@ -969,7 +1017,7 @@ ParaDrawing.prototype.Measure = function()
 		}
 	}
 };
-ParaDrawing.prototype.Save_RecalculateObject = function(Copy)
+ParaDrawing.prototype.SaveRecalculateObject = function(Copy)
 {
 	var DrawingObj = {};
 
@@ -995,7 +1043,7 @@ ParaDrawing.prototype.Save_RecalculateObject = function(Copy)
 
 	return DrawingObj;
 };
-ParaDrawing.prototype.Load_RecalculateObject = function(RecalcObj)
+ParaDrawing.prototype.LoadRecalculateObject = function(RecalcObj)
 {
 	this.updatePosition3(RecalcObj.PageNum, RecalcObj.X, RecalcObj.Y);
 	this.GraphicObj.setRecalcObject(RecalcObj.spRecaclcObject);
@@ -1007,7 +1055,7 @@ ParaDrawing.prototype.Reassign_ImageUrls = function(mapUrls)
 		this.GraphicObj.Reassign_ImageUrls(mapUrls);
 	}
 };
-ParaDrawing.prototype.Prepare_RecalculateObject = function()
+ParaDrawing.prototype.PrepareRecalculateObject = function()
 {
 };
 ParaDrawing.prototype.Is_RealContent = function()
@@ -1074,11 +1122,16 @@ ParaDrawing.prototype.setParagraphTabs = function(tabs)
 	if (isRealObject(this.GraphicObj) && typeof this.GraphicObj.setParagraphTabs === "function")
 		this.GraphicObj.setParagraphTabs(tabs);
 };
-ParaDrawing.prototype.Selection_Is_TableBorderMove = function()
+ParaDrawing.prototype.IsMovingTableBorder = function()
 {
-	if (isRealObject(this.GraphicObj) && typeof this.GraphicObj.Selection_Is_TableBorderMove === "function")
-		return this.GraphicObj.Selection_Is_TableBorderMove();
+	if (isRealObject(this.GraphicObj) && typeof this.GraphicObj.IsMovingTableBorder === "function")
+		return this.GraphicObj.IsMovingTableBorder();
 	return false;
+};
+ParaDrawing.prototype.SetVerticalClip = function(Top, Bottom)
+{
+	this.LineTop = Top;
+	this.LineBottom = Bottom;
 };
 ParaDrawing.prototype.Update_Position = function(Paragraph, ParaLayout, PageLimits, PageLimitsOrigin, LineNum)
 {
@@ -1098,8 +1151,12 @@ ParaDrawing.prototype.Update_Position = function(Paragraph, ParaLayout, PageLimi
 		this.PositionV.Percent      = this.PositionV_Old.Percent2;
 	}
 
+	var oDocumentContent = this.Parent.Parent;
+	if (oDocumentContent && oDocumentContent.IsBlockLevelSdtContent())
+		oDocumentContent = oDocumentContent.Parent.Parent;
+
 	this.Parent          = Paragraph;
-	this.DocumentContent = this.Parent.Parent;
+	this.DocumentContent = oDocumentContent;
 	var PageNum          = ParaLayout.PageNum;
 
 	var OtherFlowObjects = editor.WordControl.m_oLogicDocument.DrawingObjects.getAllFloatObjectsOnPage(PageNum, this.Parent.Parent);
@@ -1163,7 +1220,56 @@ ParaDrawing.prototype.Update_Position = function(Paragraph, ParaLayout, PageLimi
 		this.Y = this.Internal_Position.Calculate_Y(bInline, this.PositionV.RelativeFrom, this.PositionV.Align, this.PositionV.Value, this.PositionV.Percent);
 	}
 
-	this.updatePosition3(this.PageNum, this.X, this.Y, OldPageNum);
+	var DiffX = 0.0, DiffY = 0.0;
+	if(this.Is_Inline() || this.PositionH.Align || this.PositionV.Align)
+	{
+		var extX, extY, rot;
+		if (this.GraphicObj.spPr && this.GraphicObj.spPr.xfrm )
+		{
+			if(AscFormat.isRealNumber(this.GraphicObj.spPr.xfrm.extX) && AscFormat.isRealNumber(this.GraphicObj.spPr.xfrm.extY))
+			{
+				extX = this.GraphicObj.spPr.xfrm.extX;
+				extY = this.GraphicObj.spPr.xfrm.extY;
+			}
+			else
+			{
+				extX = 5;
+				extY = 5;
+			}
+			if(AscFormat.isRealNumber(this.GraphicObj.spPr.xfrm.rot))
+			{
+				rot = this.GraphicObj.spPr.xfrm.rot;
+			}
+			else
+			{
+				rot = 0;
+			}
+		}
+		else
+		{
+			extX = 5;
+			extY = 5;
+			rot = 0;
+		}
+		var xc          = this.GraphicObj.localTransform.TransformPointX(extX / 2, extY / 2);
+		var yc          = this.GraphicObj.localTransform.TransformPointY(extX / 2, extY / 2);
+		var oBounds     = this.GraphicObj.bounds;
+		if(!AscFormat.checkNormalRotate(rot)){
+			var t = extX;
+			extX = extY;
+			extY = t;
+		}
+		var oEffectExtent = this.EffectExtent;
+		if(this.Is_Inline() || this.PositionH.Align)
+		{
+			DiffX = AscFormat.getValOrDefault(oEffectExtent.L, 0.0) - (xc - extX / 2) + oBounds.l;
+		}
+		if(this.Is_Inline() || this.PositionV.Align)
+		{
+			DiffY = AscFormat.getValOrDefault(oEffectExtent.T, 0.0) - (yc - extY / 2) + oBounds.t;
+		}
+	}
+	this.updatePosition3(this.PageNum, this.X + DiffX, this.Y - DiffY, OldPageNum);
 	this.useWrap = this.Use_TextWrap();
 };
 ParaDrawing.prototype.Update_PositionYHeaderFooter = function(TopMarginY, BottomMarginY)
@@ -1199,14 +1305,14 @@ ParaDrawing.prototype.updatePosition3 = function(pageIndex, x, y, oldPageNum)
 	this.setPageIndex(pageIndex);
 	if (typeof this.GraphicObj.setStartPage === "function")
 	{
-		var bIsHfdFtr = this.DocumentContent && this.DocumentContent.Is_HdrFtr();
+		var bIsHfdFtr = this.DocumentContent && this.DocumentContent.IsHdrFtr();
 		this.GraphicObj.setStartPage(pageIndex, bIsHfdFtr, bIsHfdFtr);
 	}
 	var bInline = this.Is_Inline();
 	var _x      = (this.PositionH.Align || bInline) ? x - this.GraphicObj.bounds.x : x;
 	var _y      = (this.PositionV.Align || bInline) ? y - this.GraphicObj.bounds.y : y;
 
-	if (!(this.DocumentContent && this.DocumentContent.Is_HdrFtr() && this.DocumentContent.Get_StartPage_Absolute() !== pageIndex))
+	if (!(this.DocumentContent && this.DocumentContent.IsHdrFtr() && this.DocumentContent.Get_StartPage_Absolute() !== pageIndex))
 	{
 		this.graphicObjects.addObjectOnPage(pageIndex, this.GraphicObj);
 		this.bNoNeedToAdd = false;
@@ -1250,8 +1356,12 @@ ParaDrawing.prototype.Shift = function(Dx, Dy)
 
 	this.updatePosition3(this.PageNum, this.X, this.Y);
 };
-ParaDrawing.prototype.Is_LayoutInCell = function()
+ParaDrawing.prototype.IsLayoutInCell = function()
 {
+	// Начиная с 15-ой версии Word не дает менять этот параметр и всегда считает его true
+	if (this.LogicDocument && this.LogicDocument.GetCompatibilityMode() >= document_compatibility_mode_Word15)
+		return true;
+
 	return this.LayoutInCell;
 };
 ParaDrawing.prototype.Get_Distance = function()
@@ -1297,6 +1407,7 @@ ParaDrawing.prototype.Set_XY = function(X, Y, Paragraph, PageNum, bResetAlign)
 {
 	if (Paragraph)
 	{
+		var PageNumOld = this.PageNum;
 		var ContentPos = Paragraph.Get_DrawingObjectContentPos(this.Get_Id());
 		if (null === ContentPos)
 			return;
@@ -1317,7 +1428,12 @@ ParaDrawing.prototype.Set_XY = function(X, Y, Paragraph, PageNum, bResetAlign)
 		if (null !== nRecalcIndex)
 			oLogicDocument.Get_History().SetRecalculateIndex(nRecalcIndex);
 
-		Layout = Paragraph.Get_Layout(ContentPos, this);
+		if (!this.LogicDocument
+			|| null === this.LogicDocument.FullRecalc.Id
+			|| (PageNum < this.LogicDocument.FullRecalc.PageIndex
+			&& PageNumOld < this.LogicDocument.FullRecalc.PageIndex))
+			Layout = Paragraph.Get_Layout(ContentPos, this);
+
 		this.private_SetXYByLayout(X, Y, PageNum, Layout, (bResetAlign || true !== this.PositionH.Align ? true : false), (bResetAlign || true !== this.PositionV.Align ? true : false));
 	}
 };
@@ -1476,7 +1592,7 @@ ParaDrawing.prototype.Add_ToDocument2 = function(Paragraph)
 
 	Paragraph.Add_ToContent(0, DrawingRun);
 };
-ParaDrawing.prototype.Update_CursorType = function(X, Y, PageIndex)
+ParaDrawing.prototype.UpdateCursorType = function(X, Y, PageIndex)
 {
 	this.DrawingDocument.SetCursorType("move", new AscCommon.CMouseMoveData());
 
@@ -1684,10 +1800,10 @@ ParaDrawing.prototype.tableAddRow = function(bBefore)
 	if (isRealObject(this.GraphicObj) && typeof  this.GraphicObj.tableAddRow === "function")
 		return this.GraphicObj.tableAddRow(bBefore);
 };
-ParaDrawing.prototype.getCurrentParagraph = function()
+ParaDrawing.prototype.getCurrentParagraph = function(bIgnoreSelection, arrSelectedParagraphs)
 {
 	if (isRealObject(this.GraphicObj) && typeof this.GraphicObj.getCurrentParagraph === "function")
-		return this.GraphicObj.getCurrentParagraph();
+		return this.GraphicObj.getCurrentParagraph(bIgnoreSelection, arrSelectedParagraphs);
 
 	if (this.Parent instanceof Paragraph)
 		return this.Parent;
@@ -1793,11 +1909,22 @@ ParaDrawing.prototype.Read_FromBinary2 = function(Reader)
 ParaDrawing.prototype.Load_LinkData = function()
 {
 };
-ParaDrawing.prototype.draw = function(graphics, pageIndex)
+ParaDrawing.prototype.draw = function(graphics, PDSE)
 {
 	if (isRealObject(this.GraphicObj) && typeof this.GraphicObj.draw === "function")
 	{
 		graphics.SaveGrState();
+		var bInline = this.Is_Inline();
+		if(bInline && AscCommon.isRealObject(PDSE) && AscFormat.isRealNumber(this.LineTop) && AscFormat.isRealNumber(this.LineBottom) && AscCommon.isRealObject(this.GraphicObj.bounds))
+		{
+			var x, y, w, h;
+			var oEffectExtent = this.EffectExtent;
+			x = PDSE.X;
+			y = this.LineTop;
+			w = this.GraphicObj.bounds.r - this.GraphicObj.bounds.l + AscFormat.getValOrDefault(oEffectExtent.R, 0) + AscFormat.getValOrDefault(oEffectExtent.L, 0);
+			h = this.LineBottom - this.LineTop;
+			graphics.AddClipRect(x, y, w, h);
+		}
 		this.GraphicObj.draw(graphics);
 		graphics.RestoreGrState();
 	}
@@ -1837,9 +1964,10 @@ ParaDrawing.prototype.isShapeChild = function(bRetShape)
 		return bRetShape ? null : false;
 
 	var cur_doc_content = this.DocumentContent;
-	while (cur_doc_content.Is_TableCellContent())
+	var oCell;
+	while (oCell = cur_doc_content.IsTableCellContent(true))
 	{
-		cur_doc_content = cur_doc_content.Parent.Row.Table.Parent;
+		cur_doc_content = oCell.Row.Table.Parent;
 	}
 
 	if (isRealObject(cur_doc_content.Parent) && typeof cur_doc_content.Parent.getObjectType === "function" && cur_doc_content.Parent.getObjectType() === AscDFH.historyitem_type_Shape)
@@ -1865,12 +1993,13 @@ ParaDrawing.prototype.checkShapeChildAndGetTopParagraph = function(paragraph)
 			return top_group.parent.Get_ParentParagraph();
 		}
 	}
-	else if (parent_doc_content.Is_TableCellContent())
+	else if (parent_doc_content.IsTableCellContent())
 	{
 		var top_doc_content = parent_doc_content;
-		while (top_doc_content.Is_TableCellContent())
+		var oCell;
+		while (oCell = top_doc_content.IsTableCellContent(true))
 		{
-			top_doc_content = top_doc_content.Parent.Row.Table.Parent;
+			top_doc_content = oCell.Row.Table.Parent;
 		}
 		if (top_doc_content.Parent instanceof AscFormat.CShape)
 		{
@@ -1972,10 +2101,16 @@ ParaDrawing.prototype.Get_PageNum = function()
 {
 	return this.PageNum;
 };
-ParaDrawing.prototype.Get_AllParagraphs = function(Props, ParaArray)
+ParaDrawing.prototype.GetAllParagraphs = function(Props, ParaArray)
 {
-	if (isRealObject(this.GraphicObj) && typeof this.GraphicObj.Get_AllParagraphs === "function")
-		this.GraphicObj.Get_AllParagraphs(Props, ParaArray);
+	if (isRealObject(this.GraphicObj) && typeof this.GraphicObj.GetAllParagraphs === "function")
+		this.GraphicObj.GetAllParagraphs(Props, ParaArray);
+};
+ParaDrawing.prototype.GetAllDocContents = function(aDocContents)
+{
+	var _ret = Array.isArray(aDocContents) ? aDocContents : [];
+	this.GraphicObj.getAllDocContents(_ret);
+	return _ret;
 };
 ParaDrawing.prototype.getTableProps = function()
 {
@@ -2002,10 +2137,10 @@ ParaDrawing.prototype.select = function(pageIndex)
 		this.GraphicObj.select(pageIndex);
 
 };
-ParaDrawing.prototype.paragraphClearFormatting = function()
+ParaDrawing.prototype.paragraphClearFormatting = function(isClearParaPr, isClearTextPr)
 {
 	if (isRealObject(this.GraphicObj) && typeof  this.GraphicObj.paragraphAdd === "function")
-		this.GraphicObj.paragraphClearFormatting();
+		this.GraphicObj.paragraphClearFormatting(isClearParaPr, isClearTextPr);
 };
 ParaDrawing.prototype.paragraphAdd = function(paraItem, bRecalculate)
 {
@@ -2113,6 +2248,11 @@ ParaDrawing.prototype.addInlineImage = function(W, H, Img, chart, bFlow)
 {
 	if (isRealObject(this.GraphicObj) && typeof this.GraphicObj.addInlineImage === "function")
 		this.GraphicObj.addInlineImage(W, H, Img, chart, bFlow);
+};
+ParaDrawing.prototype.addSignatureLine = function(oSignatureDrawing)
+{
+	if (isRealObject(this.GraphicObj) && typeof this.GraphicObj.addSignatureLine === "function")
+		this.GraphicObj.addSignatureLine(oSignatureDrawing);
 };
 ParaDrawing.prototype.canAddComment = function()
 {
@@ -2287,11 +2427,12 @@ ParaDrawing.prototype.getDrawingArrayType = function()
 {
 	if (this.Is_Inline())
 		return DRAWING_ARRAY_TYPE_INLINE;
-	if (this.behindDoc === true && this.wrappingType === WRAPPING_TYPE_NONE)
-		return DRAWING_ARRAY_TYPE_BEHIND;
-	if (this.wrappingType === WRAPPING_TYPE_NONE)
-		return DRAWING_ARRAY_TYPE_BEFORE;
-	return DRAWING_ARRAY_TYPE_WRAPPING;
+	if (this.behindDoc === true){
+		if(this.wrappingType === WRAPPING_TYPE_NONE || (this.document && this.document.GetCompatibilityMode && this.document.GetCompatibilityMode() < document_compatibility_mode_Word15)){
+			return DRAWING_ARRAY_TYPE_BEHIND;
+		}
+	}
+	return DRAWING_ARRAY_TYPE_BEFORE;
 };
 ParaDrawing.prototype.documentSearch = function(String, search_Common)
 {
@@ -2389,7 +2530,7 @@ ParaDrawing.prototype.Convert_ToMathObject = function(isOpen)
 };
 ParaDrawing.prototype.private_ConvertToMathObject = function(isOpen)
 {
-	var Para = this.Get_Paragraph();
+	var Para = this.GetParagraph();
 	if (undefined === Para || null === Para || !(Para instanceof Paragraph))
 		return;
 
@@ -2443,8 +2584,8 @@ ParaDrawing.prototype.private_ConvertToMathObject = function(isOpen)
 		if (!isOpen)
 		{
 			// Устанавливаем курсор в начало правого элемента, полученного после Split
-			LogicDocument.Selection_Remove();
-			RightElement.Cursor_MoveToStartPos();
+			LogicDocument.RemoveSelection();
+			RightElement.MoveCursorToStartPos();
 			Para.CurPos.ContentPos = TopElementPos + 2;
 			Para.Document_SetThisElementCurrent(false);
 
@@ -2454,10 +2595,10 @@ ParaDrawing.prototype.private_ConvertToMathObject = function(isOpen)
 		}
 	}
 };
-ParaDrawing.prototype.Get_RevisionsChangeParagraph = function(SearchEngine)
+ParaDrawing.prototype.GetRevisionsChangeParagraph = function(SearchEngine)
 {
-	if (this.GraphicObj && this.GraphicObj.Get_RevisionsChangeParagraph)
-		this.GraphicObj.Get_RevisionsChangeParagraph(SearchEngine);
+	if (this.GraphicObj && this.GraphicObj.GetRevisionsChangeParagraph)
+		this.GraphicObj.GetRevisionsChangeParagraph(SearchEngine);
 };
 ParaDrawing.prototype.Get_ObjectType = function()
 {
@@ -2465,6 +2606,27 @@ ParaDrawing.prototype.Get_ObjectType = function()
 		return this.GraphicObj.getObjectType();
 
 	return AscDFH.historyitem_type_Drawing;
+};
+ParaDrawing.prototype.GetAllContentControls = function(arrContentControls)
+{
+	if(this.GraphicObj)
+	{
+		this.GraphicObj.GetAllContentControls(arrContentControls);
+	}
+};
+
+
+ParaDrawing.prototype.CheckContentControlEditingLock = function(){
+	if(this.DocumentContent && this.DocumentContent.CheckContentControlEditingLock){
+        this.DocumentContent.CheckContentControlEditingLock();
+	}
+};
+
+
+ParaDrawing.prototype.CheckContentControlDeletingLock = function(){
+	if(this.DocumentContent && this.DocumentContent.CheckContentControlDeletingLock){
+        this.DocumentContent.CheckContentControlDeletingLock();
+	}
 };
 
 /**
@@ -3050,6 +3212,7 @@ CAnchorPosition.prototype.Update_PositionYHeaderFooter = function(TopMarginY, Bo
 	var TopY    = Math.max(this.Page_Y, Math.min(TopMarginY, this.Page_H));
 	var BottomY = Math.max(this.Page_Y, Math.min(BottomMarginY, this.Page_H));
 
+	this.Margin_V      = TopY;
 	this.Top_Margin    = TopY;
 	this.Bottom_Margin = this.Page_H - BottomY;
 };

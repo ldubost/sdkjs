@@ -57,12 +57,19 @@
                         window.plugin_sendMessage(_message);
                     };
 
-					window.Asc.plugin.executeMethod = function(name, params)
+					window.Asc.plugin.executeMethod = function(name, params, callback)
 					{
 					    if (window.Asc.plugin.isWaitMethod === true)
-					        return false;
+                        {
+                            if (undefined === this.executeMethodStack)
+                                this.executeMethodStack = [];
+
+                            this.executeMethodStack.push({ name : name, params : params, callback : callback });
+                            return false;
+                        }
 
 					    window.Asc.plugin.isWaitMethod = true;
+					    window.Asc.plugin.methodCallback = callback;
 
 						window.Asc.plugin.info.type = "method";
 						window.Asc.plugin.info.methodName = name;
@@ -109,17 +116,65 @@
                         window.plugin_sendMessage(_message);
                     };
 
+                    window.Asc.plugin.callCommand = function(func, isClose, isCalc)
+					{
+						var _txtFunc = "var Asc = {}; Asc.scope = " + JSON.stringify(window.Asc.scope) + "; var scope = Asc.scope; (" + func.toString() + ")();";
+						var _type = (isClose === true) ? "close" : "command";
+						window.Asc.plugin.info.recalculate = (false === isCalc) ? false : true;
+						window.Asc.plugin.executeCommand(_type, _txtFunc);
+					};
+
+                    window.Asc.plugin.callModule = function(url, callback, isClose)
+					{
+						var _isClose = isClose;
+						var _client = new XMLHttpRequest();
+						_client.open("GET", url);
+
+						_client.onreadystatechange = function() {
+							if (_client.readyState == 4 && (_client.status == 200 || location.href.indexOf("file:") == 0))
+							{
+								var _type = (_isClose === true) ? "close" : "command";
+								window.Asc.plugin.info.recalculate = true;
+								window.Asc.plugin.executeCommand(_type, _client.responseText);
+								if (callback)
+									callback(_client.responseText);
+							}
+						};
+						_client.send();
+					};
+
+					window.Asc.plugin.loadModule = function(url, callback)
+					{
+						var _client = new XMLHttpRequest();
+						_client.open("GET", url);
+
+						_client.onreadystatechange = function() {
+							if (_client.readyState == 4 && (_client.status == 200 || location.href.indexOf("file:") == 0))
+							{
+								if (callback)
+									callback(_client.responseText);
+							}
+						};
+						_client.send();
+					};
+
                     window.Asc.plugin.init(window.Asc.plugin.info.data);
                     break;
                 }
                 case "button":
                 {
-                    window.Asc.plugin.button(parseInt(pluginData.button));
+                    var _buttonId = parseInt(pluginData.button);
+                    if (!window.Asc.plugin.button && -1 == _buttonId)
+						window.Asc.plugin.executeCommand("close", "");
+                    else
+                        window.Asc.plugin.button(_buttonId);
                     break;
                 }
                 case "enableMouseEvent":
                 {
                     g_isMouseSendEnabled = pluginData.isEnabled;
+					if (window.Asc.plugin.onEnableMouseEvent)
+						window.Asc.plugin.onEnableMouseEvent(g_isMouseSendEnabled);
                     break;
                 }
                 case "onExternalMouseUp":
@@ -131,14 +186,42 @@
                 case "onMethodReturn":
                 {
 					window.Asc.plugin.isWaitMethod = false;
-                    if (window.Asc.plugin.onMethodReturn)
-                        window.Asc.plugin.onMethodReturn(pluginData.methodReturnData);
+
+					if (window.Asc.plugin.methodCallback)
+					{
+					    var methodCallback = window.Asc.plugin.methodCallback;
+                        window.Asc.plugin.methodCallback = null;
+                        methodCallback(pluginData.methodReturnData);
+                        methodCallback = null;
+					}
+					else if (window.Asc.plugin.onMethodReturn)
+					{
+						window.Asc.plugin.onMethodReturn(pluginData.methodReturnData);
+					}
+
+					if (window.Asc.plugin.executeMethodStack && window.Asc.plugin.executeMethodStack.length > 0)
+                    {
+                        var obj = window.Asc.plugin.executeMethodStack.shift();
+                        window.Asc.plugin.executeMethod(obj.name, obj.params, obj.callback);
+                    }
+
                     break;
                 }
+				case "onCommandCallback":
+				{
+					if (window.Asc.plugin.onCommandCallback)
+						window.Asc.plugin.onCommandCallback();
+					break;
+				}
                 case "onExternalPluginMessage":
                 {
 					if (window.Asc.plugin.onExternalPluginMessage && pluginData.data && pluginData.data.type)
 						window.Asc.plugin.onExternalPluginMessage(pluginData.data);
+                }
+                case "onEvent":
+                {
+                    if (window.Asc.plugin["event_" + pluginData.eventName])
+                        window.Asc.plugin["event_" + pluginData.eventName](pluginData.eventData);
                 }
                 default:
                     break;

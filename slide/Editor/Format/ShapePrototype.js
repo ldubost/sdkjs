@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2018
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -43,7 +43,7 @@ var pHText = [];
 pHText[0] = [];//rus         ""                                                          ;
 pHText[0][AscFormat.phType_body]  =    "Slide text";             //"Текст слайда" ;                              ;
 pHText[0][AscFormat.phType_chart]    = "Chart";         // "Диаграмма" ;                                     ;
-pHText[0][AscFormat.phType_clipArt]  = "ClipArt";// "Текст слайда" ; //(Clip Art)                   ;
+pHText[0][AscFormat.phType_clipArt]  = "Clip Art";// "Текст слайда" ; //(Clip Art)                   ;
 pHText[0][AscFormat.phType_ctrTitle] = "Slide title";// "Заголовок слайда" ; //(Centered Title)     ;
 pHText[0][AscFormat.phType_dgm]      = "Diagram";// "Диаграмма";// (Diagram)                        ;
 pHText[0][AscFormat.phType_dt]       = "Date and time";// "Дата и время";// (Date and Time)         ;
@@ -57,6 +57,15 @@ pHText[0][AscFormat.phType_sldNum]   = "Slide number";// "Номер слайд�
 pHText[0][AscFormat.phType_subTitle] = "Slide subtitle";// "Подзаголовок слайда"; //(Subtitle)      ;
 pHText[0][AscFormat.phType_tbl]      = "Table";// "Таблица"; //(Table)                              ;
 pHText[0][AscFormat.phType_title]    = "Slide title";// "Заголовок слайда" ;  //(Title)             ;
+
+AscFormat.checkPlaceholdersText = function()
+{
+    if (AscFonts.IsCheckSymbols)
+    {
+        for (var i = pHText[0].length - 1; i >= 0; i--)
+            AscFonts.FontPickerByCharacter.getFontsByString(AscCommon.translateManager.getValue(pHText[0][i]));
+    }
+};
 
 CShape.prototype.setDrawingObjects = function(drawingObjects)
 {
@@ -99,7 +108,7 @@ CShape.prototype.setDrawingBase = function(drawingBase)
 
 CShape.prototype.getDrawingObjectsController = function()
 {
-    if(this.parent && this.parent.getObjectType() === AscDFH.historyitem_type_Slide)
+    if(this.parent && (this.parent.getObjectType() === AscDFH.historyitem_type_Slide ||  this.parent.getObjectType() === AscDFH.historyitem_type_Notes))
     {
         return this.parent.graphicObjects;
     }
@@ -227,10 +236,6 @@ CShape.prototype.getDrawingDocument = function()
     return editor.WordControl.m_oLogicDocument.DrawingDocument;
 };
 
-CShape.prototype.getTextArtTranslate = function()
-{
-    return editor.textArtTranslate;
-};
 CShape.prototype.getTextArtPreviewManager = function()
 {
     return editor.textArtPreviewManager;
@@ -396,7 +401,16 @@ CShape.prototype.getCanvasContext = function()
 };
 CShape.prototype.getCompiledStyle = function()
 {
-    return this.style;
+    if(this.style){
+        return this.style;
+    }
+    var hierarchy = this.getHierarchy();
+    for (var i = 0; i < hierarchy.length; ++i) {
+        if (hierarchy[i] && hierarchy[i].style) {
+            return hierarchy[i].style;
+        }
+    }
+    return null;
 };
 CShape.prototype.getParentObjects = function ()
 {
@@ -434,6 +448,18 @@ CShape.prototype.getParentObjects = function ()
                     theme: this.themeOverride ? this.themeOverride : this.parent.Theme
                 };
             }
+            case AscDFH.historyitem_type_Notes:
+            {
+                return {
+
+                    presentation: editor.WordControl.m_oLogicDocument,
+                    slide: null,
+                    layout: null,
+                    master: this.parent.Master,
+                    theme: this.themeOverride ? this.themeOverride : (this.parent.Master ? this.parent.Master.Theme : null),
+                    notes: this.parent
+                }
+            }
         }
     }
     return { slide: null, layout: null, master: null, theme: null};
@@ -450,9 +476,12 @@ CShape.prototype.recalculate = function ()
 {
     if(this.bDeleted || !this.parent)
         return;
-    var check_slide_placeholder = !this.isPlaceholder() || (this.parent && this.parent.getObjectType() === AscDFH.historyitem_type_Slide);
-    AscFormat.ExecuteNoHistory(function(){
 
+    if(this.parent.getObjectType() === AscDFH.historyitem_type_Notes){
+        return;
+    }
+    var check_slide_placeholder = !this.isPlaceholder() || (this.parent && (this.parent.getObjectType() === AscDFH.historyitem_type_Slide));
+    AscFormat.ExecuteNoHistory(function(){
 
         if (this.recalcInfo.recalculateBrush) {
             this.recalculateBrush();
@@ -572,9 +601,17 @@ CShape.prototype.recalculateContent2 = function()
             {
                 return;
             }
-            var text = typeof pHText[0][this.nvSpPr.nvPr.ph.type] === "string" && pHText[0][this.nvSpPr.nvPr.ph.type].length > 0 ?  pHText[0][this.nvSpPr.nvPr.ph.type] : pHText[0][AscFormat.phType_body];
-            if (!this.txBody.content2)
-                this.txBody.content2 = AscFormat.CreateDocContentFromString(text, this.getDrawingDocument(), this.txBody);
+            var text;
+            if(this.parent instanceof AscCommonSlide.CNotes && this.nvSpPr.nvPr.ph.type === AscFormat.phType_body){
+                text = "Click to add notes";
+            }
+            else{
+                text = typeof pHText[0][this.nvSpPr.nvPr.ph.type] === "string" && pHText[0][this.nvSpPr.nvPr.ph.type].length > 0 ?  pHText[0][this.nvSpPr.nvPr.ph.type] : pHText[0][AscFormat.phType_body];
+            }
+
+            if (!this.txBody.content2){
+                this.txBody.content2 = AscFormat.CreateDocContentFromString(AscCommon.translateManager.getValue(text), this.getDrawingDocument(), this.txBody);
+            }
             else
             {
                 this.txBody.content2.Recalc_AllParagraphs_CompiledPr();
@@ -669,15 +706,15 @@ CShape.prototype.recalculateContent2 = function()
             var content_ = this.getDocContent();
             if(content_ && content_.Content[0])
             {
-                content.Content[0].Pr  = content_.Content[0].Pr;
-                var para_text_pr = new ParaTextPr(content_.Content[0].Get_FirstRunPr());
-                content.Set_ApplyToAll(true);
-                content.Paragraph_Add(para_text_pr);
-                content.Set_ApplyToAll(false);
+                content.Content[0].Pr  = content_.Content[0].Pr.Copy();
+                if(!content.Content[0].Pr.DefaultRunPr){
+                    content.Content[0].Pr.DefaultRunPr = new AscCommonWord.CTextPr();
+                }
+                content.Content[0].Pr.DefaultRunPr.Merge(content_.Content[0].Get_FirstRunPr());
             }
             content.Set_StartPage(0);
             content.Reset(0, 0, w, 20000);
-            content.Recalculate_Page(content.StartPage, true);
+            content.RecalculateContent(this.txBody.contentWidth2, this.txBody.contentHeight2, 0);
 
             var oTextWarpContent = this.checkTextWarp(content, body_pr, this.txBody.contentWidth2, this.txBody.contentHeight2, false, true);
             this.txWarpStructParamarks2 = oTextWarpContent.oTxWarpStructParamarks;
@@ -743,7 +780,8 @@ CShape.prototype.getIsSingleBody = function(x, y)
 {
     if(!this.isPlaceholder())
         return false;
-    if(this.getPlaceholderType() !== AscFormat.phType_body)
+    var ph_type = this.getPlaceholderType();
+    if(ph_type !== AscFormat.phType_body && ph_type !== null)
         return false;
     if(this.parent && this.parent.cSld && Array.isArray(this.parent.cSld.spTree))
     {
@@ -757,34 +795,87 @@ CShape.prototype.getIsSingleBody = function(x, y)
     return true;
 };
 
-CShape.prototype.Set_CurrentElement = function(bUpdate, pageIndex)
-{
-    if(this.parent)
-    {
+CShape.prototype.Set_CurrentElement = function(bUpdate, pageIndex){
+    if(this.parent){
         var drawing_objects = this.parent.graphicObjects;
         drawing_objects.resetSelection(true);
-        if(this.group)
-        {
+        if(this.group){
             var main_group = this.group.getMainGroup();
             drawing_objects.selectObject(main_group, 0);
             main_group.selectObject(this, 0);
             main_group.selection.textSelection = this;
             drawing_objects.selection.groupSelection = main_group;
         }
-        else
-        {
+        else{
             drawing_objects.selectObject(this, 0);
             drawing_objects.selection.textSelection = this;
         }
-        //var content = this.getDocContent();
-        //content && content.Set_StartPage(this.parent.num);
-        if(editor.WordControl.m_oLogicDocument.CurPage !== this.parent.num)
-        {
-            editor.WordControl.m_oLogicDocument.Set_CurPage(this.parent.num);
-            editor.WordControl.GoToPage(this.parent.num);
+        var nSlideNum;
+        if(this.parent instanceof AscCommonSlide.CNotes){
+            editor.WordControl.m_oLogicDocument.FocusOnNotes = true;
+            if(this.parent.slide){
+                nSlideNum = this.parent.slide.num;
+                this.parent.slide.graphicObjects.resetSelection();
+            }
+            else{
+                nSlideNum = 0;
+            }
+        }
+        else{
+            nSlideNum = this.parent.num;
+            editor.WordControl.m_oLogicDocument.FocusOnNotes = false;
+        }
+        if(editor.WordControl.m_oLogicDocument.CurPage !== nSlideNum){
+            editor.WordControl.m_oLogicDocument.Set_CurPage(nSlideNum);
+            editor.WordControl.GoToPage(nSlideNum);
+            if(this.parent instanceof AscCommonSlide.CNotes){
+                editor.WordControl.m_oLogicDocument.FocusOnNotes = true;
+            }
         }
     }
 };
+
+CShape.prototype.OnContentReDraw = function(){
+    if(AscCommonSlide){
+        var oPresentation = editor.WordControl.m_oLogicDocument;
+        if(this.parent instanceof AscCommonSlide.Slide) {
+            oPresentation.DrawingDocument.OnRecalculatePage(this.parent.num, this.parent);
+        }
+        else if(this.parent instanceof AscCommonSlide.CNotes) {
+            var oCurSlide = oPresentation.Slides[oPresentation.CurPage];
+            if(oCurSlide && oCurSlide.notes === this.parent){
+                oPresentation.DrawingDocument.Notes_OnRecalculate(oPresentation.CurPage, oCurSlide.NotesWidth, oCurSlide.getNotesHeight());
+            }
+        }
+    }
+};
+
+    CShape.prototype.Is_ThisElementCurrent = function()
+    {
+        if(this.parent && this.parent.graphicObjects)
+        {
+            if(this.group)
+            {
+                var main_group = this.group.getMainGroup();
+                return main_group.selection.textSelection === this;
+            }
+            else
+            {
+                if(this.parent.getObjectType && this.parent.getObjectType() === AscDFH.historyitem_type_Notes)
+                {
+                    if(editor.WordControl.m_oLogicDocument.FocusOnNotes && this.parent.slide && this.parent.slide.num === editor.WordControl.m_oLogicDocument.CurPage)
+                    {
+                        return this.parent.graphicObjects.selection.textSelection === this;
+                    }
+                }
+                else
+                {
+                    return this.parent.graphicObjects.selection.textSelection === this;
+                }
+            }
+        }
+        return false;
+    };
 
     //--------------------------------------------------------export----------------------------------------------------
     window['AscFormat'] = window['AscFormat'] || {};

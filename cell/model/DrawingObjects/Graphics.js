@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2018
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -113,6 +113,8 @@ function CGraphics()
 
     this.ClearMode          = false;
     this.IsRetina           = false;
+
+	this.dash_no_smart = null;
 }
 
 CGraphics.prototype =
@@ -220,6 +222,7 @@ CGraphics.prototype =
         if (!this.m_oContext.setLineDash)
             return;
 
+		this.dash_no_smart = params ? params.slice() : null;
         this.m_oContext.setLineDash(params ? params : []);
     },
 
@@ -688,7 +691,7 @@ CGraphics.prototype =
 
 		var editor = window["Asc"]["editor"];
         var _img = editor.ImageLoader.map_image_index[img];
-        if (_img != undefined && _img.Status == AscFonts.ImageLoadStatus.Loading)
+        if (_img != undefined && _img.Status == AscFonts.ImageLoadStatus.Loading || (AscCommon.CollaborativeEditing.WaitImages && AscCommon.CollaborativeEditing.WaitImages[img]))
         {
             // TODO: IMAGE_LOADING
         }
@@ -860,7 +863,7 @@ CGraphics.prototype =
 
         var _font_manager = this.IsUseFonts2 ? this.m_oFontManager2 : this.m_oFontManager;
 
-        if (_lastFont.Name != _lastFont.SetUpName || _lastFont.Size != _lastFont.SetUpSize || _style != _lastFont.SetUpStyle)
+        if (_lastFont.Name != _lastFont.SetUpName || _lastFont.Size != _lastFont.SetUpSize || _style != _lastFont.SetUpStyle || !_font_manager.m_pFont)
         {
             _lastFont.SetUpName = _lastFont.Name;
             _lastFont.SetUpSize = _lastFont.Size;
@@ -1788,8 +1791,17 @@ CGraphics.prototype =
     },
     drawHorLine2 : function(align, y, x, r, penW)
     {
-        if (!this.m_bIntegerGrid)
+        var _check_transform = global_MatrixTransformer.IsIdentity2(this.m_oTransform);
+        if (!this.m_bIntegerGrid || !_check_transform)
         {
+            if (_check_transform)
+            {
+                this.SetIntegerGrid(true);
+                this.drawHorLine2(align, y, x, r, penW);
+                this.SetIntegerGrid(false);
+                return;
+            }
+
             var _y1 = y - penW / 2;
             var _y2 = _y1 + 2 * penW;
 
@@ -1856,8 +1868,17 @@ CGraphics.prototype =
     },
     drawVerLine : function(align, x, y, b, penW)
     {
-        if (!this.m_bIntegerGrid)
+        var _check_transform = global_MatrixTransformer.IsIdentity2(this.m_oTransform);
+        if (!this.m_bIntegerGrid || !_check_transform)
         {
+            if (_check_transform)
+            {
+                this.SetIntegerGrid(true);
+                this.drawVerLine(align, x, y, b, penW);
+                this.SetIntegerGrid(false);
+                return;
+            }
+
             this.p_width(penW * 1000);
             this._s();
             this._m(x, y);
@@ -1924,7 +1945,6 @@ CGraphics.prototype =
             }
         }
     },
-
     // мега крутые функции для таблиц
     drawHorLineExt : function(align, y, x, r, penW, leftMW, rightMW)
     {
@@ -2164,6 +2184,15 @@ CGraphics.prototype =
             {
                 this.SetIntegerGrid(true);
                 bIsSmartAttack = true;
+
+				if (this.dash_no_smart)
+				{
+					for (var index = 0; index < this.dash_no_smart.length; index++)
+						this.dash_no_smart[index] = (this.m_oCoordTransform.sx * this.dash_no_smart[index] + 0.5) >> 0;
+
+					this.m_oContext.setLineDash(this.dash_no_smart);
+					this.dash_no_smart = null;
+				}
             }
 
             var _pen_w = (pen_w * this.m_oCoordTransform.sx + 0.5) >> 0;
@@ -2206,6 +2235,15 @@ CGraphics.prototype =
         {
             this.SetIntegerGrid(true);
             bIsSmartAttack = true;
+
+			if (this.dash_no_smart)
+			{
+				for (var index = 0; index < this.dash_no_smart.length; index++)
+					this.dash_no_smart[index] = (this.m_oCoordTransform.sx * this.dash_no_smart[index] + 0.5) >> 0;
+
+				this.m_oContext.setLineDash(this.dash_no_smart);
+				this.dash_no_smart = null;
+			}
         }
 
         var _pen_w = (pen_w * this.m_oCoordTransform.sx + 0.5) >> 0;

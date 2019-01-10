@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2018
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -33,6 +33,9 @@
 "use strict";
 
 (function(window, undefined){
+
+	// https://bugreport.apple.com/web/?problemID=39173151
+	var isSafariAppleDevices = (AscCommon.AscBrowser.isSafariMacOs && AscCommon.AscBrowser.isAppleDevices);
 
 function _FT_Common()
 {
@@ -287,8 +290,8 @@ function FT_Service_SFNT_TableRec(load_, get_, info_)
 var FT_SERVICE_ID_TT_CMAP = "tt-cmaps";
 function TT_CMapInfo()
 {
-    this.language;
-    this.format;
+    this.language = 0;
+    this.format = 0;
 }
 function FT_Service_TTCMapsRec(get_cmap_info_)
 {
@@ -907,6 +910,7 @@ FT_Stream.prototype =
                 case 24:  /* read a byte sequence */
                 case 25:   /* skip some bytes      */
                 {
+					var len = fields[ind].size;
                     if ( cursor + fsize > this.size )
                     {
                         error = 85;
@@ -918,7 +922,7 @@ FT_Stream.prototype =
                     if ( fval == 24 )
                     {
                         data = structure.data;
-                        pos = structure.pos + arrayFields[ind].offset;
+                        pos = structure.pos + fields[ind].offset;
 
                         for (var i=0;i<len;i++)
                             data[i] = this.data[cursor+i];
@@ -985,8 +989,8 @@ FT_Stream.prototype =
             /* finally, store the value in the object */
 
             data = structure.data;
-            pos = structure.pos + arrayFields[ind].offset;
-            switch (arrayFields[ind])
+            pos = structure.pos + fields[ind].offset;
+            switch (fields[ind])
             {
                 case 1:
                     data[pos] = value & 0xFF;
@@ -8895,6 +8899,16 @@ function AFM_StreamRec()
     this.status = 0;
 }
 
+function AFM_ParserRec()
+{
+	this.memory = null;
+	this.stream = null;
+
+	this.FontInfo = null;
+	this.get_index = null;
+	this.user_data = null;
+}
+
 function AFM_IS_NEWLINE(ch)
 {
     if (ch == 13 || ch == 10)
@@ -10455,7 +10469,7 @@ function ps_tocoordarray(cur, limit, max_coords, coords)
 
         var old_cur = cur.pos;
 
-        if ( coords != NULL && count >= max_coords )
+        if ( coords != null && count >= max_coords )
             break;
 
         /* call PS_Conv_ToFixed() even if coords == NULL */
@@ -12861,7 +12875,7 @@ function sfnt_get_charset_id(face,acharset_encoding,acharset_registry)
         FT_Error = tt_face_find_bdf_prop(face, "CHARSET_ENCODING", encoding);
         if (FT_Error == 0)
         {
-            if (registry.type == BDF_PROPERTY_TYPE_ATOM && encoding.type == BDF_PROPERTY_TYPE_ATOM)
+            if (registry.type == 1 && encoding.type == 1)
             {
                 return {enc:encoding.u,reg:registry.u};
             }
@@ -13229,6 +13243,8 @@ function tt_face_load_font_dir(face, stream)
     face.format_tag = sfnt.format_tag;
 
     face.dir_tables = new Array(face.num_tables);
+    for (var dtNum = 0; dtNum < face.num_tables; dtNum++)
+        face.dir_tables[dtNum] = new TT_Table();
 
     error = stream.Seek(sfnt.offset + 12);
     if (0 == error)
@@ -13241,7 +13257,6 @@ function tt_face_load_font_dir(face, stream)
     var cur = 0;
     for (var nn = 0; nn < sfnt.num_tables; nn++ )
     {
-        face.dir_tables[cur] = new TT_Table();
         var entry = face.dir_tables[cur];
         entry.Tag      = stream.GetULong();
         entry.CheckSum = stream.GetULong();
@@ -13876,7 +13891,7 @@ function tt_face_get_metrics(face, vertical, gindex)
     var header = (vertical == 1) ? face.vertical : face.horizontal;
 
     var longs_m = null;
-    var k = header.number_Of_HMetrics;
+    var k = (vertical == 1) ? header.number_Of_VMetrics : header.number_Of_HMetrics;
 
     var v1 = 0;
     var v2 = 0;
@@ -15055,9 +15070,12 @@ function tt_cmap0_class_rec()
     }
     this.get_cmap_info = function(cmap, cmap_info)
     {
+		cmap_info.format   = 0;
+    	if (isSafariAppleDevices)
+    		return 0;
+
         var data = cmap.data;
         data.pos += 4;
-        cmap_info.format   = 0;
         cmap_info.language = FT_PEEK_USHORT(data);
         data.pos -= 4;
         return 0;
@@ -15255,8 +15273,11 @@ function tt_cmap2_class_rec()
     }
     this.get_cmap_info = function(cmap, cmap_info)
     {
+		cmap_info.format   = 2;
+		if (isSafariAppleDevices)
+			return 0;
+
         cmap.data.pos += 4;
-        cmap_info.format   = 2;
         cmap_info.language = FT_PEEK_USHORT(cmap.data);
         cmap.data.pos -= 4;
         return 0;
@@ -15473,7 +15494,7 @@ function tt_cmap4_char_map_linear(cmap, _charcode, next)
     if (next != 0 && gindex != 0)
         return {gindex:gindex,char_code:charcode};
 
-    return {gindex:gindex,char_code:_char_code};
+    return {gindex:gindex,char_code:_charcode};
 }
 function tt_cmap4_char_map_binary(cmap, _charcode, next)
 {
@@ -15854,9 +15875,12 @@ function tt_cmap4_class_rec()
     }
     this.get_cmap_info = function(cmap, cmap_info)
     {
+		cmap_info.format = 4;
+		if (isSafariAppleDevices)
+			return 0;
+
         var data = cmap.cmap.data;
         data.pos += 4;
-        cmap_info.format = 4;
         cmap_info.language = FT_PEEK_USHORT(data);
         data.pos -= 4;
         return 0;
@@ -15945,9 +15969,12 @@ function tt_cmap6_class_rec()
     }
     this.get_cmap_info = function(cmap, cmap_info)
     {
+		cmap_info.format = 6;
+		if (isSafariAppleDevices)
+			return 0;
+
         var data = cmap.data;
         data.pos += 4;
-        cmap_info.format = 6;
         cmap_info.language = FT_PEEK_USHORT(data);
         data.pos -= 4;
         return 0;
@@ -16087,9 +16114,12 @@ function tt_cmap8_class_rec()
     }
     this.get_cmap_info = function(cmap, cmap_info)
     {
+		cmap_info.format = 8;
+		if (isSafariAppleDevices)
+			return 0;
+
         var data = cmap.cmap.data;
         data.pos += 8;
-        cmap_info.format = 8;
         cmap_info.language = FT_PEEK_ULONG(data);
         data.pos -= 8;
         return 0;
@@ -16170,9 +16200,12 @@ function tt_cmap10_class_rec()
     }
     this.get_cmap_info = function(cmap, cmap_info)
     {
+		cmap_info.format = 10;
+		if (isSafariAppleDevices)
+			return 0;
+
         var data = cmap.cmap.data;
         data.pos += 8;
-        cmap_info.format = 10;
         cmap_info.language = FT_PEEK_ULONG(data);
         data.pos -= 8;
         return 0;
@@ -16292,7 +16325,7 @@ function tt_cmap12_char_map_binary(cmap, _char_code, next)
 
         cmap.valid = 1;
         cmap.cur_charcode = char_code;
-        cmap12.cur_group = mid;
+        cmap.cur_group = mid;
 
         if (gindex == 0)
         {
@@ -16322,7 +16355,7 @@ function tt_cmap12_char_next(cmap, _char_code)
     if (cmap.cur_charcode >= 0xFFFFFFFF)
         return {gindex:gindex,char_code:__char_code};
 
-    if (cmap12.valid == 1 && cmap.cur_charcode == _char_code)
+    if (cmap.valid == 1 && cmap.cur_charcode == _char_code)
     {
         tt_cmap12_next(cmap);
         if (1 == cmap.valid)
@@ -16377,9 +16410,12 @@ function tt_cmap12_class_rec()
     }
     this.get_cmap_info = function(cmap, cmap_info)
     {
+		cmap_info.format = 12;
+		if (isSafariAppleDevices)
+			return 0;
+		
         var data = cmap.cmap.data;
         data.pos += 8;
-        cmap_info.format = 12;
         cmap_info.language = FT_PEEK_ULONG(data);
         data.pos -= 8;
         return 0;
@@ -16502,7 +16538,7 @@ function tt_cmap13_char_map_binary(cmap, _char_code, next)
 
         if (gindex == 0)
         {
-            tt_cmap13_next( cmap13 );
+            tt_cmap13_next( cmap );
             if (cmap.valid == 1)
                 gindex = cmap.cur_gindex;
         }
@@ -16539,7 +16575,7 @@ function tt_cmap13_char_next(cmap, _char_code)
             gindex = 0;
     }
     else
-        return tt_cmap13_char_map_binary( cmap, pchar_code, 1 );
+        return tt_cmap13_char_map_binary( cmap, _char_code, 1 );
 
     return {gindex:gindex,char_code:__char_code};
 }
@@ -16552,7 +16588,7 @@ function tt_cmap13_class_rec()
         var p = dublicate_pointer(table);
         var base = p.pos;
 
-        if (bae + 16 > valid.limit)
+        if (base + 16 > valid.limit)
             return 8;
 
         p.pos = base + 4;
@@ -16588,9 +16624,12 @@ function tt_cmap13_class_rec()
     }
     this.get_cmap_info = function(cmap, cmap_info)
     {
+		cmap_info.format = 13;
+		if (isSafariAppleDevices)
+			return 0;
+
         var data = cmap.data;
         data.pos += 8;
-        cmap_info.format = 13;
         cmap_info.language = FT_PEEK_ULONG(data);
         data.pos -= 8;
         return 0;
@@ -16913,13 +16952,13 @@ function tt_cmap14_variant_chars(cmap, memory, variantSelector)
     {
         var __pp = dublicate_pointer(_cmap_data);
         __pp += defOff;
-        return tt_cmap14_get_def_chars(cmap, _p, memory);
+        return tt_cmap14_get_def_chars(cmap, __pp, memory);
     }
     if (dcnt == 0)
     {
         var __pp = dublicate_pointer(_cmap_data);
         __pp += nondefOff;
-        return tt_cmap14_get_nondef_chars(cmap, __p, memory);
+        return tt_cmap14_get_nondef_chars(cmap, __pp, memory);
     }
 
     if (0 != tt_cmap14_ensure(cmap, (dcnt + numMappings + 1), memory))
@@ -21784,7 +21823,7 @@ function Ins_SxVTL(exc, aIdx1, aIdx2, aOpc, Vec)
     if ((aIdx1 >= exc.zp2.n_points) || (aIdx2 >= exc.zp1.n_points))
     {
         if (exc.pedantic_hinting)
-            exc.error = FT_Err_Invalid_Reference;
+            exc.error = 0x86;
         return 1;
     }
 
@@ -27283,7 +27322,7 @@ function TT_Face()
     this.max_components = 0;
     //#endif
 
-    this.vertical_info = false;
+    this.vertical_info = 0;
     this.vertical = new TT_VertHeader();
 
     this.num_names = 0;
@@ -28167,7 +28206,7 @@ function TT_Vary_Get_Glyph_Deltas(face, glyph_index, n_points)
         stream.cur = here;
     }
 
-    for ( i = 0; i < ( tupleCount & GX_TC_TUPLE_COUNT_MASK ); ++i )
+    for ( i = 0; i < ( tupleCount & 0x0FFF ); ++i )
     {
         var tupleDataSize = stream.GetUShort();
         var tupleIndex    = stream.GetUShort();
@@ -28321,7 +28360,7 @@ function TT_Get_HMetrics(face, idx)
 }
 function TT_Get_VMetrics(face, idx, yMax)
 {
-    if (face.vertical_info === true)
+    if (face.vertical_info === 1)
         return face.sfnt.get_metrics(face, 1, idx);
     else if (face.os2.version != 0xFFFF)
         return {bearing : (face.os2.sTypoAscender - yMax), advance : (face.os2.sTypoAscender - face.os2.sTypoDescender)};
@@ -29516,7 +29555,7 @@ function compute_glyph_metrics(loader, glyph_index)
     var top;
     var advance;
 
-    if (face.vertical_info === true && face.vertical.number_Of_VMetrics > 0)
+    if (face.vertical_info === 1 && face.vertical.number_Of_VMetrics > 0)
     {
         top = FT_DivFix(loader.pp3.y - bbox.yMax, y_scale);
 
@@ -33571,12 +33610,12 @@ function cff_size_done(cffsize)
     var internal = cffsize.internal;
     if (internal != null)
     {
-        var funcs = cff_size_get_globals_funcs(size);
+        var funcs = cff_size_get_globals_funcs(cffsize);
         if (funcs != null)
         {
             funcs.destroy(internal.topfont);
 
-            for (var i = font.num_subfonts; i > 0; i--)
+            for (var i = internal.topfont.num_subfonts; i > 0; i--)
                 funcs.destroy(internal.subfonts[i - 1]);
         }
         /* `internal' is freed by destroy_size (in ftobjs.c) */
@@ -34061,7 +34100,7 @@ function cff_face_init(stream, face, face_index, num_params, params)
             var cid_font_name = cff_index_get_sid_string(cff, dict.cid_font_name);
             /* do we have a `/FontName' for a CID-keyed font? */
             if (cid_font_name != null)
-                face.family_name = cff_strcpy(memory, cid_font_name);
+                face.family_name = cff_strcpy(face.memory, cid_font_name);
         }
 
         if (style_name != null)
@@ -34493,7 +34532,6 @@ function CFF_Decoder()
 
 function cff_builder_init(builder, face, size, glyph, hinting)
 {
-    builder.path_begun  = 0;
     builder.path_begun  = 0;
     builder.load_points = 1;
 
@@ -34962,7 +35000,7 @@ function cff_decoder_parse_charstrings(decoder, charstring_base, charstring_len)
             {
                 if (ip.pos + 3 >= limit)
                     return 3;
-                val = (ip.data[ip.pos] << 24 )| (ip.data[ip.pos + 1] << 16) | (ip.data[ip.po + 2] << 8) | ip.data[ip.pos + 3];
+                val = (ip.data[ip.pos] << 24 )| (ip.data[ip.pos + 1] << 16) | (ip.data[ip.pos + 2] << 8) | ip.data[ip.pos + 3];
                 ip.pos += 4;
                 if (charstring_type == 2)
                     shift = 0;
@@ -35387,7 +35425,7 @@ function cff_decoder_parse_charstrings(decoder, charstring_base, charstring_len)
                 case 7:
                 {
                     if (num_args < 6)
-                        return FT_Error.FT_Err_Too_Few_Arguments;
+                        return 129;
 
                     var nargs = num_args - num_args % 6;
 
@@ -35868,7 +35906,7 @@ function cff_decoder_parse_charstrings(decoder, charstring_base, charstring_len)
                 }
 
                 case 32:
-                    topsargs[0] = FT_MulFix( args[0], args[1] );
+                    tops[args] = FT_MulFix( args[0], args[1] );
                     args++;
                     break;
 
@@ -36609,7 +36647,7 @@ function cff_get_glyph_name(face, glyph_index, buffer, buffer_max)
 function cff_get_name_index(face, glyph_name)
 {
     var cff = face.extra.data;
-    var charset = cf.charset;
+    var charset = cff.charset;
 
     var psnames = FT_FACE_FIND_GLOBAL_SERVICE(face, FT_SERVICE_ID_POSTSCRIPT_CMAPS);
     if (psnames == null)
@@ -36729,7 +36767,7 @@ function cff_get_ros(face, registry, ordering, supplement)
         ret.supplement = dict.cid_supplement;
     }
 
-    return error;
+    return ret;
 }
 
 function cff_get_is_cid(face)
@@ -37843,7 +37881,7 @@ function T1_Get_Private_Dict(parser, psaux)
             parser.private_len = ret.num_bytes;
 
             /* put a safeguard */
-            parser.private_dict[len] = 0;
+            parser.private_dict[ret.num_bytes] = 0;
         }
         else
         {
@@ -38430,7 +38468,7 @@ function T1_Get_MM_Var(face)
     if (error != 0)
         return { err: error, mm : null };
 
-    var _num_axis = master.num_axis;
+    var _num_axis = mmaster.num_axis;
     mmvar.axis = new Array(_num_axis);
     for (var i = 0; i < _num_axis; i++)
         mmvar.axis[i] = new FT_Var_Axis();
@@ -39306,7 +39344,7 @@ function t1_parse_subrs(face, loader)
         if (_strncmp_data(parser.root.cursor, "put", 3) == 0)
         {
             parser.root.funcs.skip_PS_token(parser.root);
-            parser.root.funcs.skip_spaces(parser);
+            parser.root.funcs.skip_spaces(parser.root);
         }
 
         /* with synthetic fonts it is possible we get here twice */
@@ -41241,8 +41279,8 @@ function FT_Set_Charmap(face, cmap)
     if (0 == len)
         return 38;
 
-    if (FT_Get_CMap_Format(cmap) == 14)
-        return 6;
+	if (FT_Get_CMap_Format(cmap) == 14)
+		return 6;
 
     for (var i = 0; i < len; i++)
     {
@@ -41271,8 +41309,7 @@ function FT_Get_CMap_Format(cmap)
         return -1;
 
     var cmap_info = new TT_CMapInfo();
-    service.get_cmap_info(cmap, cmap_info);
-    if (FT_Error != 0)
+    if (0 != service.get_cmap_info(cmap, cmap_info))
         return -1;
     
     return cmap_info.format;
@@ -41875,4 +41912,6 @@ function FT_CMap_New(clazz, init_data, charmap)
   window['AscFonts'].FT_Render_Glyph = FT_Render_Glyph;
   window['AscFonts'].raster_memory = raster_memory;
   window['AscFonts'].FT_Get_Charmap_Index = FT_Get_Charmap_Index;
+  window['AscFonts'].FT_Vector = FT_Vector;
+  window['AscFonts'].FT_Get_Kerning = FT_Get_Kerning;
 })(window);

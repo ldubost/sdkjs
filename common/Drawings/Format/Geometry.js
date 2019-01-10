@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2018
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -664,7 +664,7 @@ function CChangesGeometryAddAdj(Class, Name, OldValue, NewValue, OldAvValue, bRe
     AscDFH.changesFactory[AscDFH.historyitem_GeometryAddHandleXY] = CChangesGeometryAddHandleXY;
 
     function CChangesGeometryAddHandlePolar(Class, gdRefR, minR, maxR, gdRefAng, minAng, maxAng, posX, posY, bReverse){
-        this.Type = AscDFH.historyitem_GeometryAddHandleXY;
+        this.Type = AscDFH.historyitem_GeometryAddHandlePolar;
         this.gdRefAng = gdRefAng;
         this.minAng = minAng;
         this.maxAng = maxAng;
@@ -998,7 +998,7 @@ Geometry.prototype=
 
     AddHandlePolar: function(gdRefAng, minAng, maxAng, gdRefR, minR, maxR, posX, posY)
     {
-        History.Add(new CChangesGeometryAddHandlePolar(this, gdRefAng, minAng, maxAng, gdRefR, minR, maxR, posX, posY));
+        History.Add(new CChangesGeometryAddHandlePolar(this, gdRefR, minR, maxR, gdRefAng, minAng, maxAng, posX, posY));
         this.ahPolarLstInfo.push(
             {
                 gdRefAng:gdRefAng,
@@ -1078,6 +1078,41 @@ Geometry.prototype=
         this.rectS.b = b;
     },
 
+    findConnector: function(x, y, distanse){
+        var dx, dy;
+        for(var i = 0; i < this.cnxLst.length; i++)
+        {
+            dx=x-this.cnxLst[i].x;
+            dy=y-this.cnxLst[i].y;
+
+            if(Math.sqrt(dx*dx+dy*dy) < distanse)
+            {
+                return {idx: i, ang: this.cnxLst[i].ang, x: this.cnxLst[i].x, y: this.cnxLst[i].y};
+            }
+        }
+        return null;
+    },
+
+
+    drawConnectors: function(overlay, transform){
+
+        var dOldAlpha;
+
+        var oGraphics = overlay.Graphics ? overlay.Graphics : overlay;
+        if(AscFormat.isRealNumber(oGraphics.globalAlpha) && oGraphics.put_GlobalAlpha){
+            dOldAlpha = oGraphics.globalAlpha;
+            oGraphics.put_GlobalAlpha(false, 1);
+        }
+        for(var i = 0; i < this.cnxLst.length; i++)
+        {
+            overlay.DrawEditWrapPointsPolygon([{x: this.cnxLst[i].x, y: this.cnxLst[i].y}], transform);
+        }
+        if(AscFormat.isRealNumber(dOldAlpha) && oGraphics.put_GlobalAlpha){
+            oGraphics.put_GlobalAlpha(true, dOldAlpha);
+        }
+
+    },
+
     Recalculate: function(w, h, bResetPathsInfo)
     {
         this.gdLst["_3cd4"]= 16200000;
@@ -1127,32 +1162,39 @@ Geometry.prototype=
         CalculateAhPolarList(this.ahPolarLstInfo, this.ahPolarLst, this.gdLst);
         for(var i=0, n=this.pathLst.length; i<n; i++)
             this.pathLst[i].recalculate(this.gdLst, bResetPathsInfo);
-        if(this.rectS!=undefined)
+
+        this.rect = {};
+        if(this.rectS)
         {
-            this.rect={};
-            this.rect.l=this.gdLst[this.rectS.l];
-            if(this.rect.l===undefined)
+            this.rect.l = this.gdLst[this.rectS.l];
+            if(this.rect.l === undefined)
             {
-                this.rect.l=parseInt(this.rectS.l);
+                this.rect.l = parseInt(this.rectS.l);
             }
 
-            this.rect.t=this.gdLst[this.rectS.t];
-            if(this.rect.t===undefined)
+            this.rect.t = this.gdLst[this.rectS.t];
+            if(this.rect.t === undefined)
             {
-                this.rect.t=parseInt(this.rectS.t);
+                this.rect.t = parseInt(this.rectS.t);
             }
 
-            this.rect.r=this.gdLst[this.rectS.r];
-            if(this.rect.r===undefined)
+            this.rect.r = this.gdLst[this.rectS.r];
+            if(this.rect.r === undefined)
             {
-                this.rect.r=parseInt(this.rectS.r);
+                this.rect.r = parseInt(this.rectS.r);
             }
 
-            this.rect.b=this.gdLst[this.rectS.b];
-            if(this.rect.b===undefined)
+            this.rect.b = this.gdLst[this.rectS.b];
+            if(this.rect.b === undefined)
             {
-                this.rect.b=parseInt(this.rectS.b);
+                this.rect.b = parseInt(this.rectS.b);
             }
+        }
+        else{
+            this.rect.l = this.gdLst["l"];
+            this.rect.t = this.gdLst["t"];
+            this.rect.r = this.gdLst["r"];
+            this.rect.b = this.gdLst["b"];
         }
         if(bResetPathsInfo){
             delete this.gdLst;

@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2018
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -504,7 +504,7 @@
 			this.ForSelectedCells = (undefined != tblProp.ForSelectedCells) ? tblProp.ForSelectedCells : true;
 			this.TableStyle = (undefined != tblProp.TableStyle) ? tblProp.TableStyle : null;
 			this.TableLook = (undefined != tblProp.TableLook) ? new CTablePropLook(tblProp.TableLook) : null;
-			this.RowsInHeader = (undefined != tblProp.RowsInHeader) ? tblProp.RowsInHeader : 0;
+			this.RowsInHeader = (undefined !== tblProp.RowsInHeader) ? tblProp.RowsInHeader : false;
 			this.CellsVAlign = (undefined != tblProp.CellsVAlign) ? tblProp.CellsVAlign : c_oAscVertAlignJc.Top;
 			this.AllowOverlap = (undefined != tblProp.AllowOverlap) ? tblProp.AllowOverlap : undefined;
 			this.TableLayout = tblProp.TableLayout;
@@ -516,6 +516,9 @@
 			this.PercentFullWidth = tblProp.PercentFullWidth;
 			this.TableDescription = tblProp.TableDescription;
 			this.TableCaption = tblProp.TableCaption;
+
+			this.ColumnWidth = tblProp.ColumnWidth;
+			this.RowHeight   = tblProp.RowHeight;
 		}
 		else
 		{
@@ -795,6 +798,22 @@
 	{
 		this.TableCaption = v;
 	};
+	CTableProp.prototype.get_ColumnWidth = function()
+	{
+		return this.ColumnWidth;
+	};
+	CTableProp.prototype.put_ColumnWidth = function(v)
+	{
+		this.ColumnWidth = v;
+	};
+	CTableProp.prototype.get_RowHeight = function()
+	{
+		return this.RowHeight;
+	};
+	CTableProp.prototype.put_RowHeight = function(v)
+	{
+		this.RowHeight = v;
+	};
 
 	window['Asc']['CTableProp'] = window['Asc'].CTableProp = CTableProp;
 	CTableProp.prototype['get_Width'] = CTableProp.prototype.get_Width;
@@ -859,6 +878,10 @@
 	CTableProp.prototype['put_TableDescription'] = CTableProp.prototype.put_TableDescription;
 	CTableProp.prototype['get_TableCaption'] = CTableProp.prototype.get_TableCaption;
 	CTableProp.prototype['put_TableCaption'] = CTableProp.prototype.put_TableCaption;
+	CTableProp.prototype['get_ColumnWidth'] = CTableProp.prototype.get_ColumnWidth;
+	CTableProp.prototype['put_ColumnWidth'] = CTableProp.prototype.put_ColumnWidth;
+	CTableProp.prototype['get_RowHeight'] = CTableProp.prototype.get_RowHeight;
+	CTableProp.prototype['put_RowHeight'] = CTableProp.prototype.put_RowHeight;
 
 // ---------------------------------------------------------------
 	function CBorders(obj)
@@ -1137,7 +1160,7 @@
 			this.Italic = (undefined != obj.Italic) ? obj.Italic : null;
 			this.Underline = (undefined != obj.Underline) ? obj.Underline : null;
 			this.Strikeout = (undefined != obj.Strikeout) ? obj.Strikeout : null;
-			this.FontFamily = (undefined != obj.FontFamily && null != obj.FontFamily) ? new AscCommon.asc_CTextFontFamily(obj.FontFamily) : null;
+			this.FontFamily = (undefined != obj.FontFamily && null != obj.FontFamily) ? new AscCommon.asc_CTextFontFamily(obj.FontFamily) : new AscCommon.asc_CTextFontFamily({Name : "", Index : -1});
 			this.FontSize = (undefined != obj.FontSize) ? obj.FontSize : null;
 			this.Color = (undefined != obj.Color && null != obj.Color) ? AscCommon.CreateAscColorCustom(obj.Color.r, obj.Color.g, obj.Color.b) : null;
 			this.VertAlign = (undefined != obj.VertAlign) ? obj.VertAlign : null;
@@ -1171,7 +1194,7 @@
 			this.Italic = false;
 			this.Underline = false;
 			this.Strikeout = false;
-			this.FontFamily = new asc_CTextFontFamily();
+			this.FontFamily = new AscCommon.asc_CTextFontFamily();
 			this.FontSize = 12;
 			this.Color = AscCommon.CreateAscColorCustom(0, 0, 0);
 			this.VertAlign = AscCommon.vertalign_Baseline;
@@ -1260,17 +1283,28 @@
 	CTextProp.prototype['get_Caps'] = CTextProp.prototype.get_Caps;
 	CTextProp.prototype['get_SmallCaps'] = CTextProp.prototype.get_SmallCaps;
 
-// paragraph and text properties objects container
+	/**
+	 * Paragraph and text properties objects container
+	 * @param paragraphProp
+	 * @param textProp
+	 * @constructor
+	 */
 	function CParagraphAndTextProp(paragraphProp, textProp)
 	{
 		this.ParaPr = (undefined != paragraphProp && null != paragraphProp) ? new CParagraphPropEx(paragraphProp) : null;
 		this.TextPr = (undefined != textProp && null != textProp) ? new CTextProp(textProp) : null;
 	}
 
+	/**
+	 * @returns {?CParagraphPropEx}
+	 */
 	CParagraphAndTextProp.prototype.get_ParaPr = function ()
 	{
 		return this.ParaPr;
 	};
+	/**
+	 * @returns {?CTextProp}
+	 */
 	CParagraphAndTextProp.prototype.get_TextPr = function ()
 	{
 		return this.TextPr;
@@ -1330,7 +1364,7 @@
 			if (!_style || _style.Type != styletype_Table)
 				continue;
 
-			var table = new CTable(drawingDoc, logicDoc, true, 0, _x_mar, _y_mar, 1000, 1000, Rows, Cols, Grid);
+			var table = new CTable(drawingDoc, logicDoc, true, Rows, Cols, Grid);
 			table.Set_Props({TableStyle: i});
 
 			for (var j = 0; j < Rows; j++)
@@ -1344,6 +1378,7 @@
 			graphics.m_oFontManager = AscCommon.g_fontManager;
 			graphics.transform(1, 0, 0, 1, 0, 0);
 
+			table.Reset(_x_mar, _y_mar, 1000, 1000, 0, 0, 1);
 			table.Recalculate_Page(0);
 			table.Draw(0, graphics);
 
@@ -1417,4 +1452,395 @@
 	CHeader.prototype['get_X'] = CHeader.prototype.get_X;
 	CHeader.prototype['get_Y'] = CHeader.prototype.get_Y;
 	CHeader.prototype['get_Level'] = CHeader.prototype.get_Level;
+
+	/**
+	 * Класс для работы с настройками таблицы содержимого
+	 * @constructor
+	 */
+	function CTableOfContentsPr()
+	{
+		this.Hyperlink    = true;
+		this.OutlineStart = -1;
+		this.OutlineEnd   = -1;
+		this.Styles       = [];
+		this.PageNumbers  = true;
+		this.RightTab     = true;
+
+		// Эти параметры задаются только из интерфейса
+		this.TabLeader    = undefined;
+
+		this.StylesType   = Asc.c_oAscTOCStylesType.Current;
+
+		this.ComplexField = null;
+	}
+	CTableOfContentsPr.prototype.InitFromTOCInstruction = function(oComplexField)
+	{
+		if (!oComplexField)
+			return;
+
+		var oInstruction = oComplexField.GetInstruction();
+		if (!oInstruction)
+			return;
+
+		this.Hyperlink    = oInstruction.IsHyperlinks();
+		this.OutlineStart = oInstruction.GetHeadingRangeStart();
+		this.OutlineEnd   = oInstruction.GetHeadingRangeEnd();
+		this.Styles       = oInstruction.GetStylesArray();
+
+		this.PageNumbers  = !oInstruction.IsSkipPageRefLvl();
+		this.RightTab     = "" === oInstruction.GetSeparator();
+
+		var oBeginChar = oComplexField.GetBeginChar();
+		if (oBeginChar && oBeginChar.GetRun() && oBeginChar.GetRun().GetParagraph())
+		{
+			var oTabs = oBeginChar.GetRun().GetParagraph().GetParagraphTabs();
+
+			if (oTabs.Tabs.length > 0)
+			{
+				this.TabLeader = oTabs.Tabs[oTabs.Tabs.length - 1].Leader;
+			}
+		}
+
+		this.ComplexField = oComplexField;
+	};
+	CTableOfContentsPr.prototype.InitFromSdtTOC = function(oSdtTOC)
+	{
+		this.ComplexField = oSdtTOC;
+	};
+	CTableOfContentsPr.prototype.CheckStylesType = function(oStyles)
+	{
+		if (oStyles)
+			this.StylesType = oStyles.GetTOCStylesType();
+	};
+	CTableOfContentsPr.prototype.get_Hyperlink = function()
+	{
+		return this.Hyperlink;
+	};
+	CTableOfContentsPr.prototype.put_Hyperlink = function(isHyperlink)
+	{
+		this.Hyperlink = isHyperlink;
+	};
+	CTableOfContentsPr.prototype.get_OutlineStart = function()
+	{
+		return this.OutlineStart;
+	};
+	CTableOfContentsPr.prototype.get_OutlineEnd = function()
+	{
+		return this.OutlineEnd;
+	};
+	CTableOfContentsPr.prototype.put_OutlineRange = function(nStart, nEnd)
+	{
+		this.OutlineStart = nStart;
+		this.OutlineEnd   = nEnd;
+	};
+	CTableOfContentsPr.prototype.get_StylesCount = function()
+	{
+		return this.Styles.length;
+	};
+	CTableOfContentsPr.prototype.get_StyleName = function(nIndex)
+	{
+		if (nIndex < 0 || nIndex >= this.Styles.length)
+			return "";
+
+		return this.Styles[nIndex].Name;
+	};
+	CTableOfContentsPr.prototype.get_StyleLevel = function(nIndex)
+	{
+		if (nIndex < 0 || nIndex >= this.Styles.length)
+			return -1;
+
+		return this.Styles[nIndex].Lvl;
+	};
+	CTableOfContentsPr.prototype.get_Styles = function()
+	{
+		return this.Styles;
+	};
+	CTableOfContentsPr.prototype.clear_Styles = function()
+	{
+		this.Styles = [];
+	};
+	CTableOfContentsPr.prototype.add_Style = function(sName, nLvl)
+	{
+		this.Styles.push({Name : sName, Lvl : nLvl});
+	};
+	CTableOfContentsPr.prototype.put_ShowPageNumbers = function(isShow)
+	{
+		this.PageNumbers = isShow;
+	};
+	CTableOfContentsPr.prototype.get_ShowPageNumbers = function()
+	{
+		return this.PageNumbers;
+	};
+	CTableOfContentsPr.prototype.put_RightAlignTab = function(isRightTab)
+	{
+		this.RightTab = isRightTab;
+	};
+	CTableOfContentsPr.prototype.get_RightAlignTab = function()
+	{
+		return this.RightTab;
+	};
+	CTableOfContentsPr.prototype.put_TabLeader = function(nTabLeader)
+	{
+		this.TabLeader = nTabLeader;
+	};
+	CTableOfContentsPr.prototype.get_TabLeader = function()
+	{
+		return this.TabLeader;
+	};
+	CTableOfContentsPr.prototype.get_StylesType = function()
+	{
+		return this.StylesType;
+	};
+	CTableOfContentsPr.prototype.put_StylesType = function(nType)
+	{
+		this.StylesType = nType;
+	};
+	CTableOfContentsPr.prototype.get_InternalClass = function()
+	{
+		return this.ComplexField;
+	};
+
+
+	window['Asc']['CTableOfContentsPr'] = window['Asc'].CTableOfContentsPr = CTableOfContentsPr;
+	CTableOfContentsPr.prototype['get_Hyperlink']       = CTableOfContentsPr.prototype.get_Hyperlink;
+	CTableOfContentsPr.prototype['put_Hyperlink']       = CTableOfContentsPr.prototype.put_Hyperlink;
+	CTableOfContentsPr.prototype['get_OutlineStart']    = CTableOfContentsPr.prototype.get_OutlineStart;
+	CTableOfContentsPr.prototype['get_OutlineEnd']      = CTableOfContentsPr.prototype.get_OutlineEnd;
+	CTableOfContentsPr.prototype['put_OutlineRange']    = CTableOfContentsPr.prototype.put_OutlineRange;
+	CTableOfContentsPr.prototype['get_StylesCount']     = CTableOfContentsPr.prototype.get_StylesCount;
+	CTableOfContentsPr.prototype['get_StyleName']       = CTableOfContentsPr.prototype.get_StyleName;
+	CTableOfContentsPr.prototype['get_StyleLevel']      = CTableOfContentsPr.prototype.get_StyleLevel;
+	CTableOfContentsPr.prototype['clear_Styles']        = CTableOfContentsPr.prototype.clear_Styles;
+	CTableOfContentsPr.prototype['add_Style']           = CTableOfContentsPr.prototype.add_Style;
+	CTableOfContentsPr.prototype['put_ShowPageNumbers'] = CTableOfContentsPr.prototype.put_ShowPageNumbers;
+	CTableOfContentsPr.prototype['get_ShowPageNumbers'] = CTableOfContentsPr.prototype.get_ShowPageNumbers;
+	CTableOfContentsPr.prototype['put_RightAlignTab']   = CTableOfContentsPr.prototype.put_RightAlignTab;
+	CTableOfContentsPr.prototype['get_RightAlignTab']   = CTableOfContentsPr.prototype.get_RightAlignTab;
+	CTableOfContentsPr.prototype['get_TabLeader']       = CTableOfContentsPr.prototype.get_TabLeader;
+	CTableOfContentsPr.prototype['put_TabLeader']       = CTableOfContentsPr.prototype.put_TabLeader;
+	CTableOfContentsPr.prototype['get_StylesType']      = CTableOfContentsPr.prototype.get_StylesType;
+	CTableOfContentsPr.prototype['put_StylesType']      = CTableOfContentsPr.prototype.put_StylesType;
+	CTableOfContentsPr.prototype['get_InternalClass']   = CTableOfContentsPr.prototype.get_InternalClass;
+
+
+	/**
+	 * Класс для работы с настройками стиля
+	 * @constructor
+	 */
+	function CAscStyle()
+	{
+		this.Name = "";
+		this.Type = Asc.c_oAscStyleType.Paragraph;
+
+		this.qFormat    = undefined;
+		this.uiPriority = undefined;
+
+		this.StyleId  = "";
+	}
+	CAscStyle.prototype.get_Name = function()
+	{
+		return this.Name;
+	};
+	CAscStyle.prototype.put_Name = function(sName)
+	{
+		this.Name = sName;
+	};
+	CAscStyle.prototype.get_Type = function()
+	{
+		return this.Type;
+	};
+	CAscStyle.prototype.put_Type = function(nType)
+	{
+		this.Type = nType;
+	};
+	CAscStyle.prototype.get_QFormat = function()
+	{
+		return this.qFormat;
+	};
+	CAscStyle.prototype.put_QFormat = function(isQFormat)
+	{
+		this.qFormat = isQFormat;
+	};
+	CAscStyle.prototype.get_UIPriority = function()
+	{
+		return this.uiPriority;
+	};
+	CAscStyle.prototype.put_UIPriority = function(nPriority)
+	{
+		this.uiPriority = nPriority;
+	};
+	CAscStyle.prototype.get_StyleId = function()
+	{
+		return this.StyleId;
+	};
+
+	window['Asc']['CAscStyle'] = window['Asc'].CAscStyle = CAscStyle;
+	CAscStyle.prototype['get_Name']       = CAscStyle.prototype.get_Name;
+	CAscStyle.prototype['put_Name']       = CAscStyle.prototype.put_Name;
+	CAscStyle.prototype['get_Type']       = CAscStyle.prototype.get_Type;
+	CAscStyle.prototype['put_Type']       = CAscStyle.prototype.put_Type;
+	CAscStyle.prototype['get_QFormat']    = CAscStyle.prototype.get_QFormat;
+	CAscStyle.prototype['put_QFormat']    = CAscStyle.prototype.put_QFormat;
+	CAscStyle.prototype['get_UIPriority'] = CAscStyle.prototype.get_UIPriority;
+	CAscStyle.prototype['put_UIPriority'] = CAscStyle.prototype.put_UIPriority;
+	CAscStyle.prototype['get_StyleId']    = CAscStyle.prototype.get_StyleId;
+
+
+	/**
+	 * Класс для работы с настройками нумерации
+	 * @constructor
+	 */
+	function CAscNumbering()
+	{
+		this.NumId = "";
+		this.Lvl   = new Array(9);
+		for (var nLvl = 0; nLvl < 9; ++nLvl)
+		{
+			this.Lvl[nLvl] = new CAscNumberingLvl(nLvl);
+		}
+	}
+	CAscNumbering.prototype.get_InternalId = function()
+	{
+		return this.NumId;
+	};
+	CAscNumbering.prototype.get_Lvl = function(nLvl)
+	{
+		if (nLvl < 0)
+			return this.Lvl[0];
+		else if (nLvl > 8)
+			return this.Lvl[8];
+		else if (!this.Lvl[nLvl])
+			return this.Lvl[0];
+
+		return this.Lvl[nLvl];
+	};
+	window['Asc']['CAscNumbering'] = window['Asc'].CAscNumbering = CAscNumbering;
+	CAscNumbering.prototype['get_InternalId'] = CAscNumbering.prototype.get_InternalId;
+	CAscNumbering.prototype['get_Lvl']        = CAscNumbering.prototype.get_Lvl;
+
+
+	/**
+	 * Класс для работы с текстом конкретного уровня нумерации
+	 * @constructor
+	 */
+	function CAscNumberingLvlText(Type, Value)
+	{
+		this.Type  = undefined !== Type ? Type : Asc.c_oAscNumberingLvlTextType.Text;
+		this.Value = undefined !== Value ? Value : "";
+	}
+	CAscNumberingLvlText.prototype.get_Type = function()
+	{
+		return this.Type;
+	};
+	CAscNumberingLvlText.prototype.put_Type = function(nType)
+	{
+		this.Type = nType;
+	};
+	CAscNumberingLvlText.prototype.get_Value = function()
+	{
+		return this.Value;
+	};
+	CAscNumberingLvlText.prototype.put_Value = function(vVal)
+	{
+		this.Value = vVal;
+	};
+	window['Asc']['CAscNumberingLvlText'] = window['Asc'].CAscNumberingLvlText = CAscNumberingLvlText;
+	CAscNumberingLvlText.prototype['get_Type']  = CAscNumberingLvlText.prototype.get_Type;
+	CAscNumberingLvlText.prototype['put_Type']  = CAscNumberingLvlText.prototype.put_Type;
+	CAscNumberingLvlText.prototype['get_Value'] = CAscNumberingLvlText.prototype.get_Value;
+	CAscNumberingLvlText.prototype['put_Value'] = CAscNumberingLvlText.prototype.put_Value;
+
+
+	/**
+	 * Класс для работы с настройками конкретного уровня нумерации
+	 * @constructor
+	 */
+	function CAscNumberingLvl(nLvlNum)
+	{
+		this.LvlNum  = nLvlNum;
+		this.Format  = Asc.c_oAscNumberingFormat.Bullet;
+		this.Text    = [];
+		this.TextPr  = new AscCommonWord.CTextPr();
+		this.ParaPr  = new AscCommonWord.CParaPr();
+		this.Start   = 1;
+		this.Restart = -1;
+		this.Suff    = Asc.c_oAscNumberingSuff.Tab;
+		this.Align   = AscCommon.align_Left;
+	}
+	CAscNumberingLvl.prototype.get_LvlNum = function()
+	{
+		return this.LvlNum;
+	};
+	CAscNumberingLvl.prototype.get_Format = function()
+	{
+		return this.Format;
+	};
+	CAscNumberingLvl.prototype.put_Format = function(nFormat)
+	{
+		this.Format = nFormat;
+	};
+	CAscNumberingLvl.prototype.get_Text = function()
+	{
+		return this.Text;
+	};
+	CAscNumberingLvl.prototype.put_Text = function(arrText)
+	{
+		this.Text = arrText;
+	};
+	CAscNumberingLvl.prototype.get_TextPr = function()
+	{
+		return this.TextPr;
+	};
+	CAscNumberingLvl.prototype.get_ParaPr = function()
+	{
+		return this.ParaPr;
+	};
+	CAscNumberingLvl.prototype.get_Start = function()
+	{
+		return this.Start;
+	};
+	CAscNumberingLvl.prototype.put_Start = function(nStart)
+	{
+		this.Start = nStart;
+	};
+	CAscNumberingLvl.prototype.get_Restart = function()
+	{
+		return this.Restart;
+	};
+	CAscNumberingLvl.prototype.put_Restart = function(nRestart)
+	{
+		this.Restart = nRestart;
+	};
+	CAscNumberingLvl.prototype.get_Suff = function()
+	{
+		return this.Suff;
+	};
+	CAscNumberingLvl.prototype.put_Suff = function(nSuff)
+	{
+		this.Suff = nSuff;
+	};
+	CAscNumberingLvl.prototype.get_Align = function()
+	{
+		return this.Align;
+	};
+	CAscNumberingLvl.prototype.put_Align = function(nAlign)
+	{
+		this.Align = nAlign;
+	};
+	window['Asc']['CAscNumberingLvl'] = window['Asc'].CAscNumberingLvl = CAscNumberingLvl;
+	CAscNumberingLvl.prototype['get_LvlNum']  = CAscNumberingLvl.prototype.get_LvlNum;
+	CAscNumberingLvl.prototype['get_Format']  = CAscNumberingLvl.prototype.get_Format;
+	CAscNumberingLvl.prototype['put_Format']  = CAscNumberingLvl.prototype.put_Format;
+	CAscNumberingLvl.prototype['get_Text']    = CAscNumberingLvl.prototype.get_Text;
+	CAscNumberingLvl.prototype['put_Text']    = CAscNumberingLvl.prototype.put_Text;
+	CAscNumberingLvl.prototype['get_TextPr']  = CAscNumberingLvl.prototype.get_TextPr;
+	CAscNumberingLvl.prototype['get_ParaPr']  = CAscNumberingLvl.prototype.get_ParaPr;
+	CAscNumberingLvl.prototype['get_Start']   = CAscNumberingLvl.prototype.get_Start;
+	CAscNumberingLvl.prototype['put_Start']   = CAscNumberingLvl.prototype.put_Start;
+	CAscNumberingLvl.prototype['get_Restart'] = CAscNumberingLvl.prototype.get_Restart;
+	CAscNumberingLvl.prototype['put_Restart'] = CAscNumberingLvl.prototype.put_Restart;
+	CAscNumberingLvl.prototype['get_Suff']    = CAscNumberingLvl.prototype.get_Suff;
+	CAscNumberingLvl.prototype['put_Suff']    = CAscNumberingLvl.prototype.put_Suff;
+	CAscNumberingLvl.prototype['get_Align']   = CAscNumberingLvl.prototype.get_Align;
+	CAscNumberingLvl.prototype['put_Align']   = CAscNumberingLvl.prototype.put_Align;
 })(window, undefined);

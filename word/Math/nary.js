@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2018
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -537,7 +537,7 @@ CNary.prototype.raw_HideUpperIterator = function(Value)
         this.RecalcInfo.bProps = true;
 
         this.CurPos = 2;
-        this.Arg.Cursor_MoveToStartPos();
+        this.Arg.MoveCursorToStartPos();
     }
 };
 CNary.prototype.raw_HideLowerIterator = function(Value)
@@ -548,7 +548,7 @@ CNary.prototype.raw_HideLowerIterator = function(Value)
         this.RecalcInfo.bProps = true;
 
         this.CurPos = 2;
-        this.Arg.Cursor_MoveToStartPos();
+        this.Arg.MoveCursorToStartPos();
     }
 };
 CNary.prototype.Is_ContentUse = function(MathContent)

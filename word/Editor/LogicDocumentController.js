@@ -18,13 +18,13 @@ function CLogicDocumentController(LogicDocument)
 CLogicDocumentController.prototype = Object.create(CDocumentControllerBase.prototype);
 CLogicDocumentController.prototype.constructor = CLogicDocumentController;
 
-CLogicDocumentController.prototype.CanTargetUpdate = function()
+CLogicDocumentController.prototype.CanUpdateTarget = function()
 {
-	return this.LogicDocument.controller_CanTargetUpdate();
+	return this.LogicDocument.controller_CanUpdateTarget();
 };
-CLogicDocumentController.prototype.RecalculateCurPos = function()
+CLogicDocumentController.prototype.RecalculateCurPos = function(bUpdateX, bUpdateY)
 {
-	return this.LogicDocument.controller_RecalculateCurPos();
+	return this.LogicDocument.controller_RecalculateCurPos(bUpdateX, bUpdateY);
 };
 CLogicDocumentController.prototype.GetCurPage = function()
 {
@@ -38,6 +38,10 @@ CLogicDocumentController.prototype.AddInlineImage = function(nW, nH, oImage, oCh
 {
 	this.LogicDocument.controller_AddInlineImage(nW, nH, oImage, oChart, bFlow);
 };
+CLogicDocumentController.prototype.AddImages = function(aImages)
+{
+	this.LogicDocument.controller_AddImages(aImages);
+};
 CLogicDocumentController.prototype.AddOleObject = function(nW, nH, nWidthPix, nHeightPix, oImage, oData, sApplicationId)
 {
 	this.LogicDocument.controller_AddOleObject(nW, nH, nWidthPix, nHeightPix, oImage, oData, sApplicationId);
@@ -50,13 +54,19 @@ CLogicDocumentController.prototype.EditChart = function(Chart)
 {
 	// Ничего не делаем
 };
+CLogicDocumentController.prototype.AddSignatureLine = function(oSignatureDrawing)
+{
+    this.LogicDocument.controller_AddSignatureLine(oSignatureDrawing);
+};
+
+
 CLogicDocumentController.prototype.AddInlineTable = function(nCols, nRows)
 {
 	this.LogicDocument.controller_AddInlineTable(nCols, nRows);
 };
-CLogicDocumentController.prototype.ClearParagraphFormatting = function()
+CLogicDocumentController.prototype.ClearParagraphFormatting = function(isClearParaPr, isClearTextPr)
 {
-	this.LogicDocument.controller_ClearParagraphFormatting();
+	this.LogicDocument.controller_ClearParagraphFormatting(isClearParaPr, isClearTextPr);
 };
 CLogicDocumentController.prototype.AddToParagraph = function(oItem)
 {
@@ -82,9 +92,9 @@ CLogicDocumentController.prototype.MoveCursorLeft = function(AddToSelect, Word)
 {
 	return this.LogicDocument.controller_MoveCursorLeft(AddToSelect, Word);
 };
-CLogicDocumentController.prototype.MoveCursorRight = function(AddToSelect, Word, FromPaste)
+CLogicDocumentController.prototype.MoveCursorRight = function(AddToSelect, Word)
 {
-	return this.LogicDocument.controller_MoveCursorRight(AddToSelect, Word, FromPaste);
+	return this.LogicDocument.controller_MoveCursorRight(AddToSelect, Word);
 };
 CLogicDocumentController.prototype.MoveCursorUp = function(AddToSelect)
 {
@@ -126,10 +136,6 @@ CLogicDocumentController.prototype.SetParagraphIndent = function(Ind)
 {
 	this.LogicDocument.controller_SetParagraphIndent(Ind);
 };
-CLogicDocumentController.prototype.SetParagraphNumbering = function(NumInfo)
-{
-	this.LogicDocument.controller_SetParagraphNumbering(NumInfo);
-};
 CLogicDocumentController.prototype.SetParagraphShd = function(Shd)
 {
 	this.LogicDocument.controller_SetParagraphShd(Shd);
@@ -166,13 +172,13 @@ CLogicDocumentController.prototype.SetParagraphFramePr = function(FramePr, bDele
 {
 	this.LogicDocument.controller_SetParagraphFramePr(FramePr, bDelete);
 };
-CLogicDocumentController.prototype.IncreaseOrDecreaseParagraphFontSize = function(bIncrease)
+CLogicDocumentController.prototype.IncreaseDecreaseFontSize = function(bIncrease)
 {
-	this.LogicDocument.controller_IncreaseOrDecreaseParagraphFontSize(bIncrease);
+	this.LogicDocument.controller_IncreaseDecreaseFontSize(bIncrease);
 };
-CLogicDocumentController.prototype.IncreaseOrDecreaseParagraphIndent = function(bIncrease)
+CLogicDocumentController.prototype.IncreaseDecreaseIndent = function(bIncrease)
 {
-	this.LogicDocument.controller_IncreaseOrDecreaseParagraphIndent(bIncrease);
+	this.LogicDocument.controller_IncreaseDecreaseIndent(bIncrease);
 };
 CLogicDocumentController.prototype.SetImageProps = function(Props)
 {
@@ -182,13 +188,13 @@ CLogicDocumentController.prototype.SetTableProps = function(Props)
 {
 	this.LogicDocument.controller_SetTableProps(Props);
 };
-CLogicDocumentController.prototype.GetCurrentParaPr = function()
+CLogicDocumentController.prototype.GetCalculatedParaPr = function()
 {
-	return this.LogicDocument.controller_GetCurrentParaPr();
+	return this.LogicDocument.controller_GetCalculatedParaPr();
 };
-CLogicDocumentController.prototype.GetCurrentTextPr = function()
+CLogicDocumentController.prototype.GetCalculatedTextPr = function()
 {
-	return this.LogicDocument.controller_GetCurrentTextPr();
+	return this.LogicDocument.controller_GetCalculatedTextPr();
 };
 CLogicDocumentController.prototype.GetDirectParaPr = function()
 {
@@ -202,9 +208,9 @@ CLogicDocumentController.prototype.RemoveSelection = function(bNoCheckDrawing)
 {
 	this.LogicDocument.controller_RemoveSelection(bNoCheckDrawing);
 };
-CLogicDocumentController.prototype.IsEmptySelection = function(bCheckHidden)
+CLogicDocumentController.prototype.IsSelectionEmpty = function(bCheckHidden)
 {
-	return this.LogicDocument.controller_IsEmptySelection(bCheckHidden);
+	return this.LogicDocument.controller_IsSelectionEmpty(bCheckHidden);
 };
 CLogicDocumentController.prototype.DrawSelectionOnPage = function(PageAbs)
 {
@@ -242,6 +248,10 @@ CLogicDocumentController.prototype.IsSelectionUse = function()
 {
 	return this.LogicDocument.controller_IsSelectionUse();
 };
+CLogicDocumentController.prototype.IsNumberingSelection = function()
+{
+	return this.LogicDocument.controller_IsNumberingSelection();
+};
 CLogicDocumentController.prototype.IsTextSelectionUse = function()
 {
 	return this.LogicDocument.controller_IsTextSelectionUse();
@@ -254,9 +264,9 @@ CLogicDocumentController.prototype.GetSelectedText = function(bClearText, oPr)
 {
 	return this.LogicDocument.controller_GetSelectedText(bClearText, oPr);
 };
-CLogicDocumentController.prototype.GetCurrentParagraph = function()
+CLogicDocumentController.prototype.GetCurrentParagraph = function(bIgnoreSelection, arrSelectedParagraphs)
 {
-	return this.LogicDocument.controller_GetCurrentParagraph();
+	return this.LogicDocument.controller_GetCurrentParagraph(bIgnoreSelection, arrSelectedParagraphs);
 };
 CLogicDocumentController.prototype.GetSelectedElementsInfo = function(oInfo)
 {
@@ -266,21 +276,25 @@ CLogicDocumentController.prototype.AddTableRow = function(bBefore)
 {
 	this.LogicDocument.controller_AddTableRow(bBefore);
 };
-CLogicDocumentController.prototype.AddTableCol = function(bBefore)
+CLogicDocumentController.prototype.AddTableColumn = function(bBefore)
 {
-	this.LogicDocument.controller_AddTableCol(bBefore);
+	this.LogicDocument.controller_AddTableColumn(bBefore);
 };
 CLogicDocumentController.prototype.RemoveTableRow = function()
 {
 	this.LogicDocument.controller_RemoveTableRow();
 };
-CLogicDocumentController.prototype.RemoveTableCol = function()
+CLogicDocumentController.prototype.RemoveTableColumn = function()
 {
-	this.LogicDocument.controller_RemoveTableCol();
+	this.LogicDocument.controller_RemoveTableColumn();
 };
 CLogicDocumentController.prototype.MergeTableCells = function()
 {
 	this.LogicDocument.controller_MergeTableCells();
+};
+CLogicDocumentController.prototype.DistributeTableCells = function(isHorizontally)
+{
+	return this.LogicDocument.controller_DistributeTableCells(isHorizontally);
 };
 CLogicDocumentController.prototype.SplitTableCells = function(Cols, Rows)
 {
@@ -377,4 +391,16 @@ CLogicDocumentController.prototype.GetCurrentSectionPr = function()
 CLogicDocumentController.prototype.RemoveTextSelection = function()
 {
 	return this.RemoveSelection();
+};
+CLogicDocumentController.prototype.AddContentControl = function(nContentControlType)
+{
+	return this.LogicDocument.controller_AddContentControl(nContentControlType);
+};
+CLogicDocumentController.prototype.GetStyleFromFormatting = function()
+{
+	return this.LogicDocument.controller_GetStyleFromFormatting();
+};
+CLogicDocumentController.prototype.GetSimilarNumbering = function(oContinueEngine)
+{
+	this.LogicDocument.controller_GetSimilarNumbering(oContinueEngine);
 };

@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2018
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -64,9 +64,21 @@ CDocumentControllerBase.prototype.Get_DrawingDocument = function()
  * @param {boolean} bReturnHdrFtr Если true, тогда возвращаем ссылку на колонтитул.
  * @returns {boolean | CHeaderFooter}
  */
-CDocumentControllerBase.prototype.Is_HdrFtr = function(bReturnHdrFtr)
+CDocumentControllerBase.prototype.IsHdrFtr = function(bReturnHdrFtr)
 {
 	if (bReturnHdrFtr)
+		return null;
+
+	return false;
+};
+/**
+ * Является ли данный класс контроллером для сносок
+ * @param {boolean} bReturnFootnote Если true, тогда возвращаем ссылку на колонтитул
+ * @returns {boolean | CFootEndnote}
+ */
+CDocumentControllerBase.prototype.IsFootnote = function(bReturnFootnote)
+{
+	if (bReturnFootnote)
 		return null;
 
 	return false;
@@ -76,7 +88,7 @@ CDocumentControllerBase.prototype.Is_HdrFtr = function(bReturnHdrFtr)
  * @param {boolean} bReturnShape Если true, тогда возвращаем ссылку на автофигуру.
  * @returns {boolean | CShape}
  */
-CDocumentControllerBase.prototype.Is_HdrFtr = function(bReturnShape)
+CDocumentControllerBase.prototype.Is_DrawingShape = function(bReturnShape)
 {
 	if (bReturnShape)
 		return null;
@@ -157,8 +169,11 @@ CDocumentControllerBase.prototype.Get_TextBackGroundColor = function()
  * Является ли данный класс ячейкой.
  * @returns {false}
  */
-CDocumentControllerBase.prototype.Is_Cell = function()
+CDocumentControllerBase.prototype.IsCell = function(isReturnCell)
 {
+	if (true === isReturnCell)
+		return null;
+
 	return false;
 };
 /**
@@ -180,7 +195,7 @@ CDocumentControllerBase.prototype.Get_ColorMap = function()
  * @param CurElement
  * @returns {null}
  */
-CDocumentControllerBase.prototype.Get_PrevElementEndInfo = function(CurElement)
+CDocumentControllerBase.prototype.GetPrevElementEndInfo = function(CurElement)
 {
 	return null;
 };
@@ -264,12 +279,12 @@ CDocumentControllerBase.prototype.Set_CurrentElement = function(bUpdateStates, P
  * Можно ли обновлять позицию курсора.
  * @returns {boolean}
  */
-CDocumentControllerBase.prototype.CanTargetUpdate = function(){return true;};
+CDocumentControllerBase.prototype.CanUpdateTarget = function(){return true;};
 /**
  * Пересчитываем текущую позицию.
  * @returns {{X: number, Y: number, Height: number, PageNum: number, Internal: {Line: number, Page: number, Range: number}, Transform: null}}
  */
-CDocumentControllerBase.prototype.RecalculateCurPos = function(){return {X : 0, Y : 0, Height : 0, PageNum : 0, Internal : {Line : 0, Page : 0, Range : 0}, Transform : null};};
+CDocumentControllerBase.prototype.RecalculateCurPos = function(bUpdateX, bUpdateY){return {X : 0, Y : 0, Height : 0, PageNum : 0, Internal : {Line : 0, Page : 0, Range : 0}, Transform : null};};
 /**
  * Получаем текущий номер страницы.
  * @returns {number} -1 - значит, номер страницы определеить невозможно
@@ -290,6 +305,12 @@ CDocumentControllerBase.prototype.AddNewParagraph = function(bRecalculate, bForc
  * @param {boolean} bFlow - инлайн объект или "плавающий"
  */
 CDocumentControllerBase.prototype.AddInlineImage = function(nW, nH, oImage, oChart, bFlow){};
+
+/**
+ * Добавляем несколько изображений
+ * @param {Array} aImages - массив объектов типа CImage
+ * */
+CDocumentControllerBase.prototype.AddImages = function(aImages){};
 /**
  * Добавляем OLE-объект.
  * @param nW
@@ -307,6 +328,11 @@ CDocumentControllerBase.prototype.AddOleObject = function(nW, nH, nWidthPix, nHe
  */
 CDocumentControllerBase.prototype.AddTextArt = function(nStyle){};
 /**
+ * Вставляем объект SignatureLine
+ * @param oSignatureDrawing
+ */
+CDocumentControllerBase.prototype.AddSignatureLine = function(oSignatureDrawing){};
+/**
  * Редактируем диаграмму.
  * @param Chart
  */
@@ -318,9 +344,11 @@ CDocumentControllerBase.prototype.EditChart = function(Chart){};
  */
 CDocumentControllerBase.prototype.AddInlineTable = function(nCols, nRows){};
 /**
- * Очищаем настройки параграфа.
+ * Очищаем форматирование внутри селекта
+ * {boolean} [isClearParaPr=true] Очищать ли настройки параграфа
+ * {boolean} [isClearTextPr=true] Очищать ли настройки текста
  */
-CDocumentControllerBase.prototype.ClearParagraphFormatting = function(){};
+CDocumentControllerBase.prototype.ClearParagraphFormatting = function(isClearParaPr, isClearTextPr){};
 /**
  * Добавляем элемент в параграф.
  * @param oItem
@@ -364,7 +392,7 @@ CDocumentControllerBase.prototype.MoveCursorLeft = function(AddToSelect, Word){r
  * @param {boolean} FromPaste Пришла ли данная комнда после "вставки"
  * @returns {boolean} Получилось ли перемещение, или мы достигли предела.
  */
-CDocumentControllerBase.prototype.MoveCursorRight = function(AddToSelect, Word, FromPaste){return false;};
+CDocumentControllerBase.prototype.MoveCursorRight = function(AddToSelect, Word){return false;};
 /**
  * Смещаем курсор вверх.
  * @param AddToSelect Добавлять ли к селекту смещение
@@ -423,11 +451,6 @@ CDocumentControllerBase.prototype.SetParagraphTabs = function(Tabs){};
  */
 CDocumentControllerBase.prototype.SetParagraphIndent = function(Ind){};
 /**
- * Установить тип нумерации параграфа.
- * @param NumInfo
- */
-CDocumentControllerBase.prototype.SetParagraphNumbering = function(NumInfo){};
-/**
  * Установить заливку параграфа.
  * @param Shd
  */
@@ -477,12 +500,12 @@ CDocumentControllerBase.prototype.SetParagraphFramePr = function(FramePr, bDelet
  * Уменьшаем или увеличиваем (по специальной таблице) размер шрифта в параграфе.
  * @param {boolean} bIncrease
  */
-CDocumentControllerBase.prototype.IncreaseOrDecreaseParagraphFontSize = function(bIncrease){};
+CDocumentControllerBase.prototype.IncreaseDecreaseFontSize = function(bIncrease){};
 /**
  * Уменьшаем или увеличиваем (по специальной таблице) отступы в параграфе.
  * @param {boolean} bIncrease
  */
-CDocumentControllerBase.prototype.IncreaseOrDecreaseParagraphIndent = function(bIncrease){};
+CDocumentControllerBase.prototype.IncreaseDecreaseIndent = function(bIncrease){};
 /**
  * Устанавливаем настройки для изображений.
  * @param Props
@@ -497,12 +520,12 @@ CDocumentControllerBase.prototype.SetTableProps = function(Props){};
  * Получаем текущие настройки параграфа.
  * @returns {CParaPr}
  */
-CDocumentControllerBase.prototype.GetCurrentParaPr = function(){var oParaPr = new CParaPr(); oParaPr.Init_Default(); return oParaPr};
+CDocumentControllerBase.prototype.GetCalculatedParaPr = function(){var oParaPr = new CParaPr(); oParaPr.Init_Default(); return oParaPr};
 /**
  * Получаем текущие настройки текста.
  * @returns {CTextPr}
  */
-CDocumentControllerBase.prototype.GetCurrentTextPr = function(){var oTextPr = new CTextPr(); oTextPr.Init_Default(); return oTextPr};
+CDocumentControllerBase.prototype.GetCalculatedTextPr = function(){var oTextPr = new CTextPr(); oTextPr.Init_Default(); return oTextPr};
 /**
  * Получаем прямые настройки параграфа.
  * @returns {CParaPr}
@@ -522,7 +545,7 @@ CDocumentControllerBase.prototype.RemoveSelection = function(bNoCheckDrawing){};
  * Проверяем пустой ли селект.
  * @returns {boolean}
  */
-CDocumentControllerBase.prototype.IsEmptySelection = function(bCheckHidden){return true;};
+CDocumentControllerBase.prototype.IsSelectionEmpty = function(bCheckHidden){return true;};
 /**
  * Рисуем селект на заданно странице.
  * @param PageAbs
@@ -572,6 +595,11 @@ CDocumentControllerBase.prototype.PasteFormatting = function(TextPr, ParaPr){};
  */
 CDocumentControllerBase.prototype.IsSelectionUse = function(){return false;};
 /**
+ * Проверяем выделена ли у нас нумерация в данный момент
+ * @returns {boolean}
+ */
+CDocumentControllerBase.prototype.IsNumberingSelection = function(){return false;};
+/**
  * Проверяем выделен ли именно текст сейчас.
  * @returns {boolean}
  */
@@ -592,7 +620,7 @@ CDocumentControllerBase.prototype.GetSelectedText = function(bClearText, oPr){re
  * Получаем текущий параграф.
  * @returns {?Paragraph}
  */
-CDocumentControllerBase.prototype.GetCurrentParagraph = function(){return null};
+CDocumentControllerBase.prototype.GetCurrentParagraph = function(bIgnoreSelection, arrSelectedParagraphs){return null};
 /**
  * Собираем информацию о выделенной части документа.
  * @param oInfo
@@ -607,7 +635,7 @@ CDocumentControllerBase.prototype.AddTableRow = function(bBefore){};
  * Добавляем столбец таблицы.
  * @param bBefore
  */
-CDocumentControllerBase.prototype.AddTableCol = function(bBefore){};
+CDocumentControllerBase.prototype.AddTableColumn = function(bBefore){};
 /**
  * Удаляем строку таблицы.
  */
@@ -615,7 +643,7 @@ CDocumentControllerBase.prototype.RemoveTableRow = function(){};
 /**
  * Удаляем колонку таблицы.
  */
-CDocumentControllerBase.prototype.RemoveTableCol = function(){};
+CDocumentControllerBase.prototype.RemoveTableColumn = function(){};
 /**
  * Объединяем ячейки таблицы.
  */
@@ -643,6 +671,14 @@ CDocumentControllerBase.prototype.CanMergeTableCells = function(){return false;}
  * @returns {boolean}
  */
 CDocumentControllerBase.prototype.CanSplitTableCells = function(){return false;};
+/**
+ * Распределяем ячейки таблицы по ширине или высоте.
+ * @returns {boolean}
+ */
+CDocumentControllerBase.prototype.DistributeTableCells = function(isHorizontally)
+{
+	return false;
+};
 /**
  * Обновляем состояние интерфейса.
  */
@@ -725,10 +761,23 @@ CDocumentControllerBase.prototype.RestoreDocumentStateAfterLoadChanges = functio
 CDocumentControllerBase.prototype.GetColumnSize = function(){return {W : 0, H : 0};};
 /**
  * Получаем настройки текущей секции
- * @returns {CSectionPr?}
+ * @returns {?CSectionPr}
  */
 CDocumentControllerBase.prototype.GetCurrentSectionPr = function(){return null;};
 /**
  * Отличие от RemoveSelection в том, что сбрасываем селект с текста, но не сбрасываем с автофигур
  */
 CDocumentControllerBase.prototype.RemoveTextSelection = function(){};
+/**
+ * Добавляем класс CBlockLevelSdt в текущую позицию курсора.
+ */
+CDocumentControllerBase.prototype.AddContentControl = function(nContentControlType){return null;};
+/**
+ * Получаем стиль по выделенному фрагменту
+ */
+CDocumentControllerBase.prototype.GetStyleFromFormatting = function(){return null;};
+/**
+ * Вплоть до заданного параграфа ищем последнюю похожую нумерацию
+ * @param oContinueEngine {CDocumentNumberingContinueEngine}
+ */
+CDocumentControllerBase.prototype.GetSimilarNumbering = function(oContinueEngine){};

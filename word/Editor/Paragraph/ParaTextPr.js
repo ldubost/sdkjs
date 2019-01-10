@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2018
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -39,10 +39,11 @@
 
 /**
  * Класс представляющий собой настройки текста (сейчас используется как настройка текста для конца параграфа)
+ * @param oProps
  * @constructor
  * @extends {CRunElementBase}
  */
-function ParaTextPr(Props)
+function ParaTextPr(oProps)
 {
 	CRunElementBase.call(this);
 
@@ -57,10 +58,8 @@ function ParaTextPr(Props)
 	this.Height       = 0;
 	this.WidthVisible = 0;
 
-	if ("object" == typeof(Props))
-	{
-		this.Value.Set_FromObject(Props);
-	}
+	if (oProps)
+		this.Value.Set_FromObject(oProps);
 
 	// Добавляем данный класс в таблицу Id (обязательно в конце конструктора)
 	g_oTableId.Add(this, this.Id);
@@ -91,64 +90,77 @@ ParaTextPr.prototype.Get_Id = function()
 {
 	return this.Id;
 };
+ParaTextPr.prototype.GetParagraph = function()
+{
+	if (this.Parent instanceof Paragraph)
+		return this.Parent;
+
+	return null;
+};
+ParaTextPr.prototype.IsParagraphSimpleChanges = function()
+{
+	return true;
+};
 //----------------------------------------------------------------------------------------------------------------------
 // Функции для изменения свойств
 //----------------------------------------------------------------------------------------------------------------------
 ParaTextPr.prototype.Apply_TextPr = function(TextPr)
 {
-	if (undefined != TextPr.Bold)
+	if (undefined !== TextPr.Bold)
 		this.Set_Bold(TextPr.Bold);
 
-	if (undefined != TextPr.Italic)
+	if (undefined !== TextPr.Italic)
 		this.Set_Italic(TextPr.Italic);
 
-	if (undefined != TextPr.Strikeout)
+	if (undefined !== TextPr.Strikeout)
 		this.Set_Strikeout(TextPr.Strikeout);
 
-	if (undefined != TextPr.Underline)
+	if (undefined !== TextPr.Underline)
 		this.Set_Underline(TextPr.Underline);
 
-	if (undefined != TextPr.FontSize)
+	if (undefined !== TextPr.FontSize)
 		this.Set_FontSize(TextPr.FontSize);
 
-	if (undefined != TextPr.FontSizeCS)
+	if (undefined !== TextPr.FontSizeCS)
 		this.Set_FontSizeCS(TextPr.FontSizeCS);
 
-	if (undefined != TextPr.Color)
+	if (undefined !== TextPr.Color)
 	{
 		this.Set_Color(TextPr.Color);
-		if (undefined != this.Value.Unifill)
+
+		if (undefined !== this.Value.Unifill)
 		{
 			this.Set_Unifill(undefined);
 		}
-		if (undefined != this.Value.TextFill)
+
+		if (undefined !== this.Value.TextFill)
 		{
 			this.Set_TextFill(undefined);
 		}
 	}
 
-	if (undefined != TextPr.VertAlign)
+	if (undefined !== TextPr.VertAlign)
 		this.Set_VertAlign(TextPr.VertAlign);
 
-	if (undefined != TextPr.HighLight)
+	if (undefined !== TextPr.HighLight)
 		this.Set_HighLight(TextPr.HighLight);
 
-	if (undefined != TextPr.RStyle)
+	if (undefined !== TextPr.RStyle)
 		this.Set_RStyle(TextPr.RStyle);
 
-	if (undefined != TextPr.Spacing)
+	if (undefined !== TextPr.Spacing)
 		this.Set_Spacing(TextPr.Spacing);
 
-	if (undefined != TextPr.DStrikeout)
+	if (undefined !== TextPr.DStrikeout)
 		this.Set_DStrikeout(TextPr.DStrikeout);
 
-	if (undefined != TextPr.Caps)
+	if (undefined !== TextPr.Caps)
 		this.Set_Caps(TextPr.Caps);
 
-	if (undefined != TextPr.SmallCaps)
+	if (undefined !== TextPr.SmallCaps)
 		this.Set_SmallCaps(TextPr.SmallCaps);
 
-	if (undefined != TextPr.Position)
+	if (undefined !== TextPr.Position)
 		this.Set_Position(TextPr.Position);
 
 	if (undefined != TextPr.RFonts)
@@ -257,6 +269,9 @@ ParaTextPr.prototype.Clear_Style = function()
 };
 ParaTextPr.prototype.Set_Bold = function(Value)
 {
+	if (null === Value)
+		Value = undefined;
+
 	if (this.Value.Bold === Value)
 		return;
 
@@ -265,6 +280,9 @@ ParaTextPr.prototype.Set_Bold = function(Value)
 };
 ParaTextPr.prototype.Set_Italic = function(Value)
 {
+	if (null === Value)
+		Value = undefined;
+
 	if (this.Value.Italic === Value)
 		return;
 
@@ -273,6 +291,9 @@ ParaTextPr.prototype.Set_Italic = function(Value)
 };
 ParaTextPr.prototype.Set_Strikeout = function(Value)
 {
+	if (null === Value)
+		Value = undefined;
+
 	if (this.Value.Strikeout === Value)
 		return;
 
@@ -281,6 +302,9 @@ ParaTextPr.prototype.Set_Strikeout = function(Value)
 };
 ParaTextPr.prototype.Set_Underline = function(Value)
 {
+	if (null === Value)
+		Value = undefined;
+
 	if (this.Value.Underline === Value)
 		return;
 
@@ -289,6 +313,9 @@ ParaTextPr.prototype.Set_Underline = function(Value)
 };
 ParaTextPr.prototype.Set_FontSize = function(Value)
 {
+	if (null === Value)
+		Value = undefined;
+
 	if (this.Value.FontSize === Value)
 		return;
 
@@ -297,11 +324,17 @@ ParaTextPr.prototype.Set_FontSize = function(Value)
 };
 ParaTextPr.prototype.Set_Color = function(Value)
 {
+	if (null === Value)
+		Value = undefined;
+
 	History.Add(new CChangesParaTextPrColor(this, this.Value.Color, Value));
 	this.Value.Color = Value;
 };
 ParaTextPr.prototype.Set_VertAlign = function(Value)
 {
+	if (null === Value)
+		Value = undefined;
+
 	if (this.Value.VertAlign === Value)
 		return;
 
@@ -310,11 +343,17 @@ ParaTextPr.prototype.Set_VertAlign = function(Value)
 };
 ParaTextPr.prototype.Set_HighLight = function(Value)
 {
+	if (null === Value)
+		Value = undefined;
+
 	History.Add(new CChangesParaTextPrHighLight(this, this.Value.HighLight, Value));
 	this.Value.HighLight = Value;
 };
 ParaTextPr.prototype.Set_RStyle = function(Value)
 {
+	if (null === Value)
+		Value = undefined;
+
 	if (this.Value.RStyle === Value)
 		return;
 
@@ -323,6 +362,9 @@ ParaTextPr.prototype.Set_RStyle = function(Value)
 };
 ParaTextPr.prototype.Set_Spacing = function(Value)
 {
+	if (null === Value)
+		Value = undefined;
+
 	if (this.Value.Spacing === Value)
 		return;
 
@@ -331,6 +373,9 @@ ParaTextPr.prototype.Set_Spacing = function(Value)
 };
 ParaTextPr.prototype.Set_DStrikeout = function(Value)
 {
+	if (null === Value)
+		Value = undefined;
+
 	if (this.Value.DStrikeout === Value)
 		return;
 
@@ -339,6 +384,9 @@ ParaTextPr.prototype.Set_DStrikeout = function(Value)
 };
 ParaTextPr.prototype.Set_Caps = function(Value)
 {
+	if (null === Value)
+		Value = undefined;
+
 	if (this.Value.Caps === Value)
 		return;
 
@@ -347,6 +395,9 @@ ParaTextPr.prototype.Set_Caps = function(Value)
 };
 ParaTextPr.prototype.Set_SmallCaps = function(Value)
 {
+	if (null === Value)
+		Value = undefined;
+
 	if (this.Value.SmallCaps === Value)
 		return;
 
@@ -355,6 +406,9 @@ ParaTextPr.prototype.Set_SmallCaps = function(Value)
 };
 ParaTextPr.prototype.Set_Position = function(Value)
 {
+	if (null === Value)
+		Value = undefined;
+
 	if (this.Value.Position === Value)
 		return;
 
@@ -379,44 +433,59 @@ ParaTextPr.prototype.Set_RFonts2 = function(RFonts)
 {
 	if (undefined != RFonts)
 	{
-		if (undefined != RFonts.Ascii)
+		if (undefined !== RFonts.Ascii)
 			this.Set_RFonts_Ascii(RFonts.Ascii);
 
-		if (undefined != RFonts.HAnsi)
+		if (undefined !== RFonts.HAnsi)
 			this.Set_RFonts_HAnsi(RFonts.HAnsi);
 
-		if (undefined != RFonts.CS)
+		if (undefined !== RFonts.CS)
 			this.Set_RFonts_CS(RFonts.CS);
 
-		if (undefined != RFonts.EastAsia)
+		if (undefined !== RFonts.EastAsia)
 			this.Set_RFonts_EastAsia(RFonts.EastAsia);
 
-		if (undefined != RFonts.Hint)
+		if (undefined !== RFonts.Hint)
 			this.Set_RFonts_Hint(RFonts.Hint);
 	}
 };
 ParaTextPr.prototype.Set_RFonts_Ascii = function(Value)
 {
+	if (null === Value)
+		Value = undefined;
+
 	History.Add(new CChangesParaTextPrRFontsAscii(this, this.Value.RFonts.Ascii, Value));
 	this.Value.RFonts.Ascii = Value;
 };
 ParaTextPr.prototype.Set_RFonts_HAnsi = function(Value)
 {
+	if (null === Value)
+		Value = undefined;
+
 	History.Add(new CChangesParaTextPrRFontsHAnsi(this, this.Value.RFonts.HAnsi, Value));
 	this.Value.RFonts.HAnsi = Value;
 };
 ParaTextPr.prototype.Set_RFonts_CS = function(Value)
 {
+	if (null === Value)
+		Value = undefined;
+
 	History.Add(new CChangesParaTextPrRFontsCS(this, this.Value.RFonts.CS, Value));
 	this.Value.RFonts.CS = Value;
 };
 ParaTextPr.prototype.Set_RFonts_EastAsia = function(Value)
 {
+	if (null === Value)
+		Value = undefined;
+
 	History.Add(new CChangesParaTextPrRFontsEastAsia(this, this.Value.RFonts.EastAsia, Value));
 	this.Value.RFonts.EastAsia = Value;
 };
 ParaTextPr.prototype.Set_RFonts_Hint = function(Value)
 {
+	if (null === Value)
+		Value = undefined;
+
 	History.Add(new CChangesParaTextPrRFontsHint(this, this.Value.RFonts.Hint, Value));
 	this.Value.RFonts.Hint = Value;
 };
@@ -451,6 +520,9 @@ ParaTextPr.prototype.Set_Unifill = function(Value)
 };
 ParaTextPr.prototype.Set_FontSizeCS = function(Value)
 {
+	if (null === Value)
+		Value = undefined;
+
 	if (this.Value.FontSizeCS === Value)
 		return;
 
@@ -466,6 +538,17 @@ ParaTextPr.prototype.Set_TextFill = function(Value)
 {
 	History.Add(new CChangesParaTextPrTextFill(this, this.Value.TextFill, Value));
 	this.Value.TextFill = Value;
+};
+/**
+ * Выставляем настройки (если какая-либо undefined, то такая настройка удаляется)
+ * @param {CTextPr} oTextPr
+ */
+ParaTextPr.prototype.SetPr = function(oTextPr)
+{
+	if (!oTextPr)
+		oTextPr = new CTextPr();
+
+	this.Set_Value(oTextPr);
 };
 //----------------------------------------------------------------------------------------------------------------------
 // Undo/Redo функции

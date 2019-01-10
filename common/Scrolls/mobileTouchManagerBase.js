@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2018
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -199,7 +199,7 @@
 	};
 	CMobileDelegateSimple.prototype.GetSelectionRectsBounds = function()
 	{
-		return this.LogicDocument.Get_SelectionBounds();
+		return this.LogicDocument.GetSelectionBounds();
 	};
 	CMobileDelegateSimple.prototype.IsReader = function()
 	{
@@ -266,10 +266,10 @@
 	{
 		var _mode = AscCommon.MobileTouchContextMenuType.None;
 
-		if (!this.LogicDocument.Is_SelectionUse())
+		if (!this.LogicDocument.IsSelectionUse())
 			_mode = AscCommon.MobileTouchContextMenuType.Target;
 
-		if (this.LogicDocument.Get_SelectionBounds())
+		if (this.LogicDocument.GetSelectionBounds())
 			_mode = AscCommon.MobileTouchContextMenuType.Select;
 
 		if (_mode == 0 && this.LogicDocument.DrawingObjects.getSelectedObjectsBounds())
@@ -286,7 +286,7 @@
 		var _x = 0;
 		var _y = 0;
 
-		var _target = this.LogicDocument.Is_SelectionUse();
+		var _target = this.LogicDocument.IsSelectionUse();
 		if (_target === false)
 		{
 			/*
@@ -315,7 +315,7 @@
 			return;
 		}
 
-		var _select = this.LogicDocument.Get_SelectionBounds();
+		var _select = this.LogicDocument.GetSelectionBounds();
 		if (_select)
 		{
 			var _rect1 = _select.Start;
@@ -372,7 +372,7 @@
 
 		var _mode = 0;
 
-		var _target = this.LogicDocument.Is_SelectionUse();
+		var _target = this.LogicDocument.IsSelectionUse();
 		if (_target === false)
 		{
 			_posX = this.DrawingDocument.m_dTargetX;
@@ -398,7 +398,7 @@
 			_mode = 1;
 		}
 
-		var _select = this.LogicDocument.Get_SelectionBounds();
+		var _select = this.LogicDocument.GetSelectionBounds();
 		if (_select)
 		{
 			var _rect1 = _select.Start;
@@ -512,7 +512,7 @@
 	};
 	CMobileDelegateEditor.prototype.GetSelectionRectsBounds = function()
 	{
-		return this.LogicDocument.Get_SelectionBounds();
+		return this.LogicDocument.GetSelectionBounds();
 	};
 	CMobileDelegateEditor.prototype.IsReader = function()
 	{

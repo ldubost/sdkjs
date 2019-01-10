@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2018
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -34,11 +34,31 @@
 
 (function (window, undefined) {
 
-var vector_koef = 25.4 / 72;
+var vector_koef = 25.4 / 96;
+var pxInPt = 0.75;
 
-function CPdfPrinter()
+function CPdfPrinter(fontManager)
 {
+    this._ppiX = 96;
+    this._ppiY = 96;
+    this._zoom = 1;
+
+    if (window.Asc && window.Asc.editor)
+    {
+        this._zoom = window.Asc.editor.asc_getZoom();
+        this._ppiX = 96;
+        this._ppiY = 96;
+    }
+
+    vector_koef = 25.4 / (this._ppiX * this._zoom);
+
+    if (AscCommon.AscBrowser.isRetina)
+        vector_koef /= AscCommon.AscBrowser.retinaPixelRatio;
+
     this.DocumentRenderer = new AscCommon.CDocumentRenderer();
+    if (!window['IS_NATIVE_EDITOR']) {
+	   this.DocumentRenderer.InitPicker(fontManager);
+    }
     this.DocumentRenderer.VectorMemoryForPrint = new AscCommon.CMemory();
 
     this.font = new window["Asc"].FontProperties("Arial", -1);
@@ -46,9 +66,6 @@ function CPdfPrinter()
     this.InvertTransform = new AscCommon.CMatrix();
 
     this.bIsSimpleCommands = false;
-
-	this.width_1px = 0.75;
-	this.height_1px = 0.75;
 }
 
 CPdfPrinter.prototype =
@@ -80,11 +97,11 @@ CPdfPrinter.prototype =
     },
     getPPIX : function()
     {
-        return 72.0;
+        return this._ppiX;
     },
     getPPIY : function()
     {
-        return 72.0;
+        return this._ppiY;
     },
 
     getUnits : function()
@@ -99,8 +116,7 @@ CPdfPrinter.prototype =
 
     getZoom : function()
     {
-        console.log("error");
-        return 1;
+        return this._zoom;
     },
     changeZoom : function()
     {
@@ -288,19 +304,17 @@ CPdfPrinter.prototype =
     fillText : function(text, x, y, maxWidth, charWidths)
     {
         //this.DocumentRenderer.FillText(x * vector_koef, y * vector_koef, text);
-        var _len = text.length;
-        if (charWidths.length != _len)
-            this.DocumentRenderer.FillText(x * vector_koef, y * vector_koef, text);
-        else
-        {
-            var offset = 0;
-            for (var i = 0; i < _len; ++i)
-            {
-                this.DocumentRenderer.FillText((x + offset) * vector_koef, y * vector_koef, "" + text[i]);
-                offset += charWidths[i];
-            }
-        }
-        return this;
+		var charPos = 0;
+		var _x = x * vector_koef;
+		var _y = y * vector_koef;
+		for (var iter = text.getUnicodeIterator(); iter.check(); iter.next())
+		{
+			this.DocumentRenderer.FillTextCode(_x, _y, iter.value());
+			if (charPos < charWidths.length)
+				_x += (charWidths[charPos] * vector_koef);
+			charPos++;
+		}
+		return this;
     },
 
     beginPath : function()
@@ -344,14 +358,14 @@ CPdfPrinter.prototype =
 	},
 	lineHorPrevPx : function (x1, y, x2)
 	{
-		y -= this.height_1px;
+		y -= pxInPt;
 		this.DocumentRenderer._m(x1 * vector_koef, y * vector_koef);
 		this.DocumentRenderer._l(x2 * vector_koef, y * vector_koef);
 		return this;
 	},
 	lineVerPrevPx : function (x, y1, y2)
 	{
-		x -= this.width_1px;
+		x -= pxInPt;
 		this.DocumentRenderer._m(x * vector_koef, y1 * vector_koef);
 		this.DocumentRenderer._l(x * vector_koef, y2 * vector_koef);
 		return this;

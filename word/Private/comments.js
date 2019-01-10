@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2018
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -35,23 +35,21 @@
 Asc['asc_docs_api'].prototype.asc_addComment = function(AscCommentData)
 {
 	if (true === AscCommon.CollaborativeEditing.Get_GlobalLock())
-	{
 		return;
-	}
 
-	if (null == this.WordControl.m_oLogicDocument)
-	{
+	var oLogicDocument = this.WordControl.m_oLogicDocument;
+
+	if (!oLogicDocument)
 		return;
-	}
 
 	// Комментарий без цитаты позволяем добавить всегда
-	if (true !== this.can_AddQuotedComment() || false === this.WordControl.m_oLogicDocument.Document_Is_SelectionLocked(AscCommon.changestype_Paragraph_Content))
+	if (true !== this.can_AddQuotedComment() || false === oLogicDocument.Document_Is_SelectionLocked(AscCommon.changestype_Paragraph_Content, null, true, oLogicDocument.IsEditCommentsMode()))
 	{
 		var CommentData = new CCommentData();
 		CommentData.Read_FromAscCommentData(AscCommentData);
 
 		this.WordControl.m_oLogicDocument.Create_NewHistoryPoint(AscDFH.historydescription_Document_AddComment);
-		var Comment = this.WordControl.m_oLogicDocument.Add_Comment(CommentData);
+		var Comment = this.WordControl.m_oLogicDocument.AddComment(CommentData, AscCommentData.asc_getDocumentFlag());
 		if (null != Comment)
 		{
 			this.sync_AddComment(Comment.Get_Id(), CommentData);

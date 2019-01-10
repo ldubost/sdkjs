@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2018
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -52,7 +52,12 @@ AscDFH.drawingsConstructorsMap[AscDFH.historyitem_Comment_Change] = CCommentData
 
 
 AscDFH.drawingsChangesMap[AscDFH.historyitem_Comment_Position] = function(oClass, value){oClass.x = value.a; oClass.y = value.b;};
-AscDFH.drawingsChangesMap[AscDFH.historyitem_Comment_Change]   = function(oClass, value){oClass.Data = value;};
+AscDFH.drawingsChangesMap[AscDFH.historyitem_Comment_Change]   = function(oClass, value){
+    oClass.Data = value;
+    if(value){
+        editor.sync_ChangeCommentData(oClass.Id, value);
+    }
+};
 AscDFH.drawingsChangesMap[AscDFH.historyitem_Comment_TypeInfo] = function(oClass, value){oClass.m_oTypeInfo = value;};
 
 function ParaComment(Start, Id)
@@ -82,11 +87,6 @@ ParaComment.prototype =
 
     Set_CommentId : function(NewCommentId)
     {
-    },
-
-    Set_Paragraph : function(Paragraph)
-    {
-        this.Paragraph = Paragraph;
     },
 
     Is_Empty : function()
@@ -128,15 +128,15 @@ ParaComment.prototype =
     {
     },
 
-    Get_NextRunElements : function(RunElements, UseContentPos, Depth)
+    GetNextRunElements : function(RunElements, UseContentPos, Depth)
     {
     },
 
-    Get_PrevRunElements : function(RunElements, UseContentPos, Depth)
+    GetPrevRunElements : function(RunElements, UseContentPos, Depth)
     {
     },
 
-    Collect_DocumentStatistics : function(ParaStats)
+	CollectDocumentStatistics : function(ParaStats)
     {
     },
 
@@ -148,7 +148,7 @@ ParaComment.prototype =
     {
     },
 
-    Get_SelectedText : function(bAll, bClearText)
+	GetSelectedText : function(bAll, bClearText)
     {
         return "";
     },
@@ -242,15 +242,15 @@ ParaComment.prototype =
     {
     },
 
-    Save_RecalculateObject : function(Copy)
+    SaveRecalculateObject : function(Copy)
     {
     },
 
-    Load_RecalculateObject : function(RecalcObj, Parent)
+    LoadRecalculateObject : function(RecalcObj, Parent)
     {
     },
 
-    Prepare_RecalculateObject : function()
+    PrepareRecalculateObject : function()
     {
     },
 
@@ -282,7 +282,7 @@ ParaComment.prototype =
         return { X : X };
     },
 
-    Recalculate_MinMaxContentWidth : function()
+	RecalculateMinMaxContentWidth : function()
     {
 
     },
@@ -331,11 +331,11 @@ ParaComment.prototype =
         return true;
     },
 
-    Cursor_MoveToStartPos : function()
+	MoveCursorToStartPos : function()
     {
     },
 
-    Cursor_MoveToEndPos : function(SelectFromEnd)
+	MoveCursorToEndPos : function(SelectFromEnd)
     {
     },
 
@@ -433,15 +433,11 @@ ParaComment.prototype =
     {
     },
 
-    Selection_Stop : function()
+	RemoveSelection : function()
     {
     },
 
-    Selection_Remove : function()
-    {
-    },
-
-    Select_All : function(Direction)
+	SelectAll : function(Direction)
     {
     },
 
@@ -449,7 +445,7 @@ ParaComment.prototype =
     {
     },
 
-    Selection_IsEmpty : function(CheckEnd)
+	IsSelectionEmpty : function(CheckEnd)
     {
         return true;
     },
@@ -459,7 +455,7 @@ ParaComment.prototype =
         return false;
     },
 
-    Is_SelectedAll : function(Props)
+	IsSelectedAll : function(Props)
     {
         return true;
     },
@@ -487,6 +483,10 @@ ParaComment.prototype =
     {
     }
 };
+ParaComment.prototype.SetParagraph = function(Paragraph)
+{
+	this.Paragraph = Paragraph;
+};
 ParaComment.prototype.Get_CurrentParaPos = function()
 {
     return new CParaPos(this.StartRange, this.StartLine, 0, 0);
@@ -501,8 +501,8 @@ ParaComment.prototype.Get_TextPr = function(ContentPos, Depth)
 ParaComment.prototype.Set_ReviewType = function(ReviewType, RemovePrChange){};
 ParaComment.prototype.Set_ReviewTypeWithInfo = function(ReviewType, ReviewInfo){};
 ParaComment.prototype.Check_RevisionsChanges = function(Checker, ContentPos, Depth){};
-ParaComment.prototype.Accept_RevisionChanges = function(Type, bAll){};
-ParaComment.prototype.Reject_RevisionChanges = function(Type, bAll){};
+ParaComment.prototype.AcceptRevisionChanges = function(Type, bAll){};
+ParaComment.prototype.RejectRevisionChanges = function(Type, bAll){};
 
 function CWriteCommentData()
 {
@@ -583,6 +583,12 @@ CWriteCommentData.prototype =
             this.AdditionalData += ("0;" + this.Data.m_sUserId.length + ";" + this.Data.m_sUserId + ";" );
             this.AdditionalData += ("1;" + this.Data.m_sUserName.length + ";" + this.Data.m_sUserName + ";" );
             this.AdditionalData += ("2;1;" + (this.Data.m_bSolved ? "1;" : "0;"));
+            if (this.Data.m_sOOTime)
+            {
+                var d = new Date(this.Data.m_sOOTime - 0);
+                var WriteOOTime = this.DateToISO8601(d);
+                this.AdditionalData += ("3;" + WriteOOTime.length + ";" + WriteOOTime);
+            }
         }
     },
 
@@ -638,6 +644,11 @@ CWriteCommentData.prototype =
                 _comment_data.m_sUserName = _value;
             else if (2 == _attr)
                 _comment_data.m_bSolved = ("1" == _value) ? true : false;
+            else if (3 == _attr)
+            {
+                var _time = this.Iso8601ToDate(_value);
+                _comment_data.m_sOOTime = _time;
+			}
         }
     }
 };
@@ -668,6 +679,7 @@ function CCommentData()
 {
     this.m_sText      = "";
     this.m_sTime      = "";
+    this.m_sOOTime      = "";
     this.m_sUserId    = "";
     this.m_sUserName  = "";
     this.m_sQuoteText = null;
@@ -677,6 +689,21 @@ function CCommentData()
 
 CCommentData.prototype =
 {
+
+    createDuplicate: function(){
+        var ret = new CCommentData();
+        ret.m_sText = this.m_sText;
+        ret.m_sTime = this.m_sTime;
+        ret.m_sOOTime = this.m_sOOTime;
+        ret.m_sUserId = this.m_sUserId;
+        ret.m_sUserName = this.m_sUserName;
+        ret.m_sQuoteText = this.m_sQuoteText;
+        ret.m_bSolved = this.m_bSolved;
+        for(var i = 0; i < this.m_aReplies.length; ++i){
+            ret.m_aReplies.push(this.m_aReplies[i].createDuplicate());
+        }
+        return ret;
+    },
 
     Add_Reply: function(CommentData)
     {
@@ -740,6 +767,7 @@ CCommentData.prototype =
     {
         this.m_sText      = AscCommentData.asc_getText();
         this.m_sTime      = AscCommentData.asc_getTime();
+        this.m_sOOTime    = AscCommentData.asc_getOnlyOfficeTime();
         this.m_sUserId    = AscCommentData.asc_getUserId();
         this.m_sQuoteText = AscCommentData.asc_getQuoteText();
         this.m_bSolved    = AscCommentData.asc_getSolved();
@@ -758,6 +786,7 @@ CCommentData.prototype =
     {
         // String            : m_sText
         // String            : m_sTime
+        // String            : m_sOOTime
         // String            : m_sUserId
         // String            : m_sUserName
         // Bool              : Null ли QuoteText
@@ -769,6 +798,7 @@ CCommentData.prototype =
         var Count = this.m_aReplies.length;
         Writer.WriteString2( this.m_sText );
         Writer.WriteString2( this.m_sTime );
+        Writer.WriteString2( this.m_sOOTime );
         Writer.WriteString2( this.m_sUserId );
         Writer.WriteString2( this.m_sUserName );
 
@@ -792,6 +822,7 @@ CCommentData.prototype =
     {
         // String            : m_sText
         // String            : m_sTime
+        // String            : m_sOOTime
         // String            : m_sUserId
         // Bool              : Null ли QuoteText
         // String            : (Если предыдущий параметр false) QuoteText
@@ -801,6 +832,7 @@ CCommentData.prototype =
 
         this.m_sText     = Reader.GetString2();
         this.m_sTime     = Reader.GetString2();
+        this.m_sOOTime   = Reader.GetString2();
         this.m_sUserId   = Reader.GetString2();
         this.m_sUserName = Reader.GetString2();
 
@@ -888,6 +920,13 @@ CComment.prototype =
         return AscDFH.historyitem_type_Comment;
     },
 
+    createDuplicate: function(Parent){
+        var oData = this.Data ? this.Data.createDuplicate() : null;
+        var ret = new CComment(Parent, oData);
+        ret.setPosition(this.x, this.y);
+        return ret;
+    },
+
     hit: function(x, y)
     {
         var Flags = 0;
@@ -923,7 +962,23 @@ CComment.prototype =
             Flags |= 2;
         }
         var dd = editor.WordControl.m_oDrawingDocument;
-        graphics.DrawPresentationComment(Flags, this.x, this.y, dd.GetCommentWidth(), dd.GetCommentHeight())
+        var w = dd.GetCommentWidth();
+        var h = dd.GetCommentHeight();
+        graphics.DrawPresentationComment(Flags, this.x, this.y, w, h);
+
+        var oLock = this.Lock;
+        if(oLock && AscCommon.locktype_None !== oLock.Get_Type())
+        {
+            var bCoMarksDraw = true;
+            var oApi = editor || Asc['editor'];
+            if(oApi){
+                bCoMarksDraw = (!AscCommon.CollaborativeEditing.Is_Fast() || AscCommon.locktype_Mine !== oLock.Get_Type());
+            }
+            if(bCoMarksDraw){
+                graphics.DrawLockObjectRect(oLock.Get_Type(), this.x, this.y, w, h);
+                return true;
+            }
+        }
     },
 
     Set_StartInfo: function(PageNum, X, Y, H, ParaId)
@@ -999,15 +1054,15 @@ CComment.prototype =
         if ( Para_start === Para_end )
         {
             if ( null != Para_start )
-                Para_start.Remove_CommentMarks( this.Id );
+                Para_start.RemoveCommentMarks( this.Id );
         }
         else
         {
             if ( null != Para_start )
-                Para_start.Remove_CommentMarks( this.Id );
+                Para_start.RemoveCommentMarks( this.Id );
 
             if ( null != Para_end )
-                Para_end.Remove_CommentMarks( this.Id );
+                Para_end.RemoveCommentMarks( this.Id );
         }
     },
 
@@ -1060,6 +1115,7 @@ CComment.prototype =
         //    String : Id колонтитула
 
         Writer.WriteString2( this.Id );
+        AscFormat.writeObject(Writer, this.Parent);
         this.Data.Write_ToBinary2(Writer);
         Writer.WriteLong( this.m_oTypeInfo.Type );
 
@@ -1077,6 +1133,7 @@ CComment.prototype =
         //    String : Id колонтитула
 
         this.Id = Reader.GetString2();
+        this.Parent = AscFormat.readObject(Reader);
         this.Data = new CCommentData();
         this.Data.Read_FromBinary2(Reader);
         this.m_oTypeInfo.Type = Reader.GetLong();
@@ -1109,7 +1166,7 @@ CComment.prototype =
         }
 
         if ( false === bUse )
-            editor.WordControl.m_oLogicDocument.Remove_Comment( this.Id, true );
+            editor.WordControl.m_oLogicDocument.RemoveComment( this.Id, true );
     }
 };
 

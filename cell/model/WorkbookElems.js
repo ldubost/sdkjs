@@ -1,5 +1,5 @@
 ﻿/*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2018
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -39,23 +39,20 @@ var CellValueType = AscCommon.CellValueType;
 var c_oAscBorderWidth = AscCommon.c_oAscBorderWidth;
 var c_oAscBorderStyles = AscCommon.c_oAscBorderStyles;
 var FormulaTablePartInfo = AscCommon.FormulaTablePartInfo;
-var cBoolLocal = AscCommon.cBoolLocal;
-var cErrorOrigin = AscCommon.cErrorOrigin;
-var cErrorLocal = AscCommon.cErrorLocal;
 var parserHelp = AscCommon.parserHelp;
-var oNumFormatCache = AscCommon.oNumFormatCache;
-var gc_nMaxDigCountView = AscCommon.gc_nMaxDigCountView;
 var gc_nMaxRow0 = AscCommon.gc_nMaxRow0;
 var gc_nMaxCol0 = AscCommon.gc_nMaxCol0;
 	var History = AscCommon.History;
+	var c_oAscPrintDefaultSettings = AscCommon.c_oAscPrintDefaultSettings;
 
 var UndoRedoDataTypes = AscCommonExcel.UndoRedoDataTypes;
-var UndoRedoData_CellSimpleData = AscCommonExcel.UndoRedoData_CellSimpleData;
 var UndoRedoData_IndexSimpleProp = AscCommonExcel.UndoRedoData_IndexSimpleProp;
+
+var UndoRedoData_Layout = AscCommonExcel.UndoRedoData_Layout;
+
 
 var c_oAscCustomAutoFilter = Asc.c_oAscCustomAutoFilter;
 var c_oAscAutoFilterTypes = Asc.c_oAscAutoFilterTypes;
-var c_oAscNumFormatType = Asc.c_oAscNumFormatType;
 
 var g_oColorManager = null;
 	
@@ -108,14 +105,14 @@ function shiftSort(a, b, offset)
 	}
 	else
 	{
-	    if (0 != offset.offsetRow) {
-	        if (offset.offsetRow > 0)
+	    if (0 != offset.row) {
+	        if (offset.row > 0)
 	            nRes = b.to.r1 - a.to.r1;
 	        else
 	            nRes = a.to.r1 - b.to.r1;
 	    }
-	    if (0 == nRes && 0 != offset.offsetCol) {
-	        if (offset.offsetCol > 0)
+	    if (0 == nRes && 0 != offset.col) {
+	        if (offset.col > 0)
 	            nRes = b.to.c1 - a.to.c1;
 	        else
 	            nRes = a.to.c1 - b.to.c1;
@@ -131,11 +128,19 @@ var g_oRgbColorProperties = {
 	};
 function RgbColor(rgb)
 {
-	this.Properties = g_oRgbColorProperties;
 	this.rgb = rgb;
+
+	this._hash;
 }
 RgbColor.prototype =
 {
+	Properties: g_oRgbColorProperties,
+	getHash: function() {
+		if (!this._hash) {
+			this._hash = this.rgb;
+		}
+		return this._hash;
+	},
 	clone : function()
 	{
 		return new RgbColor(this.rgb);
@@ -151,7 +156,7 @@ RgbColor.prototype =
 
     isEqual: function(oColor)
     {
-        if(!oColor){
+        if(!oColor || !(oColor instanceof RgbColor)){
             return false;
         }
         if(this.rgb !== oColor.rgb){
@@ -212,10 +217,18 @@ function ThemeColor()
 	this.rgb = null;
 	this.theme = null;
 	this.tint = null;
+
+	this._hash;
 }
 ThemeColor.prototype =
 {
 	Properties: g_oThemeColorProperties,
+	getHash: function() {
+		if (!this._hash) {
+			this._hash = this.theme + ';' + this.tint;
+		}
+		return this._hash;
+	},
 	clone : function()
 	{
 		//ThemeColor must be created by g_oColorManager for correct rebuild
@@ -380,14 +393,14 @@ function ColorManager()
 }
 ColorManager.prototype =
 {
-	isEqual : function(color1, color2)
+	isEqual : function(color1, color2, byRgb)
 	{
 		var bRes = false;
 		if(null == color1 && null == color2)
 			bRes = true;
 		else if(null != color1 && null != color2)
 		{
-			if((color1 instanceof ThemeColor && color2 instanceof ThemeColor) || (color1 instanceof RgbColor && color2 instanceof RgbColor))
+			if((color1 instanceof ThemeColor && color2 instanceof ThemeColor) || (color1 instanceof RgbColor && color2 instanceof RgbColor) || byRgb)
 				bRes =  color1.getRgb() == color2.getRgb();
 		}
 		return bRes;
@@ -455,8 +468,6 @@ g_oColorManager = new ColorManager();
 	function Fragment(val) {
 		this.text = null;
 		this.format = null;
-		this.sFormula = null;
-		this.sId = null;
 		if (null != val) {
 			this.set(val);
 		}
@@ -472,13 +483,39 @@ g_oColorManager = new ColorManager();
 		if (null != oVal.format) {
 			this.format = oVal.format;
 		}
-		if (null != oVal.sFormula) {
-			this.sFormula = oVal.sFormula;
-		}
-		if (null != oVal.sId) {
-			this.sId = oVal.sId;
+	};
+	Fragment.prototype.checkVisitedHyperlink = function (row, col, hyperlinkManager) {
+		var color = this.format.getColor();
+		if (color instanceof AscCommonExcel.ThemeColor && g_nColorHyperlink === color.theme && null === color.tint) {
+			//для посещенных гиперссылок
+			var hyperlink = hyperlinkManager.getByCell(row, col);
+			if (hyperlink && hyperlink.data.getVisited()) {
+				this.format.setColor(g_oColorManager.getThemeColor(g_nColorHyperlinkVisited, null));
+			}
 		}
 	};
+
+	function readValAttr(attr){
+		if(attr()){
+			var val = attr()["val"];
+			return val ? val : null;
+		}
+		return null;
+	}
+	function getNumFromXml(val) {
+		return val ? val - 0 : null;
+	}
+	function getColorFromXml(attr) {
+		if(attr()){
+			var vals = attr();
+			if(null != vals["theme"]) {
+				return AscCommonExcel.g_oColorManager.getThemeColor(getNumFromXml(vals["theme"]), getNumFromXml(vals["tint"]));
+			} else if(null != vals["rgb"]){
+				return new AscCommonExcel.RgbColor(0x00ffffff & getNumFromXml(vals["rgb"]));
+			}
+		}
+		return null;
+	}
 
 var g_oFontProperties = {
 		fn: 0,
@@ -505,8 +542,25 @@ var g_oFontProperties = {
 		this.va = null;
 		this.skip = null;
 		this.repeat = null;
+
+		this._hash;
+		this._index;
 	}
 	Font.prototype.Properties = g_oFontProperties;
+	Font.prototype.getHash = function() {
+		if(!this._hash){
+			var color = this.c ? this.c.getHash() : '';
+			this._hash = this.fn + '|' +this.scheme + '|' +this.fs + '|' +this.b + '|' +this.i + '|' +this.u + '|' +
+				this.s + '|' + color + '|' +this.va + '|' + this.skip + '|' +this.repeat;
+		}
+		return this._hash;
+	};
+	Font.prototype.getIndexNumber = function() {
+		return this._index;
+	};
+	Font.prototype.setIndexNumber = function(val) {
+		return this._index = val;
+	};
 	Font.prototype.assign = function(font) {
 		this.fn = font.fn;
 		this.scheme = font.scheme;
@@ -774,93 +828,440 @@ var g_oFontProperties = {
 				break;
 		}
 	};
-var g_oFillProperties = {
+	Font.prototype.onStartNode = function(elem, attr, uq) {
+		var newContext = this;
+		if("b" === elem){
+			this.b = getBoolFromXml(readValAttr(attr));
+		} else if("color" === elem){
+			this.c = getColorFromXml(attr);
+		} else if("i" === elem){
+			this.i = getBoolFromXml(readValAttr(attr));
+		} else if("name" === elem){
+			this.fn = readValAttr(attr);
+		} else if("scheme" === elem){
+			this.scheme = readValAttr(attr);
+		} else if("strike" === elem){
+			this.s = getBoolFromXml(readValAttr(attr));
+		} else if("sz" === elem){
+			this.fs = getNumFromXml(readValAttr(attr));
+		} else if("u" === elem){
+			switch (readValAttr(attr)) {
+				case "single":
+					this.u = Asc.EUnderline.underlineSingle;
+					break;
+				case "double":
+					this.u = Asc.EUnderline.underlineDouble;
+					break;
+				case "singleAccounting":
+					this.u = Asc.EUnderline.underlineSingleAccounting;
+					break;
+				case "doubleAccounting":
+					this.u = Asc.EUnderline.underlineDoubleAccounting;
+					break;
+				case "none":
+					this.u = Asc.EUnderline.underlineNone;
+					break;
+			}
+		} else if("vertAlign" === elem){
+			switch (readValAttr(attr)) {
+				case "baseline":
+					this.va = AscCommon.vertalign_Baseline;
+					break;
+				case "superscript":
+					this.va = AscCommon.vertalign_SuperScript;
+					break;
+				case "subscript":
+					this.va = AscCommon.vertalign_SubScript;
+					break;
+			}
+		} else {
+			newContext = null;
+		}
+		return newContext;
+	};
+
+	var st_gradienttypeLINEAR = 0;
+	var st_gradienttypePATH = 1;
+
+	var st_patterntypeNONE = 0;
+	var st_patterntypeSOLID = 1;
+	var st_patterntypeMEDIUMGRAY = 2;
+	var st_patterntypeDARKGRAY = 3;
+	var st_patterntypeLIGHTGRAY = 4;
+	var st_patterntypeDARKHORIZONTAL = 5;
+	var st_patterntypeDARKVERTICAL = 6;
+	var st_patterntypeDARKDOWN = 7;
+	var st_patterntypeDARKUP = 8;
+	var st_patterntypeDARKGRID = 9;
+	var st_patterntypeDARKTRELLIS = 10;
+	var st_patterntypeLIGHTHORIZONTAL = 11;
+	var st_patterntypeLIGHTVERTICAL = 12;
+	var st_patterntypeLIGHTDOWN = 13;
+	var st_patterntypeLIGHTUP = 14;
+	var st_patterntypeLIGHTGRID = 15;
+	var st_patterntypeLIGHTTRELLIS = 16;
+	var st_patterntypeGRAY125 = 17;
+	var st_patterntypeGRAY0625 = 18;
+
+	function FromXml_ST_GradientType(val) {
+		var res = -1;
+		if ("linear" === val) {
+			res = st_gradienttypeLINEAR;
+		} else if ("path" === val) {
+			res = st_gradienttypePATH;
+		}
+		return res;
+	}
+
+	function FromXml_ST_PatternType(val) {
+		var res = -1;
+		if ("none" === val) {
+			res = st_patterntypeNONE;
+		} else if ("solid" === val) {
+			res = st_patterntypeSOLID;
+		} else if ("mediumGray" === val) {
+			res = st_patterntypeMEDIUMGRAY;
+		} else if ("darkGray" === val) {
+			res = st_patterntypeDARKGRAY;
+		} else if ("lightGray" === val) {
+			res = st_patterntypeLIGHTGRAY;
+		} else if ("darkHorizontal" === val) {
+			res = st_patterntypeDARKHORIZONTAL;
+		} else if ("darkVertical" === val) {
+			res = st_patterntypeDARKVERTICAL;
+		} else if ("darkDown" === val) {
+			res = st_patterntypeDARKDOWN;
+		} else if ("darkUp" === val) {
+			res = st_patterntypeDARKUP;
+		} else if ("darkGrid" === val) {
+			res = st_patterntypeDARKGRID;
+		} else if ("darkTrellis" === val) {
+			res = st_patterntypeDARKTRELLIS;
+		} else if ("lightHorizontal" === val) {
+			res = st_patterntypeLIGHTHORIZONTAL;
+		} else if ("lightVertical" === val) {
+			res = st_patterntypeLIGHTVERTICAL;
+		} else if ("lightDown" === val) {
+			res = st_patterntypeLIGHTDOWN;
+		} else if ("lightUp" === val) {
+			res = st_patterntypeLIGHTUP;
+		} else if ("lightGrid" === val) {
+			res = st_patterntypeLIGHTGRID;
+		} else if ("lightTrellis" === val) {
+			res = st_patterntypeLIGHTTRELLIS;
+		} else if ("gray125" === val) {
+			res = st_patterntypeGRAY125;
+		} else if ("gray0625" === val) {
+			res = st_patterntypeGRAY0625;
+		}
+		return res;
+	}
+
+	function CT_GradientFill() {
+		//Attributes
+		this.type = null;//linear
+		this.degree = null;//0
+		this.left = null;//0
+		this.right = null;//0
+		this.top = null;//0
+		this.bottom = null;//0
+		//Members
+		this.stop = [];
+	}
+
+	CT_GradientFill.prototype.readAttributes = function(attr, uq) {
+		if (attr()) {
+			var vals = attr();
+			var val;
+			val = vals["type"];
+			if (undefined !== val) {
+				val = FromXml_ST_GradientType(val);
+				if (-1 !== val) {
+					this.type = val;
+				}
+			}
+			val = vals["degree"];
+			if (undefined !== val) {
+				this.degree = val - 0;
+			}
+			val = vals["left"];
+			if (undefined !== val) {
+				this.left = val - 0;
+			}
+			val = vals["right"];
+			if (undefined !== val) {
+				this.right = val - 0;
+			}
+			val = vals["top"];
+			if (undefined !== val) {
+				this.top = val - 0;
+			}
+			val = vals["bottom"];
+			if (undefined !== val) {
+				this.bottom = val - 0;
+			}
+		}
+	};
+	CT_GradientFill.prototype.onStartNode = function(elem, attr, uq) {
+		var newContext = this;
+		if ("stop" === elem) {
+			newContext = new CT_GradientStop();
+			if (newContext.readAttributes) {
+				newContext.readAttributes(attr, uq);
+			}
+			this.stop.push(newContext);
+		}
+		else {
+			newContext = null;
+		}
+		return newContext;
+	};
+	function CT_GradientStop() {
+		//Attributes
+		this.position = null;
+		//Members
+		this.color = null;
+	}
+
+	CT_GradientStop.prototype.readAttributes = function(attr, uq) {
+		if (attr()) {
+			var vals = attr();
+			var val;
+			val = vals["position"];
+			if (undefined !== val) {
+				this.position = val - 0;
+			}
+		}
+	};
+	CT_GradientStop.prototype.onStartNode = function(elem, attr, uq) {
+		var newContext = this;
+		if ("color" === elem) {
+			this.color = getColorFromXml(attr);
+		}
+		else {
+			newContext = null;
+		}
+		return newContext;
+	};
+	function CT_PatternFill() {
+		//Attributes
+		this.patternType = null;
+		//Members
+		this.fgColor = null;
+		this.bgColor = null;
+	}
+
+	CT_PatternFill.prototype.readAttributes = function(attr, uq) {
+		if (attr()) {
+			var vals = attr();
+			var val;
+			val = vals["patternType"];
+			if (undefined !== val) {
+				val = FromXml_ST_PatternType(val);
+				if (-1 !== val) {
+					this.patternType = val;
+				}
+			}
+		}
+	};
+	CT_PatternFill.prototype.onStartNode = function(elem, attr, uq) {
+		var newContext = this;
+		if ("fgColor" === elem) {
+			this.fgColor = getColorFromXml(attr);
+		}
+		else if ("bgColor" === elem) {
+			this.bgColor = getColorFromXml(attr);
+		}
+		else {
+			newContext = null;
+		}
+		return newContext;
+	};
+
+	var g_oFillProperties = {
 		bg: 0
 	};
-/** @constructor */
-function Fill(val)
-{
-	if(null == val)
-		val = g_oDefaultFormat.FillAbs;
-	this.Properties = g_oFillProperties;
-	this.bg = val.bg;
-}
-Fill.prototype =
-{
-	_mergeProperty : function(first, second, def)
-	{
-		if(def != first)
+
+	/** @constructor */
+	function Fill(val) {
+		if (null == val) {
+			val = g_oDefaultFormat.FillAbs;
+		}
+		this.bg = val.bg;
+
+		this._hash;
+		this._index;
+	}
+
+	Fill.prototype.Properties = g_oFillProperties;
+	Fill.prototype.getHash = function () {
+		if (!this._hash) {
+			this._hash = this.bg ? this.bg.getHash() : '';
+		}
+		return this._hash;
+	};
+	Fill.prototype.getIndexNumber = function () {
+		return this._index;
+	};
+	Fill.prototype.setIndexNumber = function (val) {
+		return this._index = val;
+	};
+	Fill.prototype._mergeProperty = function (first, second, def) {
+		if (def != first) {
 			return first;
-		else
+		} else {
 			return second;
-	},
-	merge : function(fill)
-	{
+		}
+	};
+	Fill.prototype.merge = function (fill) {
 		var oRes = new Fill();
 		oRes.bg = this._mergeProperty(this.bg, fill.bg, g_oDefaultFormat.Fill.bg);
 		return oRes;
-	},
-	getRgbOrNull : function()
-	{
+	};
+	Fill.prototype.getRgbOrNull = function () {
 		var nRes = null;
-		if(null != this.bg)
+		if (null != this.bg) {
 			nRes = this.bg.getRgb();
+		}
 		return nRes;
-	},
-	getDif : function(val)
-	{
+	};
+	Fill.prototype.getDif = function (val) {
 		var oRes = new Fill(this);
 		var bEmpty = true;
-		if(g_oColorManager.isEqual(this.bg, val.bg))
-			oRes.bg =  null;
-		else
+		if (g_oColorManager.isEqual(this.bg, val.bg)) {
+			oRes.bg = null;
+		} else {
 			bEmpty = false;
-		if(bEmpty)
+		}
+		if (bEmpty) {
 			oRes = null;
+		}
 		return oRes;
-	},
-	isEqual : function(fill)
-	{
+	};
+	Fill.prototype.isEqual = function (fill) {
 		return g_oColorManager.isEqual(this.bg, fill.bg);
-	},
-    clone : function()
-    {
-        return new Fill(this);
-    },
-	getType : function()
-	{
+	};
+	Fill.prototype.clone = function () {
+		return new Fill(this);
+	};
+	Fill.prototype.getType = function () {
 		return UndoRedoDataTypes.StyleFill;
-	},
-	getProperties : function()
-	{
+	};
+	Fill.prototype.getProperties = function () {
 		return this.Properties;
-	},
-	getProperty : function(nType)
-	{
-		switch(nType)
-		{
-			case this.Properties.bg: return this.bg;break;
+	};
+	Fill.prototype.getProperty = function (nType) {
+		switch (nType) {
+			case this.Properties.bg:
+				return this.bg;
+				break;
 		}
-	},
-	setProperty : function(nType, value)
-	{
-		switch(nType)
-		{
-			case this.Properties.bg: this.bg = value;break;
+	};
+	Fill.prototype.setProperty = function (nType, value) {
+		switch (nType) {
+			case this.Properties.bg:
+				this.bg = value;
+				break;
 		}
+	};
+	Fill.prototype.notEmpty = function () {
+		return null !== this.bg;
+	};
+	Fill.prototype.onStartNode = function (elem, attr, uq) {
+		var newContext = this;
+		if ("gradientFill" === elem) {
+			newContext = new CT_GradientFill();
+			if (newContext.readAttributes) {
+				newContext.readAttributes(attr, uq);
+			}
+		} else if ("patternFill" === elem) {
+			newContext = new CT_PatternFill();
+			if (newContext.readAttributes) {
+				newContext.readAttributes(attr, uq);
+			}
+		} else {
+			newContext = null;
+		}
+		return newContext;
+	};
+	Fill.prototype.onEndNode = function (prevContext, elem) {
+		if ("gradientFill" === elem) {
+			if (prevContext.stop.length > 0) {
+				var stop = prevContext.stop[0];
+				if (stop.color) {
+					this.bg = stop.color;
+				}
+			}
+		} else if ("patternFill" === elem) {
+			if (st_patterntypeNONE !== prevContext.patternType) {
+				if (AscCommon.openXml.SaxParserDataTransfer.priorityBg) {
+					if (prevContext.bgColor) {
+						this.bg = prevContext.bgColor;
+					} else if (prevContext.fgColor) {
+						this.bg = prevContext.fgColor;
+					}
+				} else {
+					if (prevContext.fgColor) {
+						this.bg = prevContext.fgColor;
+					} else if (prevContext.bgColor) {
+						this.bg = prevContext.bgColor;
+					}
+				}
+			}
+		}
+	};
+
+	function FromXml_ST_BorderStyle(val) {
+		var res = -1;
+		if ("none" === val) {
+			res = c_oAscBorderStyles.None;
+		} else if ("thin" === val) {
+			res = c_oAscBorderStyles.Thin;
+		} else if ("medium" === val) {
+			res = c_oAscBorderStyles.Medium;
+		} else if ("dashed" === val) {
+			res = c_oAscBorderStyles.Dashed;
+		} else if ("dotted" === val) {
+			res = c_oAscBorderStyles.Dotted;
+		} else if ("thick" === val) {
+			res = c_oAscBorderStyles.Thick;
+		} else if ("double" === val) {
+			res = c_oAscBorderStyles.Double;
+		} else if ("hair" === val) {
+			res = c_oAscBorderStyles.Hair;
+		} else if ("mediumDashed" === val) {
+			res = c_oAscBorderStyles.MediumDashed;
+		} else if ("dashDot" === val) {
+			res = c_oAscBorderStyles.DashDot;
+		} else if ("mediumDashDot" === val) {
+			res = c_oAscBorderStyles.MediumDashDot;
+		} else if ("dashDotDot" === val) {
+			res = c_oAscBorderStyles.DashDotDot;
+		} else if ("mediumDashDotDot" === val) {
+			res = c_oAscBorderStyles.MediumDashDotDot;
+		} else if ("slantDashDot" === val) {
+			res = c_oAscBorderStyles.SlantDashDot;
+		}
+		return res;
 	}
-};
+
 	var g_oBorderPropProperties = {
 		s: 0, c: 1
 	};
 
 	function BorderProp() {
-		this.Properties = g_oBorderPropProperties;
 		this.s = c_oAscBorderStyles.None;
 		this.w = c_oAscBorderWidth.None;
 		this.c = g_oColorManager.getThemeColor(1);
 	}
-
+	BorderProp.prototype.Properties = g_oBorderPropProperties;
+	BorderProp.prototype.getHash = function() {
+		if (!this._hash) {
+			var color = this.c ? this.c.getHash() : '';
+			this._hash = this.s + ';' + this.w + ';' + color;
+		}
+		return this._hash;
+	};
 	BorderProp.prototype.setStyle = function (style) {
 		this.s = style;
 		switch (this.s) {
@@ -932,8 +1333,8 @@ Fill.prototype =
 	BorderProp.prototype.isEmpty = function () {
 		return c_oAscBorderStyles.None === this.s;
 	};
-	BorderProp.prototype.isEqual = function (val) {
-		return this.s === val.s && g_oColorManager.isEqual(this.c, val.c);
+	BorderProp.prototype.isEqual = function (val, byRgb) {
+		return this.s === val.s && g_oColorManager.isEqual(this.c, val.c, byRgb);
 	};
 	BorderProp.prototype.clone = function () {
 		var res = new BorderProp();
@@ -975,6 +1376,29 @@ Fill.prototype =
 				break;
 		}
 	};
+	BorderProp.prototype.readAttributes = function(attr, uq) {
+		if(attr()){
+			var vals = attr();
+			var val;
+			val = vals["style"];
+			if(undefined !== val){
+				val = FromXml_ST_BorderStyle(val);
+				if(-1 !== val){
+					this.setStyle(val);
+				}
+			}
+		}
+	};
+	BorderProp.prototype.onStartNode = function(elem, attr, uq) {
+		var newContext = this;
+		if("color" === elem){
+			this.c = getColorFromXml(attr);
+		}
+		else {
+			newContext = null;
+		}
+		return newContext;
+	};
 var g_oBorderProperties = {
 		l: 0,
 		t: 1,
@@ -992,7 +1416,6 @@ var g_oBorderProperties = {
 		if (null == val) {
 			val = g_oDefaultFormat.BorderAbs;
 		}
-		this.Properties = g_oBorderProperties;
 		this.l = val.l.clone();
 		this.t = val.t.clone();
 		this.r = val.r.clone();
@@ -1002,8 +1425,32 @@ var g_oBorderProperties = {
 		this.iv = val.iv.clone();
 		this.dd = val.dd;
 		this.du = val.du;
+
+		this._hash;
+		this._index;
 	}
 
+	Border.prototype.Properties = g_oBorderProperties;
+	Border.prototype.getHash = function() {
+		if (!this._hash) {
+			this._hash = (this.l ? this.l.getHash() : '') + '|';
+			this._hash += (this.t ? this.t.getHash() : '') + '|';
+			this._hash += (this.r ? this.r.getHash() : '') + '|';
+			this._hash += (this.b ? this.b.getHash() : '') + '|';
+			this._hash += (this.d ? this.d.getHash() : '') + '|';
+			this._hash += (this.ih ? this.ih.getHash() : '') + '|';
+			this._hash += (this.iv ? this.iv.getHash() : '') + '|';
+			this._hash += this.dd + '|';
+			this._hash += this.du;
+		}
+		return this._hash;
+	};
+	Border.prototype.getIndexNumber = function() {
+		return this._index;
+	};
+	Border.prototype.setIndexNumber = function(val) {
+		return this._index = val;
+	};
 	Border.prototype._mergeProperty = function (first, second, def) {
 		if ((null != def.isEqual && false == def.isEqual(first)) || (null == def.isEqual && def != first)) {
 			return first;
@@ -1075,6 +1522,34 @@ var g_oBorderProperties = {
 			oRes = null;
 		}
 		return oRes;
+	};
+	Border.prototype.intersect = function (border, def, byRgb) {
+		if (!this.l.isEqual(border.l, byRgb)) {
+			this.l = def.l;
+		}
+		if (!this.t.isEqual(border.t, byRgb)) {
+			this.t = def.t;
+		}
+		if (!this.r.isEqual(border.r, byRgb)) {
+			this.r = def.r;
+		}
+		if (!this.b.isEqual(border.b, byRgb)) {
+			this.b = def.b;
+		}
+		if (!this.d.isEqual(border.d, byRgb)) {
+			this.d = def.d;
+			this.dd = false;
+			this.du = false;
+		}
+		if (!this.ih.isEqual(border.ih, byRgb)) {
+			this.ih = def.ih;
+		}
+		if (!this.iv.isEqual(border.iv, byRgb)) {
+			this.iv = def.iv;
+		}
+		if (this.dd !== border.dd) {
+			this.dd = def.dd;
+		}
 	};
 	Border.prototype.isEqual = function (val) {
 		return this.l.isEqual(val.l) && this.t.isEqual(val.t) && this.r.isEqual(val.r) && this.b.isEqual(val.b) &&
@@ -1200,97 +1675,112 @@ var g_oBorderProperties = {
 			(this.t && c_oAscBorderStyles.None !== this.t.s) || (this.b && c_oAscBorderStyles.None !== this.b.s) ||
 			(this.dd && c_oAscBorderStyles.None !== this.dd.s) || (this.du && c_oAscBorderStyles.None !== this.du.s);
 	};
+	Border.prototype.readAttributes = function(attr, uq) {
+		if(attr()){
+			var vals = attr();
+			var val;
+			val = vals["diagonalUp"];
+			if(undefined !== val){
+				this.du = getBoolFromXml(val);
+			}
+			val = vals["diagonalDown"];
+			if(undefined !== val){
+				this.dd = getBoolFromXml(val);
+			}
+		}
+	};
+	Border.prototype.onStartNode = function(elem, attr, uq) {
+		var newContext = this;
+		if("start" === elem || "left" === elem){
+			newContext = new BorderProp();
+			if(newContext.readAttributes){
+				newContext.readAttributes(attr, uq);
+			}
+			this.l = newContext;
+		}
+		else if("end" === elem || "right" === elem){
+			newContext = new BorderProp();
+			if(newContext.readAttributes){
+				newContext.readAttributes(attr, uq);
+			}
+			this.r = newContext;
+		}
+		else if("top" === elem){
+			newContext = new BorderProp();
+			if(newContext.readAttributes){
+				newContext.readAttributes(attr, uq);
+			}
+			this.t = newContext;
+		}
+		else if("bottom" === elem){
+			newContext = new BorderProp();
+			if(newContext.readAttributes){
+				newContext.readAttributes(attr, uq);
+			}
+			this.b = newContext;
+		}
+		else if("diagonal" === elem){
+			newContext = new BorderProp();
+			if(newContext.readAttributes){
+				newContext.readAttributes(attr, uq);
+			}
+			this.d = newContext;
+		}
+		else if("vertical" === elem){
+			newContext = new BorderProp();
+			if(newContext.readAttributes){
+				newContext.readAttributes(attr, uq);
+			}
+			this.iv = newContext;
+		}
+		else if("horizontal" === elem){
+			newContext = new BorderProp();
+			if(newContext.readAttributes){
+				newContext.readAttributes(attr, uq);
+			}
+			this.ih = newContext;
+		}
+		else {
+			newContext = null;
+		}
+		return newContext;
+	};
 var g_oNumProperties = {
-		f: 0
+		f: 0,
+		id: 1
 	};
 /** @constructor */
 function Num(val)
 {
 	if(null == val)
 		val = g_oDefaultFormat.NumAbs;
-	this.Properties = g_oNumProperties;
 	this.f = val.f;
   this.id = val.id;
+
+	this._hash;
+	this._index;
 }
 Num.prototype =
 {
+	Properties: g_oNumProperties,
+	getHash: function() {
+		if (!this._hash) {
+			this._hash = this.f + '|' + this.id;
+		}
+		return this._hash;
+	},
+	getIndexNumber: function() {
+		return this._index;
+	},
+	setIndexNumber: function(val) {
+		this._index = val;
+	},
   setFormat: function(f, opt_id) {
     this.f = f;
     this.id = opt_id;
   },
   getFormat: function() {
-    var res = this.f;
-    if (null != this.id) {
-      if (15 <= this.id && this.id <= 17) {
-        switch (this.id) {
-          case 15:
-            res = AscCommon.getShortDateMonthFormat(true, true, null);
-            break;
-          case 16:
-            res = AscCommon.getShortDateMonthFormat(true, false, null);
-            break;
-          case 17:
-            res = AscCommon.getShortDateMonthFormat(false, true, null);
-            break;
-        }
-      } else {
-		//todo currencyLocale true/false?
-		var currencyLocale = true;
-        switch (this.id) {
-          case 5:
-            res = AscCommon.getCurrencyFormatSimple(null, 0, true, currencyLocale, false);
-            break;
-          case 6:
-            res = AscCommon.getCurrencyFormatSimple(null, 0, true, currencyLocale, true);
-            break;
-          case 7:
-            res = AscCommon.getCurrencyFormatSimple(null, 2, true, currencyLocale, false);
-            break;
-          case 8:
-            res = AscCommon.getCurrencyFormatSimple(null, 2, true, currencyLocale, true);
-            break;
-          case 14:
-            res = AscCommon.getShortDateFormat(null);
-            break;
-          case 22:
-            res = AscCommon.getShortDateFormat(null) + " h:mm";
-            break;
-          case 27:
-          case 28:
-          case 29:
-          case 30:
-          case 31:
-          case 36:
-            res = AscCommon.getShortDateFormat(null);
-            break;
-          case 37:
-            res = AscCommon.getCurrencyFormatSimple(null, 0, false, currencyLocale, false);
-            break;
-          case 38:
-            res = AscCommon.getCurrencyFormatSimple(null, 0, false, currencyLocale, true);
-            break;
-          case 39:
-            res = AscCommon.getCurrencyFormatSimple(null, 2, false, currencyLocale, false);
-            break;
-          case 40:
-            res = AscCommon.getCurrencyFormatSimple(null, 2, false, currencyLocale, true);
-            break;
-          case 41:
-            res = AscCommon.getCurrencyFormat(null, 0, false, currencyLocale);
-            break;
-          case 42:
-            res = AscCommon.getCurrencyFormat(null, 0, true, currencyLocale);
-            break;
-          case 43:
-            res = AscCommon.getCurrencyFormat(null, 2, false, currencyLocale);
-            break;
-          case 44:
-            res = AscCommon.getCurrencyFormat(null, 2, true, currencyLocale);
-            break;
-        }
-      }
-    }
-    return res;
+    return (null != this.id) ? (AscCommon.getFormatByStandardId(this.id) || this.f) : this.f;
   },
   _mergeProperty : function(first, second, def)
   {
@@ -1349,14 +1839,37 @@ Num.prototype =
 	{
 		switch(nType)
 		{
-			case this.Properties.f: return this.getFormat();break;
+			case this.Properties.f: return this.f;break;
+			case this.Properties.id: return this.id;break;
 		}
 	},
 	setProperty : function(nType, value)
 	{
 		switch(nType)
 		{
-			case this.Properties.f: this.setFormat(value);break;
+			case this.Properties.f: this.f = value;break;
+			case this.Properties.id: this.id = value;break;
+		}
+	},
+	readAttributes : function(attr, uq) {
+		if (attr()) {
+			var vals = attr();
+			var val;
+			val = vals["numFmtId"];
+			var sFormat = null;
+			var id;
+			if (undefined !== val) {
+				id = val - 0;
+			}
+			val = vals["formatCode"];
+			if (undefined !== val) {
+				sFormat = AscCommon.unleakString(uq(val));
+			}
+			this.f = null != sFormat ? sFormat : (AscCommonExcel.aStandartNumFormats[id] || "General");
+			if ((5 <= id && id <= 8) || (14 <= id && id <= 17) || 22 == id || (27 <= id && id <= 31) ||
+				(36 <= id && id <= 44)) {
+				this.id = id;
+			}
 		}
 	}
 };
@@ -1367,24 +1880,48 @@ var g_oCellXfsProperties = {
 		num: 3,
 		align: 4,
 		QuotePrefix: 5,
-		XfId: 6
+		XfId: 6,
+		PivotButton: 7
 	};
 /** @constructor */
 function CellXfs() {
-	this.Properties = g_oCellXfsProperties;
     this.border = null;
     this.fill = null;
     this.font = null;
     this.num = null;
     this.align = null;
 	this.QuotePrefix = null;
+	this.PivotButton = null;
 	this.XfId = null;
-    // Является ли стиль ссылкой (При открытии все стили будут ссылками. Поэтому при смене свойств нужно делать копию)
-    this.isReference = false;
+
+	//inner
+	this._hash;
+	this._index;
+	this.operationCache = {};
 }
 CellXfs.prototype =
 {
-	_mergeProperty : function(first, second, isTable)
+	Properties: g_oCellXfsProperties,
+	getHash: function() {
+		if (!this._hash) {
+			this._hash = (this.border ? this.border.getIndexNumber() : '') + '|';
+			this._hash += (this.fill ? this.fill.getIndexNumber() : '') + '|';
+			this._hash += (this.font ? this.font.getIndexNumber() : '') + '|';
+			this._hash += (this.num ? this.num.getIndexNumber() : '') + '|';
+			this._hash += (this.align ? this.align.getIndexNumber() : '') + '|';
+			this._hash += this.QuotePrefix + '|';
+			this._hash += this.PivotButton + '|';
+			this._hash += this.XfId + '|';
+		}
+		return this._hash;
+	},
+	getIndexNumber: function() {
+		return this._index;
+	},
+	setIndexNumber: function(val) {
+		this._index = val;
+	},
+	_mergeProperty : function(addFunc, first, second, isTable)
 	{
 		var res = null;
 		if(null != first || null != second)
@@ -1395,62 +1932,56 @@ CellXfs.prototype =
 				res = first;
 			else
 			{
-				if(null != first.merge)
-					res = first.merge(second, isTable);
-				else
+				if (null != first.merge) {
+					res = addFunc.call(g_StyleCache, first.merge(second, isTable));
+				} else {
 					res = first;
+				}
 			}
 		}
 		return res;
 	},
 	merge : function(xfs, isTable)
 	{
-		var oRes = new CellXfs();
-		oRes.border = this._mergeProperty(this.border, xfs.border);
-		oRes.fill = this._mergeProperty(this.fill, xfs.fill);
-		oRes.font = this._mergeProperty(this.font, xfs.font, isTable);
-		oRes.num = this._mergeProperty(this.num, xfs.num);
-		oRes.align = this._mergeProperty(this.align, xfs.align);
-		oRes.QuotePrefix = this._mergeProperty(this.QuotePrefix, xfs.QuotePrefix);
-		oRes.XfId = this._mergeProperty(this.XfId, xfs.XfId);
-		return oRes;
+		var xfIndexNumber = xfs.getIndexNumber();
+		if (undefined === xfIndexNumber) {
+			xfs = g_StyleCache.addXf(xfs, true);
+			xfIndexNumber = xfs.getIndexNumber();
+		}
+		var cache = this.getOperationCache("merge", xfIndexNumber);
+		if (!cache) {
+			cache = new CellXfs();
+			cache.border = this._mergeProperty(g_StyleCache.addBorder, xfs.border, this.border);
+			cache.fill = this._mergeProperty(g_StyleCache.addFill, xfs.fill, this.fill);
+			cache.font = this._mergeProperty(g_StyleCache.addFont, xfs.font, this.font, isTable);
+			cache.num = this._mergeProperty(g_StyleCache.addNum, xfs.num, this.num);
+			cache.align = this._mergeProperty(g_StyleCache.addAlign, xfs.align, this.align);
+			cache.QuotePrefix = this._mergeProperty(null, xfs.QuotePrefix, this.QuotePrefix);
+			cache.PivotButton = this._mergeProperty(null, xfs.PivotButton, this.PivotButton);
+			cache.XfId = this._mergeProperty(null, xfs.XfId, this.XfId);
+			cache = g_StyleCache.addXf(cache);
+			this.setOperationCache("merge", xfIndexNumber, cache);
+		}
+		return cache;
 	},
     clone : function()
     {
         var res = new CellXfs();
-        if(null != this.border)
-            res.border = this.border.clone();
-        if(null != this.fill)
-            res.fill = this.fill.clone();
-        if(null != this.font)
-            res.font = this.font.clone();
-        if(null != this.num)
-            res.num = this.num.clone();
-        if(null != this.align)
-            res.align = this.align.clone();
-        if(null != this.QuotePrefix)
-            res.QuotePrefix = this.QuotePrefix;
-		if (null !== this.XfId)
-			res.XfId = this.XfId;
+		res.border = this.border;
+		res.fill = this.fill;
+		res.font = this.font;
+		res.num = this.num;
+		res.align = this.align;
+		res.QuotePrefix = this.QuotePrefix;
+		res.PivotButton = this.PivotButton;
+		res.XfId = this.XfId;
         return res;
     },
 	isEqual : function(xfs)
 	{
-		if(false == ((null == this.border && null == xfs.border) || (null != this.border && null != xfs.border && this.border.isEqual(xfs.border))))
-			return false;
-		if(false == ((null == this.fill && null == xfs.fill) || (null != this.fill && null != xfs.fill && this.fill.isEqual(xfs.fill))))
-			return false;
-		if(false == ((null == this.font && null == xfs.font) || (null != this.font && null != xfs.font && this.font.isEqual(xfs.font))))
-			return false;
-		if(false == ((null == this.num && null == xfs.num) || (null != this.num && null != xfs.num && this.num.isEqual(xfs.num))))
-			return false;
-		if(false == ((null == this.align && null == xfs.align) || (null != this.align && null != xfs.align && this.align.isEqual(xfs.align))))
-			return false;
-		if(this.QuotePrefix != xfs.QuotePrefix)
-			return false;
-		if (this.XfId != xfs.XfId)
-			return false;
-		return true;
+		return this.font === xfs.font && this.fill === xfs.fill && this.border === xfs.border && this.num === xfs.num &&
+			this.align === xfs.align && this.QuotePrefix === xfs.QuotePrefix && this.PivotButton === xfs.PivotButton &&
+			this.XfId === xfs.XfId;
 	},
 	getType : function()
 	{
@@ -1470,6 +2001,7 @@ CellXfs.prototype =
 			case this.Properties.num: return this.num;break;
 			case this.Properties.align: return this.align;break;
 			case this.Properties.QuotePrefix: return this.QuotePrefix;break;
+			case this.Properties.PivotButton: return this.PivotButton;break;
 			case this.Properties.XfId: return this.XfId; break;
 		}
 	},
@@ -1483,10 +2015,114 @@ CellXfs.prototype =
 			case this.Properties.num: this.num = value;break;
 			case this.Properties.align: this.align = value;break;
 			case this.Properties.QuotePrefix: this.QuotePrefix = value;break;
+			case this.Properties.PivotButton: this.PivotButton = value;break;
 			case this.Properties.XfId: this.XfId = value; break;
 		}
+	},
+	getBorder: function() {
+		return this.border;
+	},
+	setBorder: function(val) {
+		this.border = val;
+	},
+	getFill: function() {
+		return this.fill;
+	},
+	setFill: function(val) {
+		this.fill = val;
+	},
+	getFont: function() {
+		return this.font;
+	},
+	setFont: function(val) {
+		this.font = val;
+	},
+	getNum: function() {
+		return this.num;
+	},
+	setNum: function(val) {
+		this.num = val;
+	},
+	getAlign: function() {
+		return this.align;
+	},
+	setAlign: function(val) {
+		this.align = val;
+	},
+	getQuotePrefix: function() {
+		return this.QuotePrefix;
+	},
+	setQuotePrefix: function(val) {
+		this.QuotePrefix = val;
+	},
+	getPivotButton: function() {
+		return this.PivotButton;
+	},
+	setPivotButton: function(val) {
+		this.PivotButton = val;
+	},
+	getXfId: function() {
+		return this.XfId;
+	},
+	setXfId: function(val) {
+		this.XfId = val;
+	},
+	getOperationCache: function(operation, val) {
+		var res = undefined;
+		var operation = this.operationCache[operation];
+		if (operation) {
+			res = operation[val];
+		}
+		return res;
+	},
+	setOperationCache: function(operation, val, xfs) {
+		var valCache = this.operationCache[operation];
+		if (!valCache) {
+			valCache = {};
+			this.operationCache[operation] = valCache;
+		}
+		valCache[val] = xfs;
 	}
 };
+
+	function FromXml_ST_HorizontalAlignment(val) {
+		var res = -1;
+		if ("general" === val) {
+			res = -1;
+		} else if ("left" === val) {
+			res = AscCommon.align_Left;
+		} else if ("center" === val) {
+			res = AscCommon.align_Center;
+		} else if ("right" === val) {
+			res = AscCommon.align_Right;
+		} else if ("fill" === val) {
+			res = AscCommon.align_Justify;
+		} else if ("justify" === val) {
+			res = AscCommon.align_Justify;
+		} else if ("centerContinuous" === val) {
+			res = AscCommon.align_Center;
+		} else if ("distributed" === val) {
+			res = AscCommon.align_Justify;
+		}
+		return res;
+	}
+
+	function FromXml_ST_VerticalAlignment(val) {
+		var res = -1;
+		if ("top" === val) {
+			res = Asc.c_oAscVAlign.Top;
+		} else if ("center" === val) {
+			res = Asc.c_oAscVAlign.Center;
+		} else if ("bottom" === val) {
+			res = Asc.c_oAscVAlign.Bottom;
+		} else if ("justify" === val) {
+			res = Asc.c_oAscVAlign.Center;
+		} else if ("distributed" === val) {
+			res = Asc.c_oAscVAlign.Center;
+		}
+		return res;
+	}
+
 var g_oAlignProperties = {
 		hor: 0,
 		indent: 1,
@@ -1501,7 +2137,6 @@ function Align(val)
 {
 	if(null == val)
 		val = g_oDefaultFormat.AlignAbs;
-	this.Properties = g_oAlignProperties;
 	this.hor = val.hor;
 	this.indent = val.indent;
 	this.RelativeIndent = val.RelativeIndent;
@@ -1509,9 +2144,26 @@ function Align(val)
 	this.angle = val.angle;
 	this.ver = val.ver;
 	this.wrap = val.wrap;
+
+	this._hash;
+	this._index;
 }
 Align.prototype =
 {
+	Properties: g_oAlignProperties,
+	getHash: function() {
+		if (!this._hash) {
+			this._hash = this.hor + '|' + this.indent + '|' + this.RelativeIndent + '|' + this.shrink + '|' +
+				this.angle + '|' + this.ver + '|' + this.wrap;
+		}
+		return this._hash;
+	},
+	getIndexNumber: function() {
+		return this._index;
+	},
+	setIndexNumber: function(val) {
+		this._index = val;
+	},
 	_mergeProperty : function(first, second, def)
 	{
 		if (def != first)
@@ -1610,7 +2262,82 @@ Align.prototype =
 			case this.Properties.ver: this.ver = value;break;
 			case this.Properties.wrap: this.wrap = value;break;
 		}
+	},
+	getAngle: function() {
+		var nRes = 0;
+		if (0 <= this.angle && this.angle <= 180) {
+			nRes = this.angle <= 90 ? this.angle : 90 - this.angle;
+		}
+		return nRes;
+	},
+	setAngle: function(val) {
+		this.angle = AscCommonExcel.angleInterfaceToFormat(val);;
+	},
+	getWrap: function() {
+		// Для justify wrap всегда true
+		return AscCommon.align_Justify === this.hor ? true : this.wrap;
+	},
+	setWrap: function(val) {
+		this.wrap = val;
+	},
+	getShrinkToFit: function() {
+		return this.shrink;
+	},
+	setShrinkToFit: function(val) {
+		this.shrink = val;
+	},
+	getAlignHorizontal: function() {
+		return this.hor;
+	},
+	setAlignHorizontal: function(val) {
+		this.hor = val;
+	},
+	getAlignVertical: function() {
+		return this.ver;
+	},
+	setAlignVertical: function(val) {
+		this.ver = val;
+	},
+	readAttributes : function(attr, uq) {
+	if(attr()){
+		var vals = attr();
+		var val;
+		val = vals["horizontal"];
+		if(undefined !== val){
+			val = FromXml_ST_HorizontalAlignment(val);
+			if(-1 !== val){
+				this.hor = val;
+			}
+		}
+		val = vals["vertical"];
+		if(undefined !== val){
+			val = FromXml_ST_VerticalAlignment(val);
+			if(-1 !== val){
+				this.ver = val;
+			}
+		}
+		val = vals["textRotation"];
+		if(undefined !== val){
+			this.angle = val - 0;
+		}
+		val = vals["wrapText"];
+		if(undefined !== val){
+			this.wrap = getBoolFromXml(val);
+		}
+		val = vals["indent"];
+		if(undefined !== val){
+			this.indent = val - 0;
+		}
+		val = vals["relativeIndent"];
+		if(undefined !== val){
+			this.RelativeIndent = val - 0;
+		}
+		val = vals["shrinkToFit"];
+		if(undefined !== val){
+			this.shrink = getBoolFromXml(val);
+		}
 	}
+}
 };
 /** @constructor */
 function CCellStyles() {
@@ -1851,438 +2578,102 @@ StyleManager.prototype =
 		}
 		this.oDefaultXfs = oDefaultXfs;
 	},
-    _prepareSetReference : function (oItemWithXfs)
-    {
-        // При открытии все стили будут ссылками. Поэтому при смене свойств нужно делать копию
-        if (oItemWithXfs.xfs.isReference)
-            oItemWithXfs.xfs = oItemWithXfs.xfs.clone();
-        return oItemWithXfs.xfs;
-    },
-    _prepareSet : function(oItemWithXfs)
-	{
-		if(null == oItemWithXfs.xfs)
-		{
-			if(oItemWithXfs.getDefaultXfs)
-				oItemWithXfs.xfs = oItemWithXfs.getDefaultXfs();
-			if(null == oItemWithXfs.xfs)
-				oItemWithXfs.xfs = this.oDefaultXfs.clone();
-		} else
-            this._prepareSetReference(oItemWithXfs);
-        return oItemWithXfs.xfs;
-	},
-    _prepareSetFont : function(oItemWithXfs)
-	{
-		var xfs = this._prepareSet(oItemWithXfs);
-		if(null == xfs.font)
-			xfs.font = g_oDefaultFormat.Font.clone();
-        return xfs;
-	},
-    _prepareSetAlign : function(oItemWithXfs)
-	{
-        var xfs = this._prepareSet(oItemWithXfs);
-		if(null == xfs.align)
-			xfs.align = g_oDefaultFormat.Align.clone();
-        return xfs;
-	},
-	_prepareSetCellStyle : function (oItemWithXfs) {
-		return this._prepareSet(oItemWithXfs);
-	},
 	setCellStyle : function(oItemWithXfs, val)
 	{
-		// ToDo add code
-		var xfs = oItemWithXfs.xfs;
-		var oRes = {newVal: val, oldVal: null};
-		if(null != xfs && null != xfs.XfId)
-			oRes.oldVal = xfs.XfId;
-		else
-			oRes.oldVal = g_oDefaultFormat.XfId;
-		if(null == val) {
-			if(null != xfs) {
-			    xfs = this._prepareSetReference(oItemWithXfs);
-				xfs.XfId = g_oDefaultFormat.XfId;
-            }
-		} else {
-			xfs = this._prepareSetCellStyle(oItemWithXfs);
-			xfs.XfId = val;
-		}
-		return oRes;
+		return this._setProperty(oItemWithXfs, val, "XfId", CellXfs.prototype.getXfId, CellXfs.prototype.setXfId);
 	},
-	setNumFormat : function(oItemWithXfs, val)
+	setNum : function(oItemWithXfs, val)
 	{
-        var xfs = oItemWithXfs.xfs;
-        var oRes = {newVal: val, oldVal: null};
-        if(null != xfs && null != xfs.num)
-            oRes.oldVal = xfs.num.getFormat();
-		else
-			oRes.oldVal = g_oDefaultFormat.Num.getFormat();
-        if(null == val)
-        {
-            if(null != xfs) {
-                xfs = this._prepareSetReference(oItemWithXfs);
-                xfs.num = null;
-            }
-        }
-        else
-        {
-            xfs = this._prepareSet(oItemWithXfs);
-            if(null == xfs.num)
-                xfs.num = g_oDefaultFormat.Num.clone();
-            xfs.num.setFormat(val);
-        }
-		return oRes;
+		return this._setProperty(oItemWithXfs, val, "num", CellXfs.prototype.getNum, CellXfs.prototype.setNum, g_StyleCache.addNum);
 	},
-	setFont : function(oItemWithXfs, val, oHistoryObj, nHistoryId, sSheetId, oRange)
-    {
-        var xfs = oItemWithXfs.xfs;
-        var oRes = {newVal: val, oldVal: null};
-        if(null != xfs && null != xfs.font)
-            oRes.oldVal = xfs.font;
-		else
-			oRes.oldVal = null;
-        if(null == val)
-        {
-            if(null != xfs) {
-                xfs = this._prepareSetReference(oItemWithXfs);
-                xfs.font = null;
-            }
-        }
-        else
-        {
-            xfs = this._prepareSetFont(oItemWithXfs);
-            xfs.font = val.clone();
-        }
-		return oRes;
-	},
-	setFontname : function(oItemWithXfs, val)
+	setFont : function(oItemWithXfs, val)
 	{
-        var xfs = oItemWithXfs.xfs;
-        var oRes = {newVal: val, oldVal: null};
-        if(null != xfs && null != xfs.font)
-            oRes.oldVal = xfs.font.fn;
-		else
-			oRes.oldVal = null;
-		//todo undo для scheme
-		var isSetNull = (null == val);
-		if (!isSetNull || (null != xfs && null != xfs.font)) {
-			if (isSetNull) {
-				xfs = this._prepareSetReference(oItemWithXfs);
-			} else {
-				xfs = this._prepareSetFont(oItemWithXfs);
-			}
-			xfs.font.setName(val);
-			xfs.font.setScheme(null);
-		}
-		return oRes;
-	},
-	setFontsize : function(oItemWithXfs, val)
-	{
-        var xfs = oItemWithXfs.xfs;
-        var oRes = {newVal: val, oldVal: null};
-        if(null != xfs && null != xfs.font)
-            oRes.oldVal = xfs.font.fs;
-		else
-			oRes.oldVal = null;
-		var isSetNull = (null == val);
-		if (!isSetNull || (null != xfs && null != xfs.font)) {
-			if (isSetNull) {
-				xfs = this._prepareSetReference(oItemWithXfs);
-			} else {
-				xfs = this._prepareSetFont(oItemWithXfs);
-			}
-			xfs.font.setSize(val);
-		}
-		return oRes;
-	},
-	setFontcolor : function(oItemWithXfs, val)
-	{
-        var xfs = oItemWithXfs.xfs;
-        var oRes = {newVal: val, oldVal: null};
-        if(null != xfs && null != xfs.font)
-            oRes.oldVal = xfs.font.c;
-		else
-			oRes.oldVal = null;
-		var isSetNull = (null == val);
-		if (!isSetNull || (null != xfs && null != xfs.font)) {
-			if (isSetNull) {
-				xfs = this._prepareSetReference(oItemWithXfs);
-			} else {
-				xfs = this._prepareSetFont(oItemWithXfs);
-			}
-			xfs.font.setColor(val);
-		}
-		return oRes;
-	},
-	setBold : function(oItemWithXfs, val)
-	{
-        var xfs = oItemWithXfs.xfs;
-        var oRes = {newVal: val, oldVal: null};
-        if(null != xfs && null != xfs.font)
-            oRes.oldVal = xfs.font.b;
-		else
-			oRes.oldVal = null;
-		var isSetNull = (null == val || false == val);
-		if (!isSetNull || (null != xfs && null != xfs.font)) {
-			if (isSetNull) {
-				xfs = this._prepareSetReference(oItemWithXfs);
-			} else {
-				xfs = this._prepareSetFont(oItemWithXfs);
-			}
-			xfs.font.setBold(val);
-		}
-		return oRes;
-	},
-	setItalic : function(oItemWithXfs, val)
-	{
-        var xfs = oItemWithXfs.xfs;
-        var oRes = {newVal: val, oldVal: null};
-        if(null != xfs && null != xfs.font)
-            oRes.oldVal = xfs.font.i;
-		else
-			oRes.oldVal = null;
-		var isSetNull = (null == val || false == val);
-		if (!isSetNull || (null != xfs && null != xfs.font)) {
-			if (isSetNull) {
-				xfs = this._prepareSetReference(oItemWithXfs);
-			} else {
-				xfs = this._prepareSetFont(oItemWithXfs);
-			}
-			xfs.font.setItalic(val);
-		}
-		return oRes;
-	},
-	setUnderline : function(oItemWithXfs, val)
-	{
-        var xfs = oItemWithXfs.xfs;
-        var oRes = {newVal: val, oldVal: null};
-        if(null != xfs && null != xfs.font)
-            oRes.oldVal = xfs.font.u;
-		else
-			oRes.oldVal = null;
-		var isSetNull = (null == val || Asc.EUnderline.underlineNone == val);
-		if (!isSetNull || (null != xfs && null != xfs.font)) {
-			if (isSetNull) {
-				xfs = this._prepareSetReference(oItemWithXfs);
-			} else {
-				xfs = this._prepareSetFont(oItemWithXfs);
-			}
-			xfs.font.setUnderline(val);
-		}
-		return oRes;
-	},
-	setStrikeout : function(oItemWithXfs, val)
-	{
-        var xfs = oItemWithXfs.xfs;
-        var oRes = {newVal: val, oldVal: null};
-        if(null != xfs && null != xfs.font)
-            oRes.oldVal = xfs.font.s;
-		else
-			oRes.oldVal = null;
-		var isSetNull = (null == val || false == val);
-		if (!isSetNull || (null != xfs && null != xfs.font)) {
-			if (isSetNull) {
-				xfs = this._prepareSetReference(oItemWithXfs);
-			} else {
-				xfs = this._prepareSetFont(oItemWithXfs);
-			}
-			xfs.font.setStrikeout(val);
-		}
-		return oRes;
-	},
-	setFontAlign : function(oItemWithXfs, val)
-	{
-        var xfs = oItemWithXfs.xfs;
-        var oRes = {newVal: val, oldVal: null};
-        if(null != xfs && null != xfs.font)
-            oRes.oldVal = xfs.font.va;
-		else
-			oRes.oldVal = null;
-		var isSetNull = (null == val || AscCommon.vertalign_Baseline == val);
-		if (!isSetNull || (null != xfs && null != xfs.font)) {
-			if (isSetNull) {
-				xfs = this._prepareSetReference(oItemWithXfs);
-			} else {
-				xfs = this._prepareSetFont(oItemWithXfs);
-			}
-			xfs.font.setVerticalAlign(val);
-		}
-		return oRes;
-	},
-	setAlignVertical : function(oItemWithXfs, val)
-	{
-        var xfs = oItemWithXfs.xfs;
-        var oRes = {newVal: val, oldVal: null};
-        if(null != xfs && null != xfs.align)
-            oRes.oldVal = xfs.align.ver;
-		else
-			oRes.oldVal = g_oDefaultFormat.Align.ver;
-        if(null == val)
-        {
-            if(null != xfs && null != xfs.align) {
-                xfs = this._prepareSetReference(oItemWithXfs);
-                xfs.align.ver = g_oDefaultFormat.Align.ver;
-            }
-        }
-        else
-        {
-            xfs = this._prepareSetAlign(oItemWithXfs);
-            xfs.align.ver = val;
-        }
-		return oRes;
-	},
-	setAlignHorizontal : function(oItemWithXfs, val)
-	{
-        var xfs = oItemWithXfs.xfs;
-        var oRes = {newVal: val, oldVal: null};
-        if(null != xfs && null != xfs.align)
-            oRes.oldVal = xfs.align.hor;
-		else
-			oRes.oldVal = g_oDefaultFormat.Align.hor;
-        if(null == val)
-        {
-            if(null != xfs && null != xfs.align) {
-                xfs = this._prepareSetReference(oItemWithXfs);
-                xfs.align.hor = g_oDefaultFormat.Align.hor;
-            }
-        }
-        else
-        {
-            xfs = this._prepareSetAlign(oItemWithXfs);
-            xfs.align.hor = val;
-        }
-		return oRes;
+		return this._setProperty(oItemWithXfs, val, "font", CellXfs.prototype.getFont, CellXfs.prototype.setFont, g_StyleCache.addFont);
 	},
 	setFill : function(oItemWithXfs, val)
 	{
-        var xfs = oItemWithXfs.xfs;
-        var oRes = {newVal: val, oldVal: null};
-        if(null != xfs && null != xfs.fill)
-            oRes.oldVal = xfs.fill.bg;
-		else
-			oRes.oldVal = g_oDefaultFormat.Fill.bg;
-        if(null == val)
-        {
-            if(null != xfs && null != xfs.fill) {
-                xfs = this._prepareSetReference(oItemWithXfs);
-                xfs.fill.bg = g_oDefaultFormat.Fill.bg;
-            }
-        }
-        else
-        {
-            xfs = this._prepareSet(oItemWithXfs);
-			if(null == xfs.fill)
-                xfs.fill = g_oDefaultFormat.Fill.clone();
-            xfs.fill.bg = val;
-        }
+		if(val){
+			var fill = new Fill();
+			fill.bg = val;
+			val = fill;
+		}
+		var oRes = this._setProperty(oItemWithXfs, val, "fill", CellXfs.prototype.getFill, CellXfs.prototype.setFill, g_StyleCache.addFill);
+		if (oRes.oldVal) {
+			oRes.oldVal = oRes.oldVal.bg;
+		}
+		if (oRes.newVal) {
+			oRes.newVal = oRes.newVal.bg;
+		}
 		return oRes;
 	},
 	setBorder : function(oItemWithXfs, val)
 	{
-        var xfs = oItemWithXfs.xfs;
-        var oRes = {newVal: val, oldVal: null};
-        if(null != xfs && null != xfs.border)
-            oRes.oldVal = xfs.border;
-		else
-			oRes.oldVal = g_oDefaultFormat.Border;
-        if(null == val)
-        {
-            if(null != xfs && null != xfs.border) {
-                xfs = this._prepareSetReference(oItemWithXfs);
-                xfs.border = val;
-            }
-        }
-        else
-        {
-            xfs = this._prepareSet(oItemWithXfs);
-            xfs.border = val;
-        }
-		return oRes;
-	},
-	setShrinkToFit : function(oItemWithXfs, val)
-	{
-        var xfs = oItemWithXfs.xfs;
-        var oRes = {newVal: val, oldVal: null};
-        if(null != xfs && null != xfs.align)
-            oRes.oldVal = xfs.align.shrink;
-		else
-			oRes.oldVal = g_oDefaultFormat.Align.shrink;
-        if(null == val)
-        {
-            if(null != xfs && null != xfs.align) {
-                xfs = this._prepareSetReference(oItemWithXfs);
-                xfs.align.shrink = g_oDefaultFormat.Align.shrink;
-            }
-        }
-        else
-        {
-            xfs = this._prepareSetAlign(oItemWithXfs);
-            xfs.align.shrink = val;
-        }
-		return oRes;
-	},
-	setWrap : function(oItemWithXfs, val)
-	{
-        var xfs = oItemWithXfs.xfs;
-        var oRes = {newVal: val, oldVal: null};
-        if(null != xfs && null != xfs.align)
-            oRes.oldVal = xfs.align.wrap;
-		else
-			oRes.oldVal = g_oDefaultFormat.Align.wrap;
-        if(null == val)
-        {
-            if(null != xfs && null != xfs.align) {
-                xfs = this._prepareSetReference(oItemWithXfs);
-                xfs.align.wrap = g_oDefaultFormat.Align.wrap;
-            }
-        }
-        else
-        {
-            xfs = this._prepareSetAlign(oItemWithXfs);
-            xfs.align.wrap = val;
-        }
-		return oRes;
+		return this._setProperty(oItemWithXfs, val, "border", CellXfs.prototype.getBorder, CellXfs.prototype.setBorder, g_StyleCache.addBorder);
 	},
 	setQuotePrefix : function(oItemWithXfs, val)
 	{
-        var xfs = oItemWithXfs.xfs;
-        var oRes = {newVal: val, oldVal: null};
-        if(null != xfs && null != xfs.QuotePrefix)
-            oRes.oldVal = xfs.QuotePrefix;
-        if(null == val)
-        {
-            if(null != xfs) {
-                xfs = this._prepareSetReference(oItemWithXfs);
-                xfs.QuotePrefix = val;
-            }
-        }
-        else
-        {
-            xfs = this._prepareSet(oItemWithXfs);
-            xfs.QuotePrefix = val;
-        }
-		return oRes;
+		return this._setProperty(oItemWithXfs, val, "quotePrefix", CellXfs.prototype.getQuotePrefix, CellXfs.prototype.setQuotePrefix);
+	},
+	setPivotButton : function(oItemWithXfs, val)
+	{
+		return this._setProperty(oItemWithXfs, val, "pivotButton", CellXfs.prototype.getPivotButton, CellXfs.prototype.setPivotButton);
+	},
+	setFontname : function(oItemWithXfs, val)
+	{
+		return this._setFontProperty(oItemWithXfs, val, "name", Font.prototype.getName, function(val){
+			this.setName(val);
+			this.setScheme(null);
+		}, "name");
+	},
+	setFontsize : function(oItemWithXfs, val)
+	{
+		return this._setFontProperty(oItemWithXfs, val, "size", Font.prototype.getSize, Font.prototype.setSize);
+	},
+	setFontcolor : function(oItemWithXfs, val)
+	{
+		return this._setFontProperty(oItemWithXfs, val, "color", Font.prototype.getColor, Font.prototype.setColor);
+	},
+	setBold : function(oItemWithXfs, val)
+	{
+		return this._setFontProperty(oItemWithXfs, val, "bold", Font.prototype.getBold, Font.prototype.setBold);
+	},
+	setItalic : function(oItemWithXfs, val)
+	{
+		return this._setFontProperty(oItemWithXfs, val, "italic", Font.prototype.getItalic, Font.prototype.setItalic);
+	},
+	setUnderline : function(oItemWithXfs, val)
+	{
+		return this._setFontProperty(oItemWithXfs, val, "underline", Font.prototype.getUnderline, Font.prototype.setUnderline);
+	},
+	setStrikeout : function(oItemWithXfs, val)
+	{
+		return this._setFontProperty(oItemWithXfs, val, "strikeout", Font.prototype.getStrikeout, Font.prototype.setStrikeout);
+	},
+	setFontAlign : function(oItemWithXfs, val)
+	{
+		return this._setFontProperty(oItemWithXfs, val, "fontAlign", Font.prototype.getVerticalAlign, Font.prototype.setVerticalAlign);
+	},
+	setAlignVertical : function(oItemWithXfs, val)
+	{
+		return this._setAlignProperty(oItemWithXfs, val, "alignVertical", Align.prototype.getAlignVertical, Align.prototype.setAlignVertical);
+	},
+	setAlignHorizontal : function(oItemWithXfs, val)
+	{
+		return this._setAlignProperty(oItemWithXfs, val, "alignHorizontal", Align.prototype.getAlignHorizontal, Align.prototype.setAlignHorizontal);
+	},
+	setShrinkToFit : function(oItemWithXfs, val)
+	{
+		return this._setAlignProperty(oItemWithXfs, val, "shrinkToFit", Align.prototype.getShrinkToFit, Align.prototype.setShrinkToFit);
+	},
+	setWrap : function(oItemWithXfs, val)
+	{
+		return this._setAlignProperty(oItemWithXfs, val, "wrap", Align.prototype.getWrap, Align.prototype.setWrap);
 	},
     setAngle : function(oItemWithXfs, val)
     {
-        var xfs = oItemWithXfs.xfs;
-		var oRes = {newVal: val, oldVal: null};
-		val = AscCommonExcel.angleInterfaceToFormat(val);
-        if(null != xfs && null != xfs.align)
-            oRes.oldVal = AscCommonExcel.angleFormatToInterface2(xfs.align.angle);
-		else
-			oRes.oldVal = AscCommonExcel.angleFormatToInterface2(g_oDefaultFormat.Align.angle);
-        if(null == val)
-        {
-            if(null != xfs && null != xfs.align) {
-                xfs = this._prepareSetReference(oItemWithXfs);
-                xfs.align.angle = g_oDefaultFormat.Align.angle;
-            }
-        }
-        else
-        {
-            xfs = this._prepareSetAlign(oItemWithXfs);
-            xfs.align.angle = val;
-        }
-        return oRes;
+		return this._setAlignProperty(oItemWithXfs, val, "angle", function(){
+			return AscCommonExcel.angleFormatToInterface2(this.angle);
+		}, Align.prototype.setAngle);
     },
 	setVerticalText : function(oItemWithXfs, val)
     {
@@ -2290,8 +2681,329 @@ StyleManager.prototype =
 			return this.setAngle(oItemWithXfs, AscCommonExcel.g_nVerticalTextAngle);
 		else
 			return this.setAngle(oItemWithXfs, 0);
-    }
+    },
+	_initXf: function(oItemWithXfs){
+		var xfs = oItemWithXfs.xfs;
+		if (!xfs) {
+			if (oItemWithXfs.getDefaultXfs) {
+				xfs = oItemWithXfs.getDefaultXfs();
+			}
+			if (!xfs) {
+				xfs = this.oDefaultXfs;
+			}
+		}
+		return xfs;
+	},
+	_initXfFont: function(xfs){
+		xfs = xfs.clone();
+		if(null == xfs.font){
+			xfs.font = g_oDefaultFormat.Font;
+		}
+		xfs.font = xfs.font.clone();
+		return xfs;
+	},
+	_initXfAlign: function(xfs){
+		xfs = xfs.clone();
+		if(null == xfs.align){
+			xfs.align = g_oDefaultFormat.Align;
+		}
+		xfs.align = xfs.align.clone();
+		return xfs;
+	},
+	_setProperty: function(oItemWithXfs, val, prop, getFunc, setFunc, addFunc) {
+		var xfs = oItemWithXfs.xfs;
+		var oRes = {newVal: null, oldVal: xfs ? getFunc.call(xfs) : null};
+		xfs = this._initXf(oItemWithXfs);
+		var hash = val && val.getHash ? val.getHash() : val;
+		var xfsOperationCache = xfs;
+		var newXf = xfs.getOperationCache(prop, hash);
+		if (newXf) {
+			oItemWithXfs.setStyleInternal(newXf);
+			xfs = newXf;
+		} else {
+			xfs = xfs.clone();
+			if (null != val) {
+				if (addFunc) {
+					setFunc.call(xfs, addFunc.call(g_StyleCache, val));
+				} else {
+					setFunc.call(xfs, val);
+				}
+			}
+			else if (null != xfs) {
+				setFunc.call(xfs, null);
+			}
+
+			xfs = g_StyleCache.addXf(xfs);
+			xfsOperationCache.setOperationCache(prop, hash, xfs);
+			oItemWithXfs.setStyleInternal(xfs);
+		}
+		oRes.newVal = xfs ? getFunc.call(xfs) : null;
+		return oRes;
+	},
+	_setFontProperty : function(oItemWithXfs, val, prop, getFunc, setFunc)
+	{
+		var xfs = oItemWithXfs.xfs;
+		var oRes = {newVal: val, oldVal: xfs && xfs.font ? getFunc.call(xfs.font): null};
+		xfs = this._initXf(oItemWithXfs);
+		var hash = val && val.getHash ? val.getHash() : val;
+		var xfsOperationCache = xfs;
+		var newXf = xfs.getOperationCache(prop, hash);
+		if (newXf) {
+			oItemWithXfs.setStyleInternal(newXf);
+		} else {
+			xfs = this._initXfFont(xfs);
+
+			setFunc.call(xfs.font, val);
+			xfs.font = g_StyleCache.addFont(xfs.font);
+
+			xfs = g_StyleCache.addXf(xfs);
+			xfsOperationCache.setOperationCache(prop, val, xfs);
+			oItemWithXfs.setStyleInternal(xfs);
+		}
+		return oRes;
+	},
+	_setAlignProperty : function(oItemWithXfs, val, prop, getFunc, setFunc)
+	{
+		var xfs = oItemWithXfs.xfs;
+		var oRes = {newVal: val, oldVal: xfs && xfs.align ? getFunc.call(xfs.align): getFunc.call(g_oDefaultFormat.Align)};
+		xfs = this._initXf(oItemWithXfs);
+		var xfsOperationCache = xfs;
+		var newXf = xfs.getOperationCache(prop, val);
+		if (newXf) {
+			oItemWithXfs.setStyleInternal(newXf);
+		} else {
+			xfs = this._initXfAlign(xfs);
+
+			setFunc.call(xfs.align, val);
+			xfs.align = g_StyleCache.addAlign(xfs.align);
+
+			xfs = g_StyleCache.addXf(xfs);
+			xfsOperationCache.setOperationCache(prop, val, xfs);
+			oItemWithXfs.setStyleInternal(xfs);
+		}
+		return oRes;
+	}
 };
+
+	function StyleCache() {
+		this.fonts = {count: 0, vals: {}};
+		this.fills = {count: 0, vals: {}};
+		this.borders = {count: 0, vals: {}};
+		this.nums = {count: 0, vals: {}};
+		this.aligns = {count: 0, vals: {}};
+		this.xfs = {list: [], vals: {}};
+	}
+
+	StyleCache.prototype.addFont = function(newFont) {
+		return this._add(this.fonts, newFont);
+	};
+	StyleCache.prototype.addFill = function(newFill) {
+		return this._add(this.fills, newFill);
+	};
+	StyleCache.prototype.addBorder = function(newBorder) {
+		return this._add(this.borders, newBorder);
+	};
+	StyleCache.prototype.addNum = function(newNum) {
+		return this._add(this.nums, newNum);
+	};
+	StyleCache.prototype.addAlign = function(newAlign) {
+		return this._add(this.aligns, newAlign);
+	};
+	StyleCache.prototype.addXf = function(newXf, recursively) {
+		if (newXf) {
+			if(newXf.font){
+				newXf.font = this.addFont(newXf.font);
+			}
+			if(newXf.fill){
+				newXf.fill = this.addFill(newXf.fill);
+			}
+			if(newXf.border){
+				newXf.border = this.addBorder(newXf.border);
+			}
+			if(newXf.num){
+				newXf.num = this.addNum(newXf.num);
+			}
+			if(newXf.align){
+				newXf.align = this.addAlign(newXf.align);
+			}
+		}
+		return this._add(this.xfs, newXf);
+	};
+	StyleCache.prototype.getXf = function(index) {
+		return 1 <= index && index <= this.xfs.list.length ? this.xfs.list[index - 1] : null;
+	};
+	StyleCache.prototype.getXfCount = function() {
+		return this.xfs.list.length;
+	};
+	StyleCache.prototype._add = function(container, newVal) {
+		if (newVal && undefined === newVal.getIndexNumber()) {
+			var hash = newVal.getHash();
+			var res = container.vals[hash];
+			if (!res) {
+				if (container.list) {
+					//index starts with 1
+					newVal.setIndexNumber(container.list.push(newVal));
+				} else {
+					newVal.setIndexNumber(container.count++);
+				}
+				container.vals[hash] = newVal;
+				res = newVal;
+			}
+			return res;
+		} else {
+			return newVal;
+		}
+	};
+	var g_StyleCache = new StyleCache();
+
+	/** @constructor */
+	function SheetMergedStyles() {
+		this.stylesTablePivot = [];
+		this.stylesConditional = [];
+	}
+
+	SheetMergedStyles.prototype.setTablePivotStyle = function(range, xf, stripe) {
+		this.stylesTablePivot.push({xf: xf, range: range, stripe: stripe, borders: undefined});
+	};
+	SheetMergedStyles.prototype.clearTablePivotStyle = function(range) {
+		for (var i = this.stylesTablePivot.length - 1; i >= 0; --i) {
+			var style = this.stylesTablePivot[i];
+			if (style.range.isIntersect(range)) {
+				this.stylesTablePivot.splice(i, 1);
+			}
+		}
+	};
+	SheetMergedStyles.prototype.setConditionalStyle = function(multiplyRange, formula) {
+		this.stylesConditional.push({multiplyRange: multiplyRange, formula: formula});
+	};
+	SheetMergedStyles.prototype.clearConditionalStyle = function(multiplyRange) {
+		for (var i = this.stylesConditional.length - 1; i >= 0; --i) {
+			var style = this.stylesConditional[i];
+			if (style.multiplyRange.isIntersect(multiplyRange)) {
+				this.stylesConditional.splice(i, 1);
+			}
+		}
+	};
+	SheetMergedStyles.prototype.getStyle = function(hiddenManager, row, col, opt_ws) {
+		var res = {table: [], conditional: []};
+		if (opt_ws) {
+			opt_ws._updateConditionalFormatting();
+		}
+		for (var i = 0; i < this.stylesConditional.length; ++i) {
+			var style = this.stylesConditional[i];
+			if (style.multiplyRange.contains(col, row)) {
+				var xf = style.formula(row, col);
+				if (xf) {
+					res.conditional.push(xf);
+				}
+			}
+		}
+		for (var i = 0; i < this.stylesTablePivot.length; ++i) {
+			var style = this.stylesTablePivot[i];
+			var borderIndex;
+			var xf = style.xf;
+			if (style.range.contains(col, row) && (borderIndex = this._getBorderIndex(hiddenManager, style.range, style.stripe, row, col, xf)) >= 0) {
+				if (borderIndex > 0) {
+					if (!style.borders) {
+						style.borders = {};
+					}
+					var xfModified = style.borders[borderIndex];
+					if (!xfModified) {
+						xfModified = xf.clone();
+						var borderModified = xfModified.border.clone();
+						if (0 !== (1 & borderIndex)) {
+							borderModified.l = borderModified.iv;
+						}
+						if (0 !== (2 & borderIndex)) {
+							borderModified.t = borderModified.ih;
+						}
+						if (0 !== (4 & borderIndex)) {
+							borderModified.r = borderModified.iv;
+						}
+						if (0 !== (8 & borderIndex)) {
+							borderModified.b = borderModified.ih;
+						}
+						if (0 !== (16 & borderIndex)) {
+							borderModified.du = false;
+							borderModified.dd = false;
+						}
+						xfModified.border = g_StyleCache.addBorder(borderModified);
+						xfModified = g_StyleCache.addXf(xfModified);
+						style.borders[borderIndex] = xfModified;
+					}
+					xf = xfModified;
+				}
+				res.table.push(xf);
+			}
+		}
+		return res;
+	};
+	SheetMergedStyles.prototype._getBorderIndex = function(hiddenManager, bbox, stripe, row, col, xf) {
+		var borderIndex = 0;
+		var hidden;
+		if (stripe) {
+			if (stripe.row) {
+				hidden = hiddenManager.getHiddenRowsCount(bbox.r1, row);
+				var rowIndex = (row - bbox.r1 - hidden) % (stripe.size + stripe.offset);
+				if (rowIndex < stripe.size) {
+					if (xf.border) {
+						if (bbox.c1 !== col && xf.border.l) {
+							borderIndex += 1;
+						}
+						if (0 != rowIndex && xf.border.t) {
+							borderIndex += 2;
+						}
+						if (bbox.c2 !== col && xf.border.r) {
+							borderIndex += 4;
+						}
+						if (stripe.size - 1 != rowIndex && xf.border.b) {
+							borderIndex += 8;
+						}
+					}
+				} else {
+					borderIndex = -1;
+				}
+			} else {
+				hidden = hiddenManager.getHiddenColsCount(bbox.c1, col);
+				var colIndex = (col - bbox.c1 - hidden) % (stripe.size + stripe.offset);
+				if (colIndex < stripe.size) {
+					if (xf.border) {
+						if (0 != colIndex && xf.border.l) {
+							borderIndex += 1;
+						}
+						if (bbox.r1 !== row && xf.border.t) {
+							borderIndex += 2;
+						}
+						if (stripe.size - 1 != colIndex && xf.border.r) {
+							borderIndex += 4;
+						}
+						if (bbox.r2 !== row && xf.border.b) {
+							borderIndex += 8;
+						}
+					}
+				} else {
+					borderIndex = -1;
+				}
+			}
+		} else if (xf.border) {
+			if (bbox.c1 !== col && xf.border.l) {
+				borderIndex += 1;
+			}
+			if (bbox.r1 !== row && xf.border.t) {
+				borderIndex += 2;
+			}
+			if (bbox.c2 !== col && xf.border.r) {
+				borderIndex += 4;
+			}
+			if (bbox.r2 !== row && xf.border.b) {
+				borderIndex += 8;
+			}
+		}
+		if (xf.border && (xf.border.du || xf.border.dd)) {
+			borderIndex += 16;
+		}
+		return borderIndex;
+	};
 var g_oHyperlinkProperties = {
 		Ref: 0,
 		Location: 1,
@@ -2308,6 +3020,7 @@ function Hyperlink () {
 	this.Location = null;
 	this.LocationSheet = null;
 	this.LocationRange = null;
+	this.LocationRangeBbox = null;
 	this.bUpdateLocation = false;
 	
 	this.bVisited = false;
@@ -2323,6 +3036,8 @@ Hyperlink.prototype = {
 			oNewHyp.LocationSheet = this.LocationSheet;
 		if (null !== this.LocationRange)
 			oNewHyp.LocationRange = this.LocationRange;
+		if (null !== this.LocationRangeBbox)
+			oNewHyp.LocationRangeBbox = this.LocationRangeBbox.clone();
 		if (null !== this.Hyperlink)
 			oNewHyp.Hyperlink = this.Hyperlink;
 		if (null !== this.Tooltip)
@@ -2349,37 +3064,59 @@ Hyperlink.prototype = {
 	},
 	setLocationRange : function (LocationRange) {
 		this.LocationRange = LocationRange;
+		this.LocationRangeBbox = null;
 		this.bUpdateLocation = true;
 	},
 	setLocation : function (Location) {
-		this.bUpdateLocation = false;
-		this.Location = Location;
-		this.LocationSheet = this.LocationRange = null;
+		this.bUpdateLocation = true;
+		this.LocationSheet = this.LocationRange = this.LocationRangeBbox = null;
 
-		if (null !== this.Location) {
-			var result = parserHelp.parse3DRef(this.Location);
+		if (null !== Location) {
+			var result = parserHelp.parse3DRef(Location);
+			if (!result) {
+				// Can be in all mods. Excel bug...
+				AscCommonExcel.executeInR1C1Mode(!AscCommonExcel.g_R1C1Mode, function () {
+					result = parserHelp.parse3DRef(Location);
+				});
+			}
 			if (null !== result) {
 				this.LocationSheet = result.sheet;
 				this.LocationRange = result.range;
 			}
 		}
+		this._updateLocation();
 	},
 	getLocation : function () {
 		if (this.bUpdateLocation)
 			this._updateLocation();
 		return this.Location;
 	},
+	getLocationRange : function () {
+		return this.LocationRangeBbox && this.LocationRangeBbox.getName(AscCommonExcel.g_R1C1Mode ?
+			AscCommonExcel.referenceType.A : AscCommonExcel.referenceType.R);
+	},
 	_updateLocation : function () {
+		var t = this;
+		this.Location = null;
 		this.bUpdateLocation = false;
-		if (null === this.LocationSheet || null === this.LocationRange)
-			this.Location = null;
-		else
-			this.Location = parserHelp.get3DRef(this.LocationSheet, this.LocationRange);
+		if (null !== this.LocationSheet && null !== this.LocationRange) {
+			this.LocationRangeBbox = AscCommonExcel.g_oRangeCache.getAscRange(this.LocationRange);
+			if (!this.LocationRangeBbox) {
+				// Can be in all mods. Excel bug...
+				AscCommonExcel.executeInR1C1Mode(!AscCommonExcel.g_R1C1Mode, function () {
+					t.LocationRangeBbox = AscCommonExcel.g_oRangeCache.getAscRange(t.LocationRange);
+				});
+			}
+			if (this.LocationRangeBbox) {
+				AscCommonExcel.executeInR1C1Mode(false, function () {
+					t.LocationRange = t.LocationRangeBbox.getName(AscCommonExcel.referenceType.R);
+				});
+				this.Location = parserHelp.get3DRef(this.LocationSheet, this.LocationRange);
+			}
+		}
 	},
 	setVisited : function (bVisited) {
 		this.bVisited = bVisited;
-		if (this.Ref)
-			this.Ref.cleanCache();
 	},
 	getVisited : function () {
 		return this.bVisited;
@@ -2420,577 +3157,747 @@ Hyperlink.prototype = {
 	},
 	applyCollaborative : function (nSheetId, collaborativeEditing) {
 		var bbox = this.Ref.getBBox0();
-		var OffsetFirst = {offsetCol:0, offsetRow:0};
-		var OffsetLast = {offsetCol:0, offsetRow:0};
-		OffsetFirst.offsetRow = collaborativeEditing.getLockMeRow2(nSheetId, bbox.r1) - bbox.r1;
-		OffsetFirst.offsetCol = collaborativeEditing.getLockMeColumn2(nSheetId, bbox.c1) - bbox.c1;
-		OffsetLast.offsetRow = collaborativeEditing.getLockMeRow2(nSheetId, bbox.r2) - bbox.r2;
-		OffsetLast.offsetCol = collaborativeEditing.getLockMeColumn2(nSheetId, bbox.c2) - bbox.c2;
+		var OffsetFirst = new AscCommon.CellBase(0, 0);
+		var OffsetLast = new AscCommon.CellBase(0, 0);
+		OffsetFirst.row = collaborativeEditing.getLockMeRow2(nSheetId, bbox.r1) - bbox.r1;
+		OffsetFirst.col = collaborativeEditing.getLockMeColumn2(nSheetId, bbox.c1) - bbox.c1;
+		OffsetLast.row = collaborativeEditing.getLockMeRow2(nSheetId, bbox.r2) - bbox.r2;
+		OffsetLast.col = collaborativeEditing.getLockMeColumn2(nSheetId, bbox.c2) - bbox.c2;
 		this.Ref.setOffsetFirst(OffsetFirst);
 		this.Ref.setOffsetLast(OffsetLast);
 	}
 };
-/** @constructor */
-function SheetFormatPr(){
-	this.nBaseColWidth = null;
-	this.dDefaultColWidth = null;
-	this.oAllRow = null;
-}
-SheetFormatPr.prototype = {
-	clone : function(){
+	/** @constructor */
+	function SheetFormatPr() {
+		this.nBaseColWidth = null;
+		this.dDefaultColWidth = null;
+		this.oAllRow = null;
+	}
+	SheetFormatPr.prototype.clone = function () {
 		var oRes = new SheetFormatPr();
 		oRes.nBaseColWidth = this.nBaseColWidth;
 		oRes.dDefaultColWidth = this.dDefaultColWidth;
-		if(null != this.oAllRow)
+		if (null != this.oAllRow) {
 			oRes.oAllRow = this.oAllRow.clone();
+		}
 		return oRes;
+	};
+	SheetFormatPr.prototype.correction = function () {
+		if (null !== this.dDefaultColWidth && 0 > this.dDefaultColWidth) {
+			this.dDefaultColWidth = null;
+		}
+	};
+	/** @constructor */
+	function Col(worksheet, index) {
+		this.ws = worksheet;
+		this.index = index;
+		this.BestFit = null;
+		this.hd = null;
+		this.CustomWidth = null;
+		this.width = null;
+		this.xfs = null;
+
+		this.widthPx = null;
+		this.charCount = null;
 	}
-};
-/** @constructor */
-function Col(worksheet, index)
-{
-	this.ws = worksheet;
-	this.index = index;
-    this.BestFit = null;
-    this.hd = null;
-    this.CustomWidth = null;
-    this.width = null;
-    this.xfs = null;
-}
-Col.prototype =
-{
-	moveHor : function(nDif)
-	{
+
+	Col.prototype.moveHor = function (nDif) {
 		this.index += nDif;
-	},
-	isEqual : function(obj)
-	{
-		var bRes = this.BestFit == obj.BestFit && this.hd == obj.hd && this.width == obj.width && this.CustomWidth == obj.CustomWidth;
-		if(bRes)
-		{
-			if(null != this.xfs && null != obj.xfs)
+	};
+	Col.prototype.isEqual = function (obj) {
+		var bRes = this.BestFit == obj.BestFit && this.hd == obj.hd && this.width == obj.width &&
+			this.CustomWidth == obj.CustomWidth;
+		if (bRes) {
+			if (null != this.xfs && null != obj.xfs) {
 				bRes = this.xfs.isEqual(obj.xfs);
-			else if(null != this.xfs || null != obj.xfs)
+			} else if (null != this.xfs ||
+				null != obj.xfs) {
 				bRes = false;
+			}
 		}
 		return bRes;
-	},
-	isEmpty : function()
-	{
-		return null == this.BestFit && null == this.hd && null == this.width && null == this.xfs && null == this.CustomWidth;
-	},
-	Remove : function()
-	{
-		this.ws._removeCol(this.index);
-	},
-	clone : function(oNewWs)
-    {
-        if(!oNewWs)
-            oNewWs = this.ws;
-        var oNewCol = new Col(oNewWs, this.index);
-        if(null != this.BestFit)
-            oNewCol.BestFit = this.BestFit;
-        if(null != this.hd)
-            oNewCol.hd = this.hd;
-        if(null != this.width)
-            oNewCol.width = this.width;
-		if(null != this.CustomWidth)
-            oNewCol.CustomWidth = this.CustomWidth;
-        if(null != this.xfs)
-            oNewCol.xfs = this.xfs.clone();
-        return oNewCol;
-    },
-	getWidthProp : function()
-	{
+	};
+	Col.prototype.isEmpty = function () {
+		return null == this.BestFit && null == this.hd && null == this.width && null == this.xfs &&
+			null == this.CustomWidth;
+	};
+	Col.prototype.clone = function (oNewWs) {
+		if (!oNewWs) {
+			oNewWs = this.ws;
+		}
+		var oNewCol = new Col(oNewWs, this.index);
+		if (null != this.BestFit) {
+			oNewCol.BestFit = this.BestFit;
+		}
+		if (null != this.hd) {
+			oNewCol.hd = this.hd;
+		}
+		if (null != this.width) {
+			oNewCol.width = this.width;
+		}
+		if (null != this.CustomWidth) {
+			oNewCol.CustomWidth = this.CustomWidth;
+		}
+		if (null != this.xfs) {
+			oNewCol.xfs = this.xfs;
+		}
+
+		if (null != this.widthPx) {
+			oNewCol.widthPx = this.widthPx;
+		}
+		if (null != this.charCount) {
+			oNewCol.charCount = this.charCount;
+		}
+		return oNewCol;
+	};
+	Col.prototype.getWidthProp = function () {
 		return new AscCommonExcel.UndoRedoData_ColProp(this);
-	},
-	setWidthProp : function(prop)
-	{
-		if(null != prop)
-		{
-			if(null != prop.width)
+	};
+	Col.prototype.setWidthProp = function (prop) {
+		if (null != prop) {
+			if (null != prop.width) {
 				this.width = prop.width;
-			else
+			} else {
 				this.width = null;
-			if(null != prop.hd)
-				this.hd = prop.hd;
-			else
-				this.hd = null;
-			if(null != prop.CustomWidth)
+			}
+			this.setHidden(prop.hd);
+			if (null != prop.CustomWidth) {
 				this.CustomWidth = prop.CustomWidth;
-			else
+			} else {
 				this.CustomWidth = null;
-			if(null != prop.BestFit)
+			}
+			if (null != prop.BestFit) {
 				this.BestFit = prop.BestFit;
-			else
+			} else {
 				this.BestFit = null;
+			}
 		}
-	},
-	getStyle : function()
-	{
+	};
+	Col.prototype.getStyle = function () {
 		return this.xfs;
-	},
-	_getUpdateRange: function () {
-	    if (AscCommonExcel.g_nAllColIndex == this.index)
-	        return new Asc.Range(0, 0, gc_nMaxCol0, gc_nMaxRow0);
-	    else
-	        return new Asc.Range(this.index, 0, this.index, gc_nMaxRow0);
-	},
-	setStyle : function(xfs)
-	{
+	};
+	Col.prototype._getUpdateRange = function () {
+		if (AscCommonExcel.g_nAllColIndex == this.index) {
+			return new Asc.Range(0, 0, gc_nMaxCol0, gc_nMaxRow0);
+		} else {
+			return new Asc.Range(this.index, 0, this.index, gc_nMaxRow0);
+		}
+	};
+	Col.prototype.setStyle = function (xfs) {
 		var oldVal = this.xfs;
-		var newVal = null;
-		this.xfs = null;
-		if(null != xfs)
-		{
-			this.xfs = xfs.clone();
-			newVal = xfs;
+		this.setStyleInternal(xfs);
+		if (History.Is_On() && oldVal !== this.xfs) {
+			History.Add(AscCommonExcel.g_oUndoRedoCol, AscCH.historyitem_RowCol_SetStyle, this.ws.getId(),
+				this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, false, oldVal, this.xfs));
 		}
-		if(History.Is_On() && false == ((null == oldVal && null == newVal) || (null != oldVal && null != newVal && true == oldVal.isEqual(newVal))))
-		{
-			if(null != oldVal)
-				oldVal = oldVal.clone();
-			if(null != newVal)
-				newVal = newVal.clone();
-			History.Add(AscCommonExcel.g_oUndoRedoCol, AscCH.historyitem_RowCol_SetStyle, this.ws.getId(), this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, false, oldVal, newVal));
-		}
-	},
-	setCellStyle : function(val)
-	{
+	};
+	Col.prototype.setStyleInternal = function (xfs) {
+		this.xfs = g_StyleCache.addXf(xfs);
+	};
+	Col.prototype.setCellStyle = function (val) {
 		var newVal = this.ws.workbook.CellStyles._prepareCellStyle(val);
 		var oRes = this.ws.workbook.oStyleManager.setCellStyle(this, newVal);
-		if(History.Is_On() && oRes.oldVal != oRes.newVal) {
+		if (History.Is_On() && oRes.oldVal != oRes.newVal) {
 			var oldStyleName = this.ws.workbook.CellStyles.getStyleNameByXfId(oRes.oldVal);
-			History.Add(AscCommonExcel.g_oUndoRedoCol, AscCH.historyitem_RowCol_SetCellStyle, this.ws.getId(), this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, false, oldStyleName, val));
+			History.Add(AscCommonExcel.g_oUndoRedoCol, AscCH.historyitem_RowCol_SetCellStyle, this.ws.getId(),
+				this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, false, oldStyleName, val));
 
 			// Выставляем стиль
 			var oStyle = this.ws.workbook.CellStyles.getStyleByXfId(oRes.newVal);
-			if (oStyle.ApplyFont)
+			if (oStyle.ApplyFont) {
 				this.setFont(oStyle.getFont());
-			if (oStyle.ApplyFill)
+			}
+			if (oStyle.ApplyFill) {
 				this.setFill(oStyle.getFill());
-			if (oStyle.ApplyBorder)
+			}
+			if (oStyle.ApplyBorder) {
 				this.setBorder(oStyle.getBorder());
-			if (oStyle.ApplyNumberFormat)
+			}
+			if (oStyle.ApplyNumberFormat) {
 				this.setNumFormat(oStyle.getNumFormatStr());
+			}
 		}
-	},
-	setNumFormat : function(val)
-	{
-		var oRes = this.ws.workbook.oStyleManager.setNumFormat(this, val);
-        if(History.Is_On() && oRes.oldVal != oRes.newVal)
-            History.Add(AscCommonExcel.g_oUndoRedoCol, AscCH.historyitem_RowCol_NumFormat, this.ws.getId(), this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, false, oRes.oldVal, oRes.newVal));
-	},
-	setFont : function(val)
-    {
+	};
+	Col.prototype.setNumFormat = function (val) {
+		var oRes = this.ws.workbook.oStyleManager.setNum(this, new Num({f: val}));
+		if (History.Is_On() && oRes.oldVal != oRes.newVal) {
+			History.Add(AscCommonExcel.g_oUndoRedoCol, AscCH.historyitem_RowCol_Num, this.ws.getId(),
+				this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, false, oRes.oldVal, oRes.newVal));
+		}
+	};
+	Col.prototype.setNum = function (val) {
+		var oRes = this.ws.workbook.oStyleManager.setNum(this, val);
+		if (History.Is_On() && oRes.oldVal != oRes.newVal) {
+			History.Add(AscCommonExcel.g_oUndoRedoCol, AscCH.historyitem_RowCol_Num, this.ws.getId(),
+				this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, false, oRes.oldVal, oRes.newVal));
+		}
+	};
+	Col.prototype.setFont = function (val) {
 		var oRes = this.ws.workbook.oStyleManager.setFont(this, val);
-        if(History.Is_On() && oRes.oldVal != oRes.newVal)
-		{
+		if (History.Is_On() && oRes.oldVal != oRes.newVal) {
 			var oldVal = null;
-			if(null != oRes.oldVal)
+			if (null != oRes.oldVal) {
 				oldVal = oRes.oldVal.clone();
+			}
 			var newVal = null;
-			if(null != oRes.newVal)
+			if (null != oRes.newVal) {
 				newVal = oRes.newVal.clone();
-            History.Add(AscCommonExcel.g_oUndoRedoCol, AscCH.historyitem_RowCol_SetFont, this.ws.getId(), this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, false, oldVal, newVal));
+			}
+			History.Add(AscCommonExcel.g_oUndoRedoCol, AscCH.historyitem_RowCol_SetFont, this.ws.getId(),
+				this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, false, oldVal, newVal));
 		}
-	},
-	setFontname : function(val)
-	{
+	};
+	Col.prototype.setFontname = function (val) {
 		var oRes = this.ws.workbook.oStyleManager.setFontname(this, val);
-        if(History.Is_On() && oRes.oldVal != oRes.newVal)
-            History.Add(AscCommonExcel.g_oUndoRedoCol, AscCH.historyitem_RowCol_Fontname, this.ws.getId(), this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, false, oRes.oldVal, oRes.newVal));
-	},
-	setFontsize : function(val)
-	{
+		if (History.Is_On() && oRes.oldVal != oRes.newVal) {
+			History.Add(AscCommonExcel.g_oUndoRedoCol, AscCH.historyitem_RowCol_Fontname, this.ws.getId(),
+				this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, false, oRes.oldVal, oRes.newVal));
+		}
+	};
+	Col.prototype.setFontsize = function (val) {
 		var oRes = this.ws.workbook.oStyleManager.setFontsize(this, val);
-        if(History.Is_On() && oRes.oldVal != oRes.newVal)
-            History.Add(AscCommonExcel.g_oUndoRedoCol, AscCH.historyitem_RowCol_Fontsize, this.ws.getId(), this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, false, oRes.oldVal, oRes.newVal));
-	},
-	setFontcolor : function(val)
-	{
+		if (History.Is_On() && oRes.oldVal != oRes.newVal) {
+			History.Add(AscCommonExcel.g_oUndoRedoCol, AscCH.historyitem_RowCol_Fontsize, this.ws.getId(),
+				this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, false, oRes.oldVal, oRes.newVal));
+		}
+	};
+	Col.prototype.setFontcolor = function (val) {
 		var oRes = this.ws.workbook.oStyleManager.setFontcolor(this, val);
-        if(History.Is_On() && oRes.oldVal != oRes.newVal)
-            History.Add(AscCommonExcel.g_oUndoRedoCol, AscCH.historyitem_RowCol_Fontcolor, this.ws.getId(), this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, false, oRes.oldVal, oRes.newVal));
-	},
-	setBold : function(val)
-	{
+		if (History.Is_On() && oRes.oldVal != oRes.newVal) {
+			History.Add(AscCommonExcel.g_oUndoRedoCol, AscCH.historyitem_RowCol_Fontcolor, this.ws.getId(),
+				this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, false, oRes.oldVal, oRes.newVal));
+		}
+	};
+	Col.prototype.setBold = function (val) {
 		var oRes = this.ws.workbook.oStyleManager.setBold(this, val);
-        if(History.Is_On() && oRes.oldVal != oRes.newVal)
-            History.Add(AscCommonExcel.g_oUndoRedoCol, AscCH.historyitem_RowCol_Bold, this.ws.getId(), this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, false, oRes.oldVal, oRes.newVal));
-	},
-	setItalic : function(val)
-	{
+		if (History.Is_On() && oRes.oldVal != oRes.newVal) {
+			History.Add(AscCommonExcel.g_oUndoRedoCol, AscCH.historyitem_RowCol_Bold, this.ws.getId(),
+				this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, false, oRes.oldVal, oRes.newVal));
+		}
+	};
+	Col.prototype.setItalic = function (val) {
 		var oRes = this.ws.workbook.oStyleManager.setItalic(this, val);
-        if(History.Is_On() && oRes.oldVal != oRes.newVal)
-            History.Add(AscCommonExcel.g_oUndoRedoCol, AscCH.historyitem_RowCol_Italic, this.ws.getId(), this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, false, oRes.oldVal, oRes.newVal));
-	},
-	setUnderline : function(val)
-	{
+		if (History.Is_On() && oRes.oldVal != oRes.newVal) {
+			History.Add(AscCommonExcel.g_oUndoRedoCol, AscCH.historyitem_RowCol_Italic, this.ws.getId(),
+				this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, false, oRes.oldVal, oRes.newVal));
+		}
+	};
+	Col.prototype.setUnderline = function (val) {
 		var oRes = this.ws.workbook.oStyleManager.setUnderline(this, val);
-        if(History.Is_On() && oRes.oldVal != oRes.newVal)
-            History.Add(AscCommonExcel.g_oUndoRedoCol, AscCH.historyitem_RowCol_Underline, this.ws.getId(), this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, false, oRes.oldVal, oRes.newVal));
-	},
-	setStrikeout : function(val)
-	{
+		if (History.Is_On() && oRes.oldVal != oRes.newVal) {
+			History.Add(AscCommonExcel.g_oUndoRedoCol, AscCH.historyitem_RowCol_Underline, this.ws.getId(),
+				this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, false, oRes.oldVal, oRes.newVal));
+		}
+	};
+	Col.prototype.setStrikeout = function (val) {
 		var oRes = this.ws.workbook.oStyleManager.setStrikeout(this, val);
-        if(History.Is_On() && oRes.oldVal != oRes.newVal)
-            History.Add(AscCommonExcel.g_oUndoRedoCol, AscCH.historyitem_RowCol_Strikeout, this.ws.getId(), this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, false, oRes.oldVal, oRes.newVal));
-	},
-	setFontAlign : function(val)
-	{
+		if (History.Is_On() && oRes.oldVal != oRes.newVal) {
+			History.Add(AscCommonExcel.g_oUndoRedoCol, AscCH.historyitem_RowCol_Strikeout, this.ws.getId(),
+				this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, false, oRes.oldVal, oRes.newVal));
+		}
+	};
+	Col.prototype.setFontAlign = function (val) {
 		var oRes = this.ws.workbook.oStyleManager.setFontAlign(this, val);
-        if(History.Is_On() && oRes.oldVal != oRes.newVal)
-            History.Add(AscCommonExcel.g_oUndoRedoCol, AscCH.historyitem_RowCol_FontAlign, this.ws.getId(), this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, false, oRes.oldVal, oRes.newVal));
-	},
-	setAlignVertical : function(val)
-	{
+		if (History.Is_On() && oRes.oldVal != oRes.newVal) {
+			History.Add(AscCommonExcel.g_oUndoRedoCol, AscCH.historyitem_RowCol_FontAlign, this.ws.getId(),
+				this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, false, oRes.oldVal, oRes.newVal));
+		}
+	};
+	Col.prototype.setAlignVertical = function (val) {
 		var oRes = this.ws.workbook.oStyleManager.setAlignVertical(this, val);
-        if(History.Is_On() && oRes.oldVal != oRes.newVal)
-            History.Add(AscCommonExcel.g_oUndoRedoCol, AscCH.historyitem_RowCol_AlignVertical, this.ws.getId(), this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, false, oRes.oldVal, oRes.newVal));
-	},
-	setAlignHorizontal : function(val)
-	{
+		if (History.Is_On() && oRes.oldVal != oRes.newVal) {
+			History.Add(AscCommonExcel.g_oUndoRedoCol, AscCH.historyitem_RowCol_AlignVertical, this.ws.getId(),
+				this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, false, oRes.oldVal, oRes.newVal));
+		}
+	};
+	Col.prototype.setAlignHorizontal = function (val) {
 		var oRes = this.ws.workbook.oStyleManager.setAlignHorizontal(this, val);
-        if(History.Is_On() && oRes.oldVal != oRes.newVal)
-            History.Add(AscCommonExcel.g_oUndoRedoCol, AscCH.historyitem_RowCol_AlignHorizontal, this.ws.getId(), this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, false, oRes.oldVal, oRes.newVal));
-	},
-	setFill : function(val)
-	{
+		if (History.Is_On() && oRes.oldVal != oRes.newVal) {
+			History.Add(AscCommonExcel.g_oUndoRedoCol, AscCH.historyitem_RowCol_AlignHorizontal, this.ws.getId(),
+				this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, false, oRes.oldVal, oRes.newVal));
+		}
+	};
+	Col.prototype.setFill = function (val) {
 		var oRes = this.ws.workbook.oStyleManager.setFill(this, val);
-        if(History.Is_On() && oRes.oldVal != oRes.newVal)
-            History.Add(AscCommonExcel.g_oUndoRedoCol, AscCH.historyitem_RowCol_Fill, this.ws.getId(), this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, false, oRes.oldVal, oRes.newVal));
-	},
-	setBorder : function(val)
-	{
+		if (History.Is_On() && oRes.oldVal != oRes.newVal) {
+			History.Add(AscCommonExcel.g_oUndoRedoCol, AscCH.historyitem_RowCol_Fill, this.ws.getId(),
+				this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, false, oRes.oldVal, oRes.newVal));
+		}
+	};
+	Col.prototype.setBorder = function (val) {
 		var oRes = this.ws.workbook.oStyleManager.setBorder(this, val);
-        if(History.Is_On() && oRes.oldVal != oRes.newVal)
-		{
+		if (History.Is_On() && oRes.oldVal != oRes.newVal) {
 			var oldVal = null;
-			if(null != oRes.oldVal)
+			if (null != oRes.oldVal) {
 				oldVal = oRes.oldVal.clone();
+			}
 			var newVal = null;
-			if(null != oRes.newVal)
+			if (null != oRes.newVal) {
 				newVal = oRes.newVal.clone();
-            History.Add(AscCommonExcel.g_oUndoRedoCol, AscCH.historyitem_RowCol_Border, this.ws.getId(), this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, false, oldVal, newVal));
+			}
+			History.Add(AscCommonExcel.g_oUndoRedoCol, AscCH.historyitem_RowCol_Border, this.ws.getId(),
+				this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, false, oldVal, newVal));
 		}
-	},
-	setShrinkToFit : function(val)
-	{
+	};
+	Col.prototype.setShrinkToFit = function (val) {
 		var oRes = this.ws.workbook.oStyleManager.setShrinkToFit(this, val);
-        if(History.Is_On() && oRes.oldVal != oRes.newVal)
-            History.Add(AscCommonExcel.g_oUndoRedoCol, AscCH.historyitem_RowCol_ShrinkToFit, this.ws.getId(), this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, false, oRes.oldVal, oRes.newVal));
-	},
-	setWrap : function(val)
-	{
-		var oRes = this.ws.workbook.oStyleManager.setWrap(this, val);
-        if(History.Is_On() && oRes.oldVal != oRes.newVal)
-            History.Add(AscCommonExcel.g_oUndoRedoCol, AscCH.historyitem_RowCol_Wrap, this.ws.getId(), this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, false, oRes.oldVal, oRes.newVal));
-	},
-    setAngle : function(val)
-    {
-        var oRes = this.ws.workbook.oStyleManager.setAngle(this, val);
-        if(History.Is_On() && oRes.oldVal != oRes.newVal)
-            History.Add(AscCommonExcel.g_oUndoRedoCol, AscCH.historyitem_RowCol_Angle, this.ws.getId(), this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, false, oRes.oldVal, oRes.newVal));
-    },
-	setVerticalText : function(val)
-	{
-        var oRes = this.ws.workbook.oStyleManager.setVerticalText(this, val);
-        if(History.Is_On() && oRes.oldVal != oRes.newVal)
-            History.Add(AscCommonExcel.g_oUndoRedoCol, AscCH.historyitem_RowCol_Angle, this.ws.getId(), this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, false, oRes.oldVal, oRes.newVal));
-	}
-};
-var g_nRowFlag_empty = 0;
-var g_nRowFlag_hd = 1;
-var g_nRowFlag_CustomHeight = 2;
-var g_nRowFlag_CalcHeight = 4;
-/**
- * @constructor
- */
-function Row(worksheet)
-{
-	this.ws = worksheet;
-	this.c = {};
-	this.index = null;
-    this.xfs = null;
-    this.h = null;
-	this.flags = g_nRowFlag_empty;
-}
-Row.prototype =
-{
-	getCells : function () {
-		return this.c;
-	},
-	create : function(row)
-	{
-		this.index = row - 1;
-		this.xfs = null;
-	},
-	moveVer : function(nDif)
-	{
-		this.index += nDif;
-	},
-	isEmpty : function()
-	{
-		if(!this.isEmptyProp())
-			return false;
-		var bEmptyCells = true;
-		for(var i in this.c)
-		{
-			bEmptyCells = false;
-			break;
+		if (History.Is_On() && oRes.oldVal != oRes.newVal) {
+			History.Add(AscCommonExcel.g_oUndoRedoCol, AscCH.historyitem_RowCol_ShrinkToFit, this.ws.getId(),
+				this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, false, oRes.oldVal, oRes.newVal));
 		}
-		if(false == bEmptyCells)
-			return false;
-		return true;
-	},
-	isEmptyProp : function()
-	{
-		return null == this.xfs && null == this.h && g_nRowFlag_empty == this.flags;
-	},
-	Remove : function()
-	{
-		this.ws._removeRow(this.index);
-	},
-	clone : function(oNewWs, renameParams)
-	{
-        if(!oNewWs)
-            oNewWs = this.ws;
-        var oNewRow = new Row(oNewWs);
+	};
+	Col.prototype.setWrap = function (val) {
+		var oRes = this.ws.workbook.oStyleManager.setWrap(this, val);
+		if (History.Is_On() && oRes.oldVal != oRes.newVal) {
+			History.Add(AscCommonExcel.g_oUndoRedoCol, AscCH.historyitem_RowCol_Wrap, this.ws.getId(),
+				this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, false, oRes.oldVal, oRes.newVal));
+		}
+	};
+	Col.prototype.setAngle = function (val) {
+		var oRes = this.ws.workbook.oStyleManager.setAngle(this, val);
+		if (History.Is_On() && oRes.oldVal != oRes.newVal) {
+			History.Add(AscCommonExcel.g_oUndoRedoCol, AscCH.historyitem_RowCol_Angle, this.ws.getId(),
+				this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, false, oRes.oldVal, oRes.newVal));
+		}
+	};
+	Col.prototype.setVerticalText = function (val) {
+		var oRes = this.ws.workbook.oStyleManager.setVerticalText(this, val);
+		if (History.Is_On() && oRes.oldVal != oRes.newVal) {
+			History.Add(AscCommonExcel.g_oUndoRedoCol, AscCH.historyitem_RowCol_Angle, this.ws.getId(),
+				this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, false, oRes.oldVal, oRes.newVal));
+		}
+	};
+	Col.prototype.setHidden = function (val) {
+		if (this.index >= 0 && (!this.hd !== !val)) {
+			this.ws.hiddenManager.addHidden(false, this.index);
+		}
+		this.hd = val;
+	};
+	Col.prototype.getHidden = function () {
+		return true === this.hd;
+	};
+	Col.prototype.setIndex = function (val) {
+		this.index = val;
+	};
+	Col.prototype.getIndex = function () {
+		return this.index;
+	};
+
+	var g_nRowOffsetFlag = 0;
+	var g_nRowOffsetXf = g_nRowOffsetFlag + 1;
+	var g_nRowOffsetHeight = g_nRowOffsetXf + 4;
+	var g_nRowStructSize = g_nRowOffsetHeight + 8;
+
+	var g_nRowFlag_empty = 0;
+	var g_nRowFlag_init = 1;
+	var g_nRowFlag_hd = 2;
+	var g_nRowFlag_CustomHeight = 4;
+	var g_nRowFlag_CalcHeight = 8;
+	var g_nRowFlag_NullHeight = 16;
+
+	/**
+	 * @constructor
+	 */
+	function Row(worksheet) {
+		this.ws = worksheet;
+		this.index = null;
+		this.xfs = null;
+		this.h = null;
+		this.flags = g_nRowFlag_init;
+		this._hasChanged = false;
+	}
+	Row.prototype.clear = function () {
+		this.index = null;
+		this.xfs = null;
+		this.h = null;
+		this.flags = g_nRowFlag_init;
+		this._hasChanged = false;
+	};
+	Row.prototype.saveContent = function (opt_inCaseOfChange) {
+		if (this.index >= 0 && (!opt_inCaseOfChange || this._hasChanged)) {
+			this._hasChanged = false;
+			var sheetMemory = this.ws.rowsData;
+			sheetMemory.checkSize(this.index);
+			var xfSave = this.xfs ? this.xfs.getIndexNumber() : 0;
+			var flagToSave = this.flags;
+			var heightToSave = this.h;
+			if (null === heightToSave) {
+				flagToSave |= g_nRowFlag_NullHeight;
+				heightToSave = 0;
+			}
+			sheetMemory.setUint8(this.index, g_nRowOffsetFlag, flagToSave);
+			sheetMemory.setUint32(this.index, g_nRowOffsetXf, xfSave);
+			sheetMemory.setFloat64(this.index, g_nRowOffsetHeight, heightToSave);
+		}
+	};
+	Row.prototype.loadContent = function (index) {
+		var res = false;
+		this.clear();
+		this.index = index;
+		var sheetMemory = this.ws.rowsData;
+		if (sheetMemory.hasSize(this.index)) {
+			this.flags = sheetMemory.getUint8(this.index, g_nRowOffsetFlag);
+			if (0 != (g_nRowFlag_init & this.flags)) {
+				this.xfs = g_StyleCache.getXf(sheetMemory.getUint32(this.index, g_nRowOffsetXf));
+				if (0 !== (g_nRowFlag_NullHeight & this.flags)) {
+					this.flags &= ~g_nRowFlag_NullHeight;
+					this.h = null;
+				} else {
+					this.h = sheetMemory.getFloat64(this.index, g_nRowOffsetHeight);
+				}
+				res = true;
+			}
+		}
+		return res;
+	};
+	Row.prototype.setChanged = function (val) {
+		this._hasChanged = val;
+	};
+	Row.prototype.isEmpty = function () {
+		return this.isEmptyProp();
+	};
+	Row.prototype.isEmptyProp = function () {
+		//todo
+		return null == this.xfs && null == this.h && g_nRowFlag_init == this.flags;
+	};
+	Row.prototype.clone = function (oNewWs, renameParams) {
+		if (!oNewWs) {
+			oNewWs = this.ws;
+		}
+		var oNewRow = new Row(oNewWs);
 		oNewRow.index = this.index;
 		oNewRow.flags = this.flags;
-		if(null != this.xfs)
-			oNewRow.xfs = this.xfs.clone();
-		if(null != this.h)
+		if (null != this.xfs) {
+			oNewRow.xfs = this.xfs;
+		}
+		if (null != this.h) {
 			oNewRow.h = this.h;
-		for(var i in this.c)
-			oNewRow.c[i] = this.c[i].clone(oNewWs, renameParams);
+		}
 		return oNewRow;
-	},
-	getDefaultXfs : function()
-	{
+	};
+	Row.prototype.copyFrom = function (row) {
+		this.flags = row.flags;
+		if (null != row.xfs) {
+			this.xfs = row.xfs;
+		}
+		if (null != row.h) {
+			this.h = row.h;
+		}
+		this._hasChanged = true;
+	};
+	Row.prototype.getDefaultXfs = function () {
 		var oRes = null;
-		if(null != this.ws.oAllCol && null != this.ws.oAllCol.xfs)
+		if (null != this.ws.oAllCol && null != this.ws.oAllCol.xfs) {
 			oRes = this.ws.oAllCol.xfs.clone();
+		}
 		return oRes;
-	},
-	getHeightProp : function()
-	{
+	};
+	Row.prototype.getHeightProp = function () {
 		return new AscCommonExcel.UndoRedoData_RowProp(this);
-	},
-	setHeightProp : function(prop)
-	{
-		if(null != prop)
-		{
-			if(null != prop.h)
+	};
+	Row.prototype.setHeightProp = function (prop) {
+		if (null != prop) {
+			if (null != prop.h) {
 				this.h = prop.h;
-			else
+			} else {
 				this.h = null;
-			if(true == prop.hd)
-				this.flags |= g_nRowFlag_hd;
-			else
-				this.flags &= ~g_nRowFlag_hd;
-			if(true == prop.CustomHeight)
-				this.flags |= g_nRowFlag_CustomHeight;
-			else
-				this.flags &= ~g_nRowFlag_CustomHeight;
+			}
+			this.setHidden(prop.hd);
+			this.setCustomHeight(prop.CustomHeight);
 		}
-	},
-	copyProperty : function(otherRow)
-	{
-		if(null != otherRow.xfs)
-			this.xfs = otherRow.xfs.clone();
-		else
-			this.xfs = null;
-		this.h = otherRow.h;
-		this.flags = otherRow.flags;
-	},
-	getStyle : function()
-	{
+	};
+	Row.prototype.getStyle = function () {
 		return this.xfs;
-	},
-	_getUpdateRange: function () {
-	    if (AscCommonExcel.g_nAllRowIndex == this.index)
-	        return new Asc.Range(0, 0, gc_nMaxCol0, gc_nMaxRow0);
-	    else
-	        return new Asc.Range(0, this.index, gc_nMaxCol0, this.index);
-	},
-	setStyle : function(xfs)
-	{
+	};
+	Row.prototype._getUpdateRange = function () {
+		if (AscCommonExcel.g_nAllRowIndex == this.index) {
+			return new Asc.Range(0, 0, gc_nMaxCol0, gc_nMaxRow0);
+		} else {
+			return new Asc.Range(0, this.index, gc_nMaxCol0, this.index);
+		}
+	};
+	Row.prototype.setStyle = function (xfs) {
 		var oldVal = this.xfs;
-		var newVal = null;
-		this.xfs = null;
-		if(null != xfs)
-		{
-			this.xfs = xfs.clone();
-			newVal = xfs;
+		this.setStyleInternal(xfs);
+		if (History.Is_On() && oldVal !== this.xfs) {
+			History.Add(AscCommonExcel.g_oUndoRedoRow, AscCH.historyitem_RowCol_SetStyle, this.ws.getId(),
+				this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, true, oldVal, this.xfs));
 		}
-		if(History.Is_On() && false == ((null == oldVal && null == newVal) || (null != oldVal && null != newVal && true == oldVal.isEqual(newVal))))
-		{
-			if(null != oldVal)
-				oldVal = oldVal.clone();
-			if(null != newVal)
-				newVal = newVal.clone();
-			History.Add(AscCommonExcel.g_oUndoRedoRow, AscCH.historyitem_RowCol_SetStyle, this.ws.getId(), this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, true, oldVal, newVal));
-		}
-	},
-	setCellStyle : function(val)
-	{
+	};
+	Row.prototype.setStyleInternal = function (xfs) {
+		this.xfs = g_StyleCache.addXf(xfs);
+		this._hasChanged = true;
+	};
+	Row.prototype.setCellStyle = function (val) {
 		var newVal = this.ws.workbook.CellStyles._prepareCellStyle(val);
 		var oRes = this.ws.workbook.oStyleManager.setCellStyle(this, newVal);
-		if(History.Is_On() && oRes.oldVal != oRes.newVal) {
+		if (History.Is_On() && oRes.oldVal != oRes.newVal) {
 			var oldStyleName = this.ws.workbook.CellStyles.getStyleNameByXfId(oRes.oldVal);
-			History.Add(AscCommonExcel.g_oUndoRedoRow, AscCH.historyitem_RowCol_SetCellStyle, this.ws.getId(), this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, true, oldStyleName, val));
+			History.Add(AscCommonExcel.g_oUndoRedoRow, AscCH.historyitem_RowCol_SetCellStyle, this.ws.getId(),
+				this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, true, oldStyleName, val));
 
 			// Выставляем стиль
 			var oStyle = this.ws.workbook.CellStyles.getStyleByXfId(oRes.newVal);
-			if (oStyle.ApplyFont)
+			if (oStyle.ApplyFont) {
 				this.setFont(oStyle.getFont());
-			if (oStyle.ApplyFill)
+			}
+			if (oStyle.ApplyFill) {
 				this.setFill(oStyle.getFill());
-			if (oStyle.ApplyBorder)
+			}
+			if (oStyle.ApplyBorder) {
 				this.setBorder(oStyle.getBorder());
-			if (oStyle.ApplyNumberFormat)
+			}
+			if (oStyle.ApplyNumberFormat) {
 				this.setNumFormat(oStyle.getNumFormatStr());
+			}
 		}
-	},
-	setNumFormat : function(val)
-	{
-		var oRes = this.ws.workbook.oStyleManager.setNumFormat(this, val);
-        if(History.Is_On() && oRes.oldVal != oRes.newVal)
-            History.Add(AscCommonExcel.g_oUndoRedoRow, AscCH.historyitem_RowCol_NumFormat, this.ws.getId(), this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, true, oRes.oldVal, oRes.newVal));
-	},
-	setFont : function(val)
-    {
+	};
+	Row.prototype.setNumFormat = function (val) {
+		var oRes = this.ws.workbook.oStyleManager.setNum(this, new Num({f: val}));
+		if (History.Is_On() && oRes.oldVal != oRes.newVal) {
+			History.Add(AscCommonExcel.g_oUndoRedoRow, AscCH.historyitem_RowCol_Num, this.ws.getId(),
+				this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, true, oRes.oldVal, oRes.newVal));
+		}
+	};
+	Row.prototype.setNum = function (val) {
+		var oRes = this.ws.workbook.oStyleManager.setNum(this, val);
+		if (History.Is_On() && oRes.oldVal != oRes.newVal) {
+			History.Add(AscCommonExcel.g_oUndoRedoRow, AscCH.historyitem_RowCol_Num, this.ws.getId(),
+				this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, true, oRes.oldVal, oRes.newVal));
+		}
+	};
+	Row.prototype.setFont = function (val) {
 		var oRes = this.ws.workbook.oStyleManager.setFont(this, val);
-        if(History.Is_On() && oRes.oldVal != oRes.newVal)
-		{
+		if (History.Is_On() && oRes.oldVal != oRes.newVal) {
 			var oldVal = null;
-			if(null != oRes.oldVal)
+			if (null != oRes.oldVal) {
 				oldVal = oRes.oldVal.clone();
+			}
 			var newVal = null;
-			if(null != oRes.newVal)
+			if (null != oRes.newVal) {
 				newVal = oRes.newVal.clone();
-            History.Add(AscCommonExcel.g_oUndoRedoRow, AscCH.historyitem_RowCol_SetFont, this.ws.getId(), this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, true, oldVal, newVal));
+			}
+			History.Add(AscCommonExcel.g_oUndoRedoRow, AscCH.historyitem_RowCol_SetFont, this.ws.getId(),
+				this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, true, oldVal, newVal));
 		}
-	},
-	setFontname : function(val)
-	{
+	};
+	Row.prototype.setFontname = function (val) {
 		var oRes = this.ws.workbook.oStyleManager.setFontname(this, val);
-        if(History.Is_On() && oRes.oldVal != oRes.newVal)
-            History.Add(AscCommonExcel.g_oUndoRedoRow, AscCH.historyitem_RowCol_Fontname, this.ws.getId(), this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, true, oRes.oldVal, oRes.newVal));
-	},
-	setFontsize : function(val)
-	{
-		var oRes = this.ws.workbook.oStyleManager.setFontsize(this, val);
-        if(History.Is_On() && oRes.oldVal != oRes.newVal)
-            History.Add(AscCommonExcel.g_oUndoRedoRow, AscCH.historyitem_RowCol_Fontsize, this.ws.getId(), this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, true, oRes.oldVal, oRes.newVal));
-	},
-	setFontcolor : function(val)
-	{
-		var oRes = this.ws.workbook.oStyleManager.setFontcolor(this, val);
-        if(History.Is_On() && oRes.oldVal != oRes.newVal)
-            History.Add(AscCommonExcel.g_oUndoRedoRow, AscCH.historyitem_RowCol_Fontcolor, this.ws.getId(), this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, true, oRes.oldVal, oRes.newVal));
-	},
-	setBold : function(val)
-	{
-		var oRes = this.ws.workbook.oStyleManager.setBold(this, val);
-        if(History.Is_On() && oRes.oldVal != oRes.newVal)
-            History.Add(AscCommonExcel.g_oUndoRedoRow, AscCH.historyitem_RowCol_Bold, this.ws.getId(), this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, true, oRes.oldVal, oRes.newVal));
-	},
-	setItalic : function(val)
-	{
-		var oRes = this.ws.workbook.oStyleManager.setItalic(this, val);
-        if(History.Is_On() && oRes.oldVal != oRes.newVal)
-            History.Add(AscCommonExcel.g_oUndoRedoRow, AscCH.historyitem_RowCol_Italic, this.ws.getId(), this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, true, oRes.oldVal, oRes.newVal));
-	},
-	setUnderline : function(val)
-	{
-		var oRes = this.ws.workbook.oStyleManager.setUnderline(this, val);
-        if(History.Is_On() && oRes.oldVal != oRes.newVal)
-            History.Add(AscCommonExcel.g_oUndoRedoRow, AscCH.historyitem_RowCol_Underline, this.ws.getId(), this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, true, oRes.oldVal, oRes.newVal));
-	},
-	setStrikeout : function(val)
-	{
-		var oRes = this.ws.workbook.oStyleManager.setStrikeout(this, val);
-        if(History.Is_On() && oRes.oldVal != oRes.newVal)
-            History.Add(AscCommonExcel.g_oUndoRedoRow, AscCH.historyitem_RowCol_Strikeout, this.ws.getId(), this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, true, oRes.oldVal, oRes.newVal));
-	},
-	setFontAlign : function(val)
-	{
-		var oRes = this.ws.workbook.oStyleManager.setFontAlign(this, val);
-        if(History.Is_On() && oRes.oldVal != oRes.newVal)
-            History.Add(AscCommonExcel.g_oUndoRedoRow, AscCH.historyitem_RowCol_FontAlign, this.ws.getId(), this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, true, oRes.oldVal, oRes.newVal));
-	},
-	setAlignVertical : function(val)
-	{
-		var oRes = this.ws.workbook.oStyleManager.setAlignVertical(this, val);
-        if(History.Is_On() && oRes.oldVal != oRes.newVal)
-            History.Add(AscCommonExcel.g_oUndoRedoRow, AscCH.historyitem_RowCol_AlignVertical, this.ws.getId(), this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, true, oRes.oldVal, oRes.newVal));
-	},
-	setAlignHorizontal : function(val)
-	{
-		var oRes = this.ws.workbook.oStyleManager.setAlignHorizontal(this, val);
-        if(History.Is_On() && oRes.oldVal != oRes.newVal)
-            History.Add(AscCommonExcel.g_oUndoRedoRow, AscCH.historyitem_RowCol_AlignHorizontal, this.ws.getId(), this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, true, oRes.oldVal, oRes.newVal));
-	},
-	setFill : function(val)
-	{
-		var oRes = this.ws.workbook.oStyleManager.setFill(this, val);
-        if(History.Is_On() && oRes.oldVal != oRes.newVal)
-            History.Add(AscCommonExcel.g_oUndoRedoRow, AscCH.historyitem_RowCol_Fill, this.ws.getId(), this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, true, oRes.oldVal, oRes.newVal));
-	},
-	setBorder : function(val)
-	{
-		var oRes = this.ws.workbook.oStyleManager.setBorder(this, val);
-        if(History.Is_On() && oRes.oldVal != oRes.newVal)
-		{
-			var oldVal = null;
-			if(null != oRes.oldVal)
-				oldVal = oRes.oldVal.clone();
-			var newVal = null;
-			if(null != oRes.newVal)
-				newVal = oRes.newVal.clone();
-            History.Add(AscCommonExcel.g_oUndoRedoRow, AscCH.historyitem_RowCol_Border, this.ws.getId(), this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, true, oldVal, newVal));
+		if (History.Is_On() && oRes.oldVal != oRes.newVal) {
+			History.Add(AscCommonExcel.g_oUndoRedoRow, AscCH.historyitem_RowCol_Fontname, this.ws.getId(),
+				this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, true, oRes.oldVal, oRes.newVal));
 		}
-	},
-	setShrinkToFit : function(val)
-	{
+	};
+	Row.prototype.setFontsize = function (val) {
+		var oRes = this.ws.workbook.oStyleManager.setFontsize(this, val);
+		if (History.Is_On() && oRes.oldVal != oRes.newVal) {
+			History.Add(AscCommonExcel.g_oUndoRedoRow, AscCH.historyitem_RowCol_Fontsize, this.ws.getId(),
+				this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, true, oRes.oldVal, oRes.newVal));
+		}
+	};
+	Row.prototype.setFontcolor = function (val) {
+		var oRes = this.ws.workbook.oStyleManager.setFontcolor(this, val);
+		if (History.Is_On() && oRes.oldVal != oRes.newVal) {
+			History.Add(AscCommonExcel.g_oUndoRedoRow, AscCH.historyitem_RowCol_Fontcolor, this.ws.getId(),
+				this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, true, oRes.oldVal, oRes.newVal));
+		}
+	};
+	Row.prototype.setBold = function (val) {
+		var oRes = this.ws.workbook.oStyleManager.setBold(this, val);
+		if (History.Is_On() && oRes.oldVal != oRes.newVal) {
+			History.Add(AscCommonExcel.g_oUndoRedoRow, AscCH.historyitem_RowCol_Bold, this.ws.getId(),
+				this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, true, oRes.oldVal, oRes.newVal));
+		}
+	};
+	Row.prototype.setItalic = function (val) {
+		var oRes = this.ws.workbook.oStyleManager.setItalic(this, val);
+		if (History.Is_On() && oRes.oldVal != oRes.newVal) {
+			History.Add(AscCommonExcel.g_oUndoRedoRow, AscCH.historyitem_RowCol_Italic, this.ws.getId(),
+				this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, true, oRes.oldVal, oRes.newVal));
+		}
+	};
+	Row.prototype.setUnderline = function (val) {
+		var oRes = this.ws.workbook.oStyleManager.setUnderline(this, val);
+		if (History.Is_On() && oRes.oldVal != oRes.newVal) {
+			History.Add(AscCommonExcel.g_oUndoRedoRow, AscCH.historyitem_RowCol_Underline, this.ws.getId(),
+				this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, true, oRes.oldVal, oRes.newVal));
+		}
+	};
+	Row.prototype.setStrikeout = function (val) {
+		var oRes = this.ws.workbook.oStyleManager.setStrikeout(this, val);
+		if (History.Is_On() && oRes.oldVal != oRes.newVal) {
+			History.Add(AscCommonExcel.g_oUndoRedoRow, AscCH.historyitem_RowCol_Strikeout, this.ws.getId(),
+				this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, true, oRes.oldVal, oRes.newVal));
+		}
+	};
+	Row.prototype.setFontAlign = function (val) {
+		var oRes = this.ws.workbook.oStyleManager.setFontAlign(this, val);
+		if (History.Is_On() && oRes.oldVal != oRes.newVal) {
+			History.Add(AscCommonExcel.g_oUndoRedoRow, AscCH.historyitem_RowCol_FontAlign, this.ws.getId(),
+				this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, true, oRes.oldVal, oRes.newVal));
+		}
+	};
+	Row.prototype.setAlignVertical = function (val) {
+		var oRes = this.ws.workbook.oStyleManager.setAlignVertical(this, val);
+		if (History.Is_On() && oRes.oldVal != oRes.newVal) {
+			History.Add(AscCommonExcel.g_oUndoRedoRow, AscCH.historyitem_RowCol_AlignVertical, this.ws.getId(),
+				this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, true, oRes.oldVal, oRes.newVal));
+		}
+	};
+	Row.prototype.setAlignHorizontal = function (val) {
+		var oRes = this.ws.workbook.oStyleManager.setAlignHorizontal(this, val);
+		if (History.Is_On() && oRes.oldVal != oRes.newVal) {
+			History.Add(AscCommonExcel.g_oUndoRedoRow, AscCH.historyitem_RowCol_AlignHorizontal, this.ws.getId(),
+				this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, true, oRes.oldVal, oRes.newVal));
+		}
+	};
+	Row.prototype.setFill = function (val) {
+		var oRes = this.ws.workbook.oStyleManager.setFill(this, val);
+		if (History.Is_On() && oRes.oldVal != oRes.newVal) {
+			History.Add(AscCommonExcel.g_oUndoRedoRow, AscCH.historyitem_RowCol_Fill, this.ws.getId(),
+				this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, true, oRes.oldVal, oRes.newVal));
+		}
+	};
+	Row.prototype.setBorder = function (val) {
+		var oRes = this.ws.workbook.oStyleManager.setBorder(this, val);
+		if (History.Is_On() && oRes.oldVal != oRes.newVal) {
+			var oldVal = null;
+			if (null != oRes.oldVal) {
+				oldVal = oRes.oldVal.clone();
+			}
+			var newVal = null;
+			if (null != oRes.newVal) {
+				newVal = oRes.newVal.clone();
+			}
+			History.Add(AscCommonExcel.g_oUndoRedoRow, AscCH.historyitem_RowCol_Border, this.ws.getId(),
+				this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, true, oldVal, newVal));
+		}
+	};
+	Row.prototype.setShrinkToFit = function (val) {
 		var oRes = this.ws.workbook.oStyleManager.setShrinkToFit(this, val);
-        if(History.Is_On() && oRes.oldVal != oRes.newVal)
-            History.Add(AscCommonExcel.g_oUndoRedoRow, AscCH.historyitem_RowCol_ShrinkToFit, this.ws.getId(), this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, true, oRes.oldVal, oRes.newVal));
-	},
-	setWrap : function(val)
-	{
+		if (History.Is_On() && oRes.oldVal != oRes.newVal) {
+			History.Add(AscCommonExcel.g_oUndoRedoRow, AscCH.historyitem_RowCol_ShrinkToFit, this.ws.getId(),
+				this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, true, oRes.oldVal, oRes.newVal));
+		}
+	};
+	Row.prototype.setWrap = function (val) {
 		var oRes = this.ws.workbook.oStyleManager.setWrap(this, val);
-        if(History.Is_On() && oRes.oldVal != oRes.newVal)
-            History.Add(AscCommonExcel.g_oUndoRedoRow, AscCH.historyitem_RowCol_Wrap, this.ws.getId(), this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, true, oRes.oldVal, oRes.newVal));
-	},
-    setAngle: function(val)
-    {
-        var oRes = this.ws.workbook.oStyleManager.setAngle(this, val);
-        if(History.Is_On() && oRes.oldVal != oRes.newVal)
-            History.Add(AscCommonExcel.g_oUndoRedoRow, AscCH.historyitem_RowCol_Angle, this.ws.getId(), this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, true, oRes.oldVal, oRes.newVal));
-    },
-	setVerticalText : function(val)
-	{
-        var oRes = this.ws.workbook.oStyleManager.setVerticalText(this, val);
-        if(History.Is_On() && oRes.oldVal != oRes.newVal)
-            History.Add(AscCommonExcel.g_oUndoRedoRow, AscCH.historyitem_RowCol_Angle, this.ws.getId(), this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, true, oRes.oldVal, oRes.newVal));
+		if (History.Is_On() && oRes.oldVal != oRes.newVal) {
+			History.Add(AscCommonExcel.g_oUndoRedoRow, AscCH.historyitem_RowCol_Wrap, this.ws.getId(),
+				this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, true, oRes.oldVal, oRes.newVal));
+		}
+	};
+	Row.prototype.setAngle = function (val) {
+		var oRes = this.ws.workbook.oStyleManager.setAngle(this, val);
+		if (History.Is_On() && oRes.oldVal != oRes.newVal) {
+			History.Add(AscCommonExcel.g_oUndoRedoRow, AscCH.historyitem_RowCol_Angle, this.ws.getId(),
+				this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, true, oRes.oldVal, oRes.newVal));
+		}
+	};
+	Row.prototype.setVerticalText = function (val) {
+		var oRes = this.ws.workbook.oStyleManager.setVerticalText(this, val);
+		if (History.Is_On() && oRes.oldVal != oRes.newVal) {
+			History.Add(AscCommonExcel.g_oUndoRedoRow, AscCH.historyitem_RowCol_Angle, this.ws.getId(),
+				this._getUpdateRange(), new UndoRedoData_IndexSimpleProp(this.index, true, oRes.oldVal, oRes.newVal));
+		}
+	};
+	Row.prototype.setHidden = function (val) {
+		if (this.index >= 0 && (!this.getHidden() !== !val)) {
+			this.ws.hiddenManager.addHidden(true, this.index);
+		}
+		if (true === val) {
+			this.flags |= g_nRowFlag_hd;
+		} else {
+			this.flags &= ~g_nRowFlag_hd;
+		}
+		this._hasChanged = true;
+	};
+	Row.prototype.getHidden = function () {
+		return 0 !== (g_nRowFlag_hd & this.flags);
+	};
+	Row.prototype.setCustomHeight = function (val) {
+		if (true === val) {
+			this.flags |= g_nRowFlag_CustomHeight;
+		} else {
+			this.flags &= ~g_nRowFlag_CustomHeight;
+		}
+		this._hasChanged = true;
+	};
+	Row.prototype.getCustomHeight = function () {
+		return 0 != (g_nRowFlag_CustomHeight & this.flags);
+	};
+	Row.prototype.setCalcHeight = function (val) {
+		if (true === val) {
+			this.flags |= g_nRowFlag_CalcHeight;
+		} else {
+			this.flags &= ~g_nRowFlag_CalcHeight;
+		}
+		this._hasChanged = true;
+	};
+	Row.prototype.getCalcHeight = function () {
+		return 0 != (g_nRowFlag_CalcHeight & this.flags);
+	};
+	Row.prototype.setIndex = function (val) {
+		this.index = val;
+	};
+	Row.prototype.getIndex = function () {
+		return this.index;
+	};
+	Row.prototype.setHeight = function (val) {
+		if (val < 0) {
+			val = 0;
+		} else if (val > Asc.c_oAscMaxRowHeight) {
+			val = Asc.c_oAscMaxRowHeight;
+		}
+		this.h = val;
+		this._hasChanged = true;
+	};
+	Row.prototype.getHeight = function () {
+		return this.h;
+	};
+
+	function getStringFromMultiText(multiText) {
+		var sRes = "";
+		if (multiText) {
+			for (var i = 0, length = multiText.length; i < length; ++i) {
+				var elem = multiText[i];
+				if (null != elem.text && !(elem.format && elem.format.getSkip())) {
+					sRes += elem.text;
+				}
+			}
+		}
+		return sRes;
 	}
-};
-var g_oCCellValueMultiTextProperties = {
+	function isEqualMultiText(multiText1, multiText2) {
+		var sRes = "";
+		if (multiText1 && multiText2) {
+			if (multiText1.length === multiText2.length) {
+				for (var i = 0, length = multiText1.length; i < length; ++i) {
+					var elem1 = multiText1[i];
+					var elem2 = multiText2[i];
+					if (!elem1.isEqual(elem2)) {
+						return false;
+					}
+				}
+				return true;
+			} else {
+				return false;
+			}
+		} else {
+			return multiText1 === multiText2;
+		}
+	}
+var g_oCMultiTextElemProperties = {
 		text: 0,
 		format: 1
 	};
-function CCellValueMultiText()
-{
-	this.Properties = g_oCCellValueMultiTextProperties;
+function CMultiTextElem() {
 	this.text = null;
 	this.format = null;
 }
-CCellValueMultiText.prototype = 
+CMultiTextElem.prototype =
 {
+	Properties : g_oCMultiTextElemProperties,
 	isEqual : function(val)
 	{
 		if(null == val)
@@ -2999,7 +3906,7 @@ CCellValueMultiText.prototype =
 	},
 	clone : function()
 	{
-		var oRes = new CCellValueMultiText();
+		var oRes = new CMultiTextElem();
 		if(null != this.text)
 			oRes.text = this.text;
 		if(null != this.format)
@@ -3031,36 +3938,31 @@ CCellValueMultiText.prototype =
 		}
 	}
 };
+
 var g_oCCellValueProperties = {
 		text: 0,
 		multiText: 1,
 		number: 2,
 		type: 3
 	};
-function CCellValue()
+
+function CCellValue(opt_cell)
 {
-	this.Properties = g_oCCellValueProperties;
-	
-	this.text = null;
-	this.multiText = null;
-	this.number = null;
-	this.type = CellValueType.Number;
-	//cache
-	this.textValue = null;
-	this.aTextValue2 = [];
-	this.textValueForEdit = null;
-	this.textValueForEdit2 = null;
+	if (opt_cell) {
+		this.text = opt_cell.text;
+		this.multiText = opt_cell.multiText;
+		this.number = opt_cell.number;
+		this.type = opt_cell.type;
+	} else {
+		this.text = null;
+		this.multiText = null;
+		this.number = null;
+		this.type = CellValueType.Number;
+	}
 }
 CCellValue.prototype = 
 {
-	isEmpty : function()
-	{
-		if(null != this.number || (null != this.text && "" != this.text))
-			return false;
-		if(null != this.multiText && "" != this.getStringFromMultiText())
-			return false;
-		return true;
-	},
+	Properties: g_oCCellValueProperties,
 	isEqual : function(val)
 	{
 		if(null == val)
@@ -3086,730 +3988,8 @@ CCellValue.prototype =
 		}
 		else if(null == this.multiText && null == val.multiText)
 			return true;
-		
+
 		return false;
-	},
-	clean : function()
-	{
-		this.text = null;
-		this.multiText = null;
-		this.number = null;
-		this.type = CellValueType.Number;
-		this.cleanCache();
-	},
-	clone : function()
-	{
-		var oRes = new CCellValue();
-		if(null != this.text)
-			oRes.text = this.text;
-		if(null != this.multiText)
-			oRes.multiText = this._cloneMultiText();
-		if(null != this.number)
-			oRes.number = this.number;
-		if(null != this.type)
-			oRes.type = this.type;
-		return oRes;
-	},
-	cleanCache : function()
-	{
-		this.textValue = null;
-		this.aTextValue2 = [];
-		this.textValueForEdit = null;
-		this.textValueForEdit2 = null;
-	},
-	getStringFromMultiText: function () {
-	    var sRes = "";
-	    if (null != this.multiText) {
-	        for (var i = 0, length = this.multiText.length; i < length; ++i) {
-	            var elem = this.multiText[i];
-	            if (null != elem.text)
-	                sRes += elem.text;
-	        }
-	    }
-	    return sRes;
-	},
-	makeSimpleText : function()
-	{
-		var bRes = false;
-		if(null != this.multiText)
-		{
-		    this.text = this.getStringFromMultiText();
-		    this.multiText = null;
-			bRes = true;
-		}
-		return bRes;
-	},
-	getValueWithoutFormat : function()
-	{
-		//применяем форматирование
-		var sResult = "";
-		if(null != this.number)
-		{
-			if(CellValueType.Bool == this.type)
-				sResult = this.number == 1 ? cBoolLocal["t"].toUpperCase() : cBoolLocal["f"].toUpperCase();
-			else
-				sResult = this.number.toString();
-		}
-		else if(null != this.text)
-			sResult = this.text;
-		else if(null != this.multiText)
-		    sResult = this.getStringFromMultiText();
-		return sResult;
-	},
-	getValue : function(cell)
-	{
-		if(null == this.textValue)
-		{
-			this.getValue2(cell, gc_nMaxDigCountView, function(){return true;});
-			this.textValue = this._textArrayToString(this.aTextValue2[gc_nMaxDigCountView]);
-		}
-		return this.textValue;
-	},
-	_textArrayToString: function(aText) {
-		var res = '';
-		for (var i = 0, length = aText.length; i < length; ++i) {
-			var elem = aText[i];
-			if (elem.format && elem.format.getSkip() == false) {
-				res += elem.text;
-			}
-		}
-		return res;
-	},
-	getValueForEdit : function(cell)
-	{
-		if(null == this.textValueForEdit)
-		{
-			this.getValueForEdit2(cell);
-			this.textValueForEdit = "";
-			for(var i = 0, length = this.textValueForEdit2.length; i < length; ++i)
-				this.textValueForEdit += this.textValueForEdit2[i].text;
-		}
-//		if( CellValueType.Error == this.type ){
-//			return this._getValueTypeError(this.textValueForEdit);
-//		}
-		return this.textValueForEdit;
-	},
-	getValue2 : function(cell, dDigitsCount, fIsFitMeasurer)
-	{
-		var aRes = null;
-		if(null != this.aTextValue2[dDigitsCount])
-			aRes = this.aTextValue2[dDigitsCount];
-		if(null == aRes)
-		{
-			aRes = this._getValue2(cell, dDigitsCount, fIsFitMeasurer);
-			var formula = cell.getFormula();
-			if( formula ){
-				aRes[0].sFormula = formula;
-				aRes[0].sId = cell.getName();
-			}
-			
-			this.aTextValue2[dDigitsCount] = aRes;
-		}
-		return aRes;
-	},
-	getValueForExample : function(cell, dDigitsCount, fIsFitMeasurer, numFormat, cultureInfo)
-	{
-		var aText = this._getValue2(cell, dDigitsCount, fIsFitMeasurer, numFormat, cultureInfo);
-		return this._textArrayToString(aText);
-	},
-	_getValue2: function(cell, dDigitsCount, fIsFitMeasurer, opt_numFormat, opt_cultureInfo) {
-		var aRes = null;
-		var bNeedMeasure = true;
-		var sText = null;
-		var aText = null;
-		var isMultyText = false;
-		if (CellValueType.Number == this.type || CellValueType.String == this.type) {
-			if (null != this.text) {
-				sText = this.text;
-			} else if (null != this.multiText) {
-				aText = this.multiText;
-				isMultyText = true;
-			}
-
-			if (CellValueType.String == this.type) {
-				bNeedMeasure = false;
-			}
-			var oNumFormat;
-			if (opt_numFormat) {
-				oNumFormat = opt_numFormat;
-			} else {
-				var xfs = cell.getCompiledStyle();
-				if (null != xfs && null != xfs.num) {
-					oNumFormat = oNumFormatCache.get(xfs.num.getFormat());
-				} else {
-					oNumFormat = oNumFormatCache.get(g_oDefaultFormat.Num.getFormat());
-				}
-			}
-
-			if (false == oNumFormat.isGeneralFormat()) {
-				if (null != this.number) {
-					aText = oNumFormat.format(this.number, this.type, dDigitsCount, false, opt_cultureInfo);
-					isMultyText = false;
-					sText = null;
-				} else if (CellValueType.String == this.type) {
-					var oTextFormat = oNumFormat.getTextFormat();
-					if (null != oTextFormat && "@" != oTextFormat.formatString) {
-						if (null != this.text) {
-							aText = oNumFormat.format(this.text, this.type, dDigitsCount, false, opt_cultureInfo);
-							isMultyText = false;
-							sText = null;
-						} else if (null != this.multiText) {
-							var sSimpleString = this.getStringFromMultiText();
-							aText = oNumFormat.format(sSimpleString, this.type, dDigitsCount, false, opt_cultureInfo);
-							isMultyText = false;
-							sText = null;
-						}
-					}
-				}
-			} else if (CellValueType.Number == this.type && null != this.number) {
-				bNeedMeasure = false;
-				var bFindResult = false;
-				//варируем dDigitsCount чтобы результат влез в ячейку
-				var nTempDigCount = Math.ceil(dDigitsCount);
-				var sOriginText = this.number;
-				while (nTempDigCount >= 1) {
-					//Строим подходящий general format
-					var sGeneral = AscCommon.DecodeGeneralFormat(sOriginText, this.type, nTempDigCount);
-					if (null != sGeneral) {
-						oNumFormat = oNumFormatCache.get(sGeneral);
-					}
-
-					if (null != oNumFormat) {
-						sText = null;
-						isMultyText = false;
-						aText = oNumFormat.format(sOriginText, this.type, dDigitsCount, false, opt_cultureInfo);
-						if (true == oNumFormat.isTextFormat()) {
-							break;
-						} else {
-							aRes = this._getValue2Result(cell, sText, aText, isMultyText);
-							//Проверяем влезает ли текст
-							if (true == fIsFitMeasurer(aRes)) {
-								bFindResult = true;
-								break;
-							}
-							aRes = null;
-						}
-					}
-					nTempDigCount--;
-				}
-				if (false == bFindResult) {
-					aRes = null;
-					sText = null;
-					isMultyText = false;
-					var font = new AscCommonExcel.Font();
-					if (dDigitsCount > 1) {
-						font.setRepeat(true);
-						aText = [{text: "#", format: font}];
-					} else {
-						aText = [{text: "", format: font}];
-					}
-				}
-			}
-		} else if (CellValueType.Bool == this.type) {
-			if (null != this.number) {
-				sText = (0 != this.number) ? cBoolLocal["t"].toUpperCase() : cBoolLocal["f"].toUpperCase();
-			}
-		} else if (CellValueType.Error == this.type) {
-			if (null != this.text) {
-				sText = this._getValueTypeError(this.text);
-			}
-		}
-		if (bNeedMeasure) {
-			aRes = this._getValue2Result(cell, sText, aText, isMultyText);
-			//Проверяем влезает ли текст
-			if (false == fIsFitMeasurer(aRes)) {
-				aRes = null;
-				sText = null;
-				isMultyText = false;
-				var font = new AscCommonExcel.Font();
-				font.setRepeat(true);
-				aText = [{text: "#", format: font}];
-			}
-		}
-		if (null == aRes) {
-			aRes = this._getValue2Result(cell, sText, aText, isMultyText);
-		}
-		return aRes;
-	},
-	getValueForEdit2: function (cell, cultureInfo)
-	{
-	    if (null == cultureInfo)
-	        cultureInfo = AscCommon.g_oDefaultCultureInfo;
-		if(null == this.textValueForEdit2)
-		{
-			//todo проблема точности. в excel у чисел только 15 значащих цифр у нас больше.
-			//применяем форматирование
-			var oValueText = null;
-			var oValueArray = null;
-			var xfs = cell.getCompiledStyle();
-			if(cell.formulaParsed)
-				oValueText = "="+cell.formulaParsed.assembleLocale(AscCommonExcel.cFormulaFunctionToLocale,true);	// ToDo если будет притормаживать, то завести переменную и не рассчитывать каждый раз!
-			else
-			{
-				if(null != this.text || null != this.number)
-				{
-					if (CellValueType.Bool == this.type && null != this.number)
-						oValueText = (this.number == 1) ? cBoolLocal["t"].toUpperCase() : cBoolLocal["f"].toUpperCase();
-					else
-					{
-						if(null != this.text)
-							oValueText = this.text;
-						if(CellValueType.Number == this.type || CellValueType.String == this.type)
-						{
-							var oNumFormat;
-							if(null != xfs && null != xfs.num)
-								oNumFormat = oNumFormatCache.get(xfs.num.getFormat());
-							else
-								oNumFormat = oNumFormatCache.get(g_oDefaultFormat.Num.getFormat());
-							if(CellValueType.String != this.type && null != oNumFormat && null != this.number)
-							{
-								var nValue = this.number;
-								var oTargetFormat = oNumFormat.getFormatByValue(nValue);
-								if(oTargetFormat)
-								{
-									if(1 == oTargetFormat.nPercent)
-									{
-										//prercent
-										oValueText = AscCommon.oGeneralEditFormatCache.format(nValue * 100) + "%";
-									}
-									else if(oTargetFormat.bDateTime)
-									{
-										//Если число не подходит под формат даты возвращаем само число
-										if(false == oTargetFormat.isInvalidDateValue(nValue))
-										{
-											var bDate = oTargetFormat.bDate;
-											var bTime = oTargetFormat.bTime;
-											if(false == bDate && nValue >= 1)
-												bDate = true;
-											if(false == bTime && Math.floor(nValue) != nValue)
-											    bTime = true;
-											var sDateFormat = "";
-											if (bDate) {
-												sDateFormat = AscCommon.getShortDateFormat(cultureInfo);
-											}
-                                            var sTimeFormat = 'h:mm:ss';
-                                            if (cultureInfo.AMDesignator.length > 0 && cultureInfo.PMDesignator.length > 0){
-                                                sTimeFormat += ' AM/PM';
-                                            }
-											if(bDate && bTime)
-											    oNumFormat = oNumFormatCache.get(sDateFormat + ' ' + sTimeFormat);
-											else if(bTime)
-												oNumFormat = oNumFormatCache.get(sTimeFormat);
-											else
-											    oNumFormat = oNumFormatCache.get(sDateFormat);
-											
-											var aFormatedValue = oNumFormat.format(nValue, CellValueType.Number, AscCommon.gc_nMaxDigCount);
-											oValueText = "";
-											for(var i = 0, length = aFormatedValue.length; i < length; ++i)
-												oValueText += aFormatedValue[i].text;
-										}
-										else
-											oValueText = AscCommon.oGeneralEditFormatCache.format(nValue);
-									}
-									else
-										oValueText = AscCommon.oGeneralEditFormatCache.format(nValue);
-								}
-							}
-						}
-					}
-				}
-				else if(this.multiText)
-					oValueArray = this.multiText;
-			}
-			if(null != xfs && true == xfs.QuotePrefix && CellValueType.String == this.type && false == cell.isFormula())
-			{
-				if(null != oValueText)
-					oValueText = "'" + oValueText;
-				else if(null != oValueArray)
-					oValueArray = [{text:"'"}].concat(oValueArray);
-			}
-			this.textValueForEdit2 = this._getValue2Result(cell, oValueText, oValueArray, true);
-		}
-		return this.textValueForEdit2;
-	},
-	_getValue2Result : function(cell, sText, aText, isMultyText)
-	{
-		var aResult = [];
-		if(null == sText && null == aText)
-			sText = "";
-		var color;
-		var cellfont;
-		var xfs = cell.getCompiledStyle();
-		if(null != xfs && null != xfs.font)
-			cellfont = xfs.font;
-		else
-			cellfont = g_oDefaultFormat.Font;
-		if(null != sText){
-			var oNewItem = new Fragment();
-			oNewItem.text = sText;
-			oNewItem.format = cellfont.clone();
-			color = oNewItem.format.getColor();
-			if(color instanceof ThemeColor)
-			{
-				//для посещенных гиперссылок
-				if(g_nColorHyperlink == color.theme && null == color.tint)
-				{
-					var hyperlink = cell.ws.hyperlinkManager.getByCell(cell.nRow, cell.nCol);
-					if(null != hyperlink && hyperlink.data.getVisited())
-					{
-						oNewItem.format.setColor(g_oColorManager.getThemeColor(g_nColorHyperlinkVisited, null));
-					}
-				}
-			}
-			oNewItem.format.setSkip(false);
-			oNewItem.format.setRepeat(false);
-			aResult.push(oNewItem);
-		} else if(null != aText){
-			for(var i = 0; i < aText.length; i++){
-				var oNewItem = new Fragment();
-				var oCurtext = aText[i];
-				if(null != oCurtext.text)
-				{
-					oNewItem.text = oCurtext.text;
-					var oCurFormat = new Font();
-					if (isMultyText) {
-						if (null != oCurtext.format) {
-							oCurFormat.assign(oCurtext.format);
-						} else {
-							oCurFormat.assign(cellfont);
-						}
-					} else {
-						oCurFormat.assign(cellfont);
-						if (null != oCurtext.format) {
-							oCurFormat.assignFromObject(oCurtext.format);
-						}
-					}
-					oNewItem.format = oCurFormat;
-					color = oNewItem.format.getColor();
-					if(color instanceof ThemeColor)
-					{
-						//для посещенных гиперссылок
-						if(g_nColorHyperlink == color.theme && null == color.tint)
-						{
-							var hyperlink = cell.ws.hyperlinkManager.getByCell(cell.nRow, cell.nCol);
-							if(null != hyperlink && hyperlink.data.getVisited())
-							{
-								oNewItem.format.setColor(g_oColorManager.getThemeColor(g_nColorHyperlinkVisited, null));
-							}
-						}
-					}
-					aResult.push(oNewItem);
-				}
-			}
-		}
-		return aResult;
-	},
-	setValue : function(cell, val)
-	{
-		this.clean();
-
-		function checkCellValueTypeError(sUpText){
-			switch (sUpText){
-				case cErrorLocal["nil"]:
-					return cErrorOrigin["nil"];
-					break;
-				case cErrorLocal["div"]:
-					return cErrorOrigin["div"];
-					break;
-				case cErrorLocal["value"]:
-					return cErrorOrigin["value"];
-					break;
-				case cErrorLocal["ref"]:
-					return cErrorOrigin["ref"];
-					break;
-				case cErrorLocal["name"]:
-				case cErrorLocal["name"].replace('\\', ''): // ToDo это неправильная правка для бага 32463 (нужно переделать parse формул)
-					return cErrorOrigin["name"];
-					break;
-				case cErrorLocal["num"]:
-					return cErrorOrigin["num"];
-					break;
-				case cErrorLocal["na"]:
-					return cErrorOrigin["na"];
-					break;
-				case cErrorLocal["getdata"]:
-					return cErrorOrigin["getdata"];
-					break;
-				case cErrorLocal["uf"]:
-					return cErrorOrigin["uf"];
-					break;
-			}
-			return false;
-		}
-
-		if("" == val)
-			return;
-		var oNumFormat;
-		var xfs = cell.getCompiledStyle();
-		if(null != xfs && null != xfs.num)
-			oNumFormat = oNumFormatCache.get(xfs.num.getFormat());
-		else
-			oNumFormat = oNumFormatCache.get(g_oDefaultFormat.Num.getFormat());
-		if(oNumFormat.isTextFormat())
-		{
-			this.type = CellValueType.String;
-			this.text = val;
-		}
-		else
-		{
-		    if (AscCommon.g_oFormatParser.isLocaleNumber(val))
-			{
-				this.type = CellValueType.Number;
-				this.number = AscCommon.g_oFormatParser.parseLocaleNumber(val);
-			}
-			else
-			{
-				var sUpText = val.toUpperCase();
-				if(cBoolLocal["t"].toUpperCase() == sUpText || cBoolLocal["f"].toUpperCase() == sUpText)
-				{
-					this.type = CellValueType.Bool;
-					this.number = (cBoolLocal["t"].toUpperCase() == sUpText) ? 1 : 0;
-				}
-//				else if( "#NULL!" == sUpText || "#DIV/0!" == sUpText || "#NAME?" == sUpText || "#NUM!" == sUpText ||
-//					"#N/A" == sUpText || "#REF!" == sUpText || "#VALUE!" == sUpText )
-				else if(checkCellValueTypeError(sUpText))
-				{
-					this.type = CellValueType.Error;
-					this.text = checkCellValueTypeError(sUpText);
-				}
-				else
-				{
-					//распознаем формат
-					var res = AscCommon.g_oFormatParser.parse(val);
-					if(null != res)
-					{
-						//Сравниваем с текущим форматом, если типы совпадают - меняем только значение ячейки
-						var nFormatType = oNumFormat.getType();
-						if(!((c_oAscNumFormatType.Percent == nFormatType && res.bPercent) ||
-							(c_oAscNumFormatType.Currency == nFormatType && res.bCurrency) ||
-							(c_oAscNumFormatType.Date == nFormatType && res.bDate) ||
-							(c_oAscNumFormatType.Time == nFormatType && res.bTime)) && res.format != oNumFormat.sFormat)
-							cell.setNumFormat(res.format);
-						this.number = res.value;
-						this.type = CellValueType.Number;
-					}
-					else
-					{
-						this.type = CellValueType.String;
-						//проверяем QuotePrefix
-						if(val.length > 0 && "'" == val[0])
-						{
-							cell.setQuotePrefix(true);
-							val = val.substring(1);
-						}
-						this.text = val;
-					}
-				}
-			}
-		}
-    if (/(^(((http|https|ftp):\/\/)|(mailto:)|(www.)))|@/i.test(val)) {
-      // Удаляем концевые пробелы и переводы строки перед проверкой гиперссылок
-      val = val.replace(/\s+$/, '');
-      var typeHyp = AscCommon.getUrlType(val);
-      if (AscCommon.c_oAscUrlType.Invalid != typeHyp) {
-        val = AscCommon.prepareUrl(val, typeHyp);
-
-        var oNewHyperlink = new Hyperlink();
-        oNewHyperlink.Ref = cell.ws.getCell3(cell.nRow, cell.nCol);
-        oNewHyperlink.Hyperlink = val;
-        oNewHyperlink.Ref.setHyperlink(oNewHyperlink);
-      }
-    }
-	},
-	setValue2 : function(cell, aVal)
-	{
-		var sSimpleText = "";
-		for(var i = 0, length = aVal.length; i < length; ++i)
-			sSimpleText += aVal[i].text;
-		this.setValue(cell, sSimpleText);
-		var nRow = cell.nRow;
-		var nCol = cell.nCol;
-		if(CellValueType.String == this.type && null == cell.ws.hyperlinkManager.getByCell(nRow, nCol))
-		{
-			this.clean();
-			this.type = CellValueType.String;
-			//проверяем можно ли перевести массив в простую строку.
-			if(aVal.length > 0)
-			{
-				this.multiText = [];
-				for(var i = 0, length = aVal.length; i < length; i++){
-					var item = aVal[i];
-					var oNewElem = new CCellValueMultiText();
-					oNewElem.text = item.text;
-					if (null != item.format) {
-						oNewElem.format = new Font();
-						oNewElem.format.assign(item.format);
-					}
-					this.multiText.push(oNewElem);
-				}
-				this.minimizeMultiText(cell, true);
-			}
-			//обрабатываем QuotePrefix
-			if(null != this.text)
-			{
-				if(this.text.length > 0 && "'" == this.text[0])
-				{
-					cell.setQuotePrefix(true);
-					this.text = this.text.substring(1);
-				}
-			}
-			else if(null != this.multiText)
-			{
-				if(this.multiText.length > 0)
-				{
-					var oFirstItem = this.multiText[0];
-					if(null != oFirstItem.text && oFirstItem.text.length > 0 && "'" == oFirstItem.text[0])
-					{
-						cell.setQuotePrefix(true);
-						if(1 != oFirstItem.text.length)
-							oFirstItem.text = oFirstItem.text.substring(1);
-						else
-						{
-							this.multiText.shift();
-							if(0 == this.multiText.length)
-							{
-								this.multiText = null;
-								this.text = "";
-							}
-						}
-					}
-				}
-			}
-		}
-	},
-	_cloneMultiText : function()
-	{
-		var oRes = [];
-		for(var i = 0, length = this.multiText.length; i < length; ++i)
-			oRes.push(this.multiText[i].clone());
-		return oRes;
-	},
-	minimizeMultiText : function(cell, bSetCellFont)
-	{
-		var bRes = false;
-		if(null != this.multiText && this.multiText.length > 0)
-		{
-		    var cellFont = cell.getFont();
-		    var oIntersectFont = null;
-		    for (var i = 0, length = this.multiText.length; i < length; i++) {
-		        var elem = this.multiText[i];
-			    if (null != elem.format) {
-			        if (null == oIntersectFont)
-			            oIntersectFont = elem.format.clone();
-			        oIntersectFont.intersect(elem.format, cellFont);
-			    }
-			    else {
-			        oIntersectFont = cellFont;
-			        break;
-			    }
-			}
-
-			if(bSetCellFont)
-			{
-			    if (oIntersectFont.isEqual(g_oDefaultFormat.Font))
-					cell.setFont(null, false);
-				else
-					cell.setFont(oIntersectFont, false);
-			}
-			//если у всех элементов один формат, то сохраняем только текст
-			var bIsEqual = true;
-			for (var i = 0, length = this.multiText.length; i < length; i++)
-			{
-			    var elem = this.multiText[i];
-			    if (null != elem.format && false == oIntersectFont.isEqual(elem.format))
-				{
-					bIsEqual = false;
-					break;
-				}
-			}
-			if(bIsEqual)
-			{
-				this.makeSimpleText();
-				bRes = true;
-			}
-		}
-		return bRes;
-	},
-	_setFontProp : function(cell, fCheck, fAction)
-	{
-		var bRes = false;
-		if(null != this.multiText)
-		{
-			//проверяем поменяются ли свойства
-			var bChange = false;
-			for(var i = 0, length = this.multiText.length; i < length; ++i)
-			{
-			    var elem = this.multiText[i];
-			    if (null != elem.format && true == fCheck(elem.format))
-				{
-					bChange = true;
-					break;
-				}
-			}
-			if(bChange)
-			{
-				var backupObj = cell.getValueData();
-				for (var i = 0, length = this.multiText.length; i < length; ++i) {
-				    var elem = this.multiText[i];
-				    if (null != elem.format)
-				        fAction(elem.format)
-				}
-				//пробуем преобразовать в простую строку
-				if(this.minimizeMultiText(cell, false))
-				{
-					var DataNew = cell.getValueData();
-					History.Add(AscCommonExcel.g_oUndoRedoCell, AscCH.historyitem_Cell_ChangeValue, cell.ws.getId(), new Asc.Range(cell.nCol, cell.nRow, cell.nCol, cell.nRow), new UndoRedoData_CellSimpleData(cell.nRow,cell.nCol, backupObj, DataNew));
-				}
-				else
-				{
-					var DataNew = this._cloneMultiText();
-					History.Add(AscCommonExcel.g_oUndoRedoCell, AscCH.historyitem_Cell_ChangeArrayValueFormat, cell.ws.getId(), new Asc.Range(cell.nCol, cell.nRow, cell.nCol, cell.nRow), new UndoRedoData_CellSimpleData(cell.nRow, cell.nCol, backupObj.value.multiText, DataNew));
-				}
-			}
-			bRes = true;
-		}
-		return bRes;
-	},
-	setFontname : function(cell, val)
-	{
-		return this._setFontProp(cell, function(format){return val != format.getName();}, function(format){format.setName(val);});
-	},
-	setFontsize : function(cell, val)
-	{
-		return this._setFontProp(cell, function(format){return val != format.getSize();}, function(format){format.setSize(val);});
-	},
-	setFontcolor : function(cell, val)
-	{
-		return this._setFontProp(cell, function(format){return val != format.getColor();}, function(format){format.setColor(val);});
-	},
-	setBold : function(cell, val)
-	{
-		return this._setFontProp(cell, function(format){return val != format.getBold();}, function(format){format.setBold(val);});
-	},
-	setItalic : function(cell, val)
-	{
-		return this._setFontProp(cell, function(format){return val != format.getItalic();}, function(format){format.setItalic(val);});
-	},
-	setUnderline : function(cell, val)
-	{
-		return this._setFontProp(cell, function(format){return val != format.getUnderline();}, function(format){format.setUnderline(val);});
-	},
-	setStrikeout : function(cell, val)
-	{
-		return this._setFontProp(cell, function(format){return val != format.getStrikeout();}, function(format){format.setStrikeout(val);});
-	},
-	setFontAlign : function(cell, val)
-	{
-		return this._setFontProp(cell, function(format){return val != format.getVerticalAlign();}, function(format){format.setVerticalAlign(val);});
-	},
-	setValueType : function(type)
-	{
-		if(CellValueType.String == type && null != this.number)
-		{
-			this.text = this.number.toString();
-			this.number = null;
-		}
-		this.type = type;
 	},
 	getType : function()
 	{
@@ -3838,38 +4018,6 @@ CCellValue.prototype =
 			case this.Properties.number: this.number = value;break;
 			case this.Properties.type: this.type = value;break;
 		}
-	},
-	_getValueTypeError : function (text){
-		switch (text){
-			case cErrorOrigin["nil"]:
-				return cErrorLocal["nil"];
-				break;
-			case cErrorOrigin["div"]:
-				return cErrorLocal["div"];
-				break;
-			case cErrorOrigin["value"]:
-				return cErrorLocal["value"];
-				break;
-			case cErrorOrigin["ref"]:
-				return cErrorLocal["ref"];
-				break;
-			case cErrorOrigin["name"]:
-				return cErrorLocal["name"].replace('\\', ''); // ToDo это неправильная правка для бага 32463 (нужно переделать parse формул)
-				break;
-			case cErrorOrigin["num"]:
-				return cErrorLocal["num"];
-				break;
-			case cErrorOrigin["na"]:
-				return cErrorLocal["na"];
-				break;
-			case cErrorOrigin["getdata"]:
-				return cErrorLocal["getdata"];
-				break;
-			case cErrorOrigin["uf"]:
-				return cErrorLocal["uf"];
-				break;
-	}
-		return cErrorLocal["nil"];
 	}
 };
 
@@ -4291,7 +4439,6 @@ RangeDataManager.prototype = {
 	},
 	get : function(bbox)
 	{
-		var bboxRange = new Asc.Range(bbox.c1, bbox.r1, bbox.c2, bbox.r2);
 		var oRes = {all: [], inner: [], outer: []};
 		var oNodes = this.oIntervalTreeRB.enumerate(bbox.r1, bbox.r2);
 		for(var i = 0, length = oNodes.length; i < length; i++)
@@ -4305,7 +4452,7 @@ RangeDataManager.prototype = {
 					if(elem.bbox.isIntersect(bbox))
 					{
 						oRes.all.push(elem);
-						if(bboxRange.containsRange(elem.bbox))
+						if(bbox.containsRange(elem.bbox))
 							oRes.inner.push(elem);
 						else
 							oRes.outer.push(elem);
@@ -4413,25 +4560,25 @@ RangeDataManager.prototype = {
 	        oGetRes = this.shiftGet(bbox, bHor);
 	    var offset;
 	    if (bHor)
-	        offset = { offsetRow: 0, offsetCol: bbox.c2 - bbox.c1 + 1 };
+	        offset = new AscCommon.CellBase(0, bbox.c2 - bbox.c1 + 1);
 	    else
-	        offset = { offsetRow: bbox.r2 - bbox.r1 + 1, offsetCol: 0 };
+	        offset = new AscCommon.CellBase(bbox.r2 - bbox.r1 + 1, 0);
 	    if (!bAdd) {
-	        offset.offsetRow = -offset.offsetRow;
-	        offset.offsetCol = -offset.offsetCol;
+	        offset.row *= -1;
+	        offset.col *= -1;
 	    }
 	    this._shiftmove(true, bbox, offset, oGetRes.elems, oChangeParam);
 	},
 	move: function (from, to, oChangeParam)
 	{
-	    var offset = { offsetRow: to.r1 - from.r1, offsetCol: to.c1 - from.c1 };
+	    var offset = new AscCommon.CellBase(to.r1 - from.r1, to.c1 - from.c1);
 	    var oGetRes = this.get(from);
 	    this._shiftmove(false, from, offset, oGetRes, oChangeParam);
 	},
 	_shiftmove: function (bShift, bbox, offset, elems, oChangeParam) {
 	    var aToChange = [];
-	    var bAdd = offset.offsetRow > 0 || offset.offsetCol > 0;
-	    var bHor = 0 != offset.offsetCol ? true : false;
+	    var bAdd = offset.row > 0 || offset.col > 0;
+	    var bHor = 0 != offset.col ? true : false;
 	    //сдвигаем inner
 	    if (elems.inner.length > 0) {
 	        var bboxAsc = Asc.Range(bbox.c1, bbox.r1, bbox.c2, bbox.r2);
@@ -4448,11 +4595,11 @@ RangeDataManager.prototype = {
 	                    to = from.clone();
 	                    if (bHor) {
 	                        if (to.c1 <= bbox.c2)
-	                            to.setOffsetFirst({ offsetRow: 0, offsetCol: bbox.c2 - to.c1 + 1 });
+	                            to.setOffsetFirst(new AscCommon.CellBase(0,  bbox.c2 - to.c1 + 1));
 	                    }
 	                    else {
 	                        if (to.r1 <= bbox.r2)
-	                            to.setOffsetFirst({ offsetRow: bbox.r2 - to.r1 + 1, offsetCol: 0 });
+	                            to.setOffsetFirst(new AscCommon.CellBase(bbox.r2 - to.r1 + 1, 0));
 	                    }
 	                    to.setOffset(offset);
 	                }
@@ -4475,13 +4622,13 @@ RangeDataManager.prototype = {
 	                    if (from.c1 < bbox.c1 && bbox.r1 <= from.r1 && from.r2 <= bbox.r2) {
 	                        if (bAdd) {
 	                            to = from.clone();
-	                            to.setOffsetLast({ offsetRow: 0, offsetCol: bbox.c2 - bbox.c1 + 1 });
+	                            to.setOffsetLast(new AscCommon.CellBase(0, bbox.c2 - bbox.c1 + 1));
 	                        }
 	                        else {
 	                            to = from.clone();
 	                            var nTemp1 = from.c2 - bbox.c1 + 1;
 	                            var nTemp2 = bbox.c2 - bbox.c1 + 1;
-	                            to.setOffsetLast({ offsetRow: 0, offsetCol: -Math.min(nTemp1, nTemp2) });
+	                            to.setOffsetLast(new AscCommon.CellBase(0, -Math.min(nTemp1, nTemp2)));
 	                        }
 	                    }
 	                }
@@ -4489,13 +4636,13 @@ RangeDataManager.prototype = {
 	                    if (from.r1 < bbox.r1 && bbox.c1 <= from.c1 && from.c2 <= bbox.c2) {
 	                        if (bAdd) {
 	                            to = from.clone();
-	                            to.setOffsetLast({ offsetRow: bbox.r2 - bbox.r1 + 1, offsetCol: 0 });
+	                            to.setOffsetLast(new AscCommon.CellBase(bbox.r2 - bbox.r1 + 1, 0));
 	                        }
 	                        else {
 	                            to = from.clone();
 	                            var nTemp1 = from.r2 - bbox.r1 + 1;
 	                            var nTemp2 = bbox.r2 - bbox.r1 + 1;
-	                            to.setOffsetLast({ offsetRow: -Math.min(nTemp1, nTemp2), offsetCol: 0 });
+	                            to.setOffsetLast(new AscCommon.CellBase(-Math.min(nTemp1, nTemp2), 0));
 	                        }
 	                    }
 	                }
@@ -4551,166 +4698,6 @@ RangeDataManager.prototype = {
 	setDependenceManager : function(oDependenceManager)
 	{
 		this.oDependenceManager = oDependenceManager;
-	}
-};
-
-function CellAreaElem(row, col, data)
-{
-	this.row = row;
-	this.col = col;
-	this.data = data;
-}
-function CellArea(fChange)
-{
-	this.rows = new TreeRB();
-	this.fChange = fChange;
-}
-CellArea.prototype = {
-	add : function(row, col, value)
-	{
-		var oNewNode = new TreeRBNode(row, null);
-		var oStoredNode = this.rows.insertOrGet(oNewNode);
-		if(oStoredNode == oNewNode)
-			oStoredNode.storedValue = new TreeRB();
-		var oNewRow = oStoredNode.storedValue;
-		var oNewColNode = new TreeRBNode(col, null);
-		var oStoredColNode = oNewRow.insertOrGet(oNewColNode);
-		var storedValue = new RangeDataManagerElem(new Asc.Range(col, row, col, row), value);
-		oNewColNode.storedValue = storedValue;
-		if(null != this.fChange)
-			this.fChange.call(this, storedValue.data, null, storedValue.bbox);
-	},
-	get : function(bbox)
-	{
-		var aRes = [];
-		var aRows = this.rows.enumerate(bbox.r1, bbox.r2);
-		for(var i = 0, length = aRows.length; i < length; i++)
-		{
-			var row = aRows[i];
-			var aCells = row.storedValue.enumerate(bbox.c1, bbox.c2);
-			for(var j = 0, length2 = aCells.length; j < length2; j++)
-				aRes.push(aCells[j].storedValue);
-		}
-		return aRes;
-	},
-	remove : function(bbox)
-	{
-		var aElems = this.get(bbox);
-		for(var i = 0, length = aElems.length; i < length; ++i)
-		{
-			var elem = aElems[i];
-			this.removeElement(elem);
-		}
-	},
-	removeElement : function(elem)
-	{
-		var rowElem = this.rows.getElem(elem.bbox.r1);
-		if(rowElem)
-		{
-			var row = rowElem.storedValue;
-			var cellElem = row.getElem(elem.bbox.c1);
-			if(cellElem)
-			{
-				row.deleteNode(cellElem);
-				if(row.isEmpty())
-					this.rows.deleteNode(rowElem);
-				if(null != this.fChange)
-					this.fChange.call(this, cellElem.storedValue.data, cellElem.storedValue.bbox, null);
-			}
-		}
-	},
-	removeAll : function()
-	{
-		this.remove(new Asc.Range(0, 0, gc_nMaxCol0, gc_nMaxRow0));
-		//todo
-		this.oIntervalTreeRB = new IntervalTreeRB();
-	},
-	shiftGet : function(bbox, bHor)
-	{
-		var bboxGet = shiftGetBBox(bbox, bHor);
-		return {bbox: bboxGet, elems: this.get(bboxGet)};
-	},
-	shift: function (bbox, bAdd, bHor, oGetRes)
-	{
-	    var _this = this;
-	    if (null == oGetRes)
-	        oGetRes = this.shiftGet(bbox, bHor);
-	    var offset;
-	    if (bHor)
-	        offset = { offsetRow: 0, offsetCol: bbox.c2 - bbox.c1 + 1 };
-	    else
-	        offset = { offsetRow: bbox.r2 - bbox.r1 + 1, offsetCol: 0 };
-	    if (!bAdd) {
-	        offset.offsetRow = -offset.offsetRow;
-	        offset.offsetCol = -offset.offsetCol;
-	    }
-	    this._shiftmove(true, bbox, offset, oGetRes.elems);
-	},
-	move: function (from, to)
-	{
-	    var offset = { offsetRow: to.r1 - from.r1, offsetCol: to.c1 - from.c1 };
-	    var oGetRes = this.get(from);
-	    this._shiftmove(false, from, offset, oGetRes);
-	},
-    _shiftmove: function (bShift, bbox, offset, elems) {
-	    var aToChange = [];
-	    //сдвигаем inner
-	    if (elems.length > 0) {
-	        var bboxAsc = Asc.Range(bbox.c1, bbox.r1, bbox.c2, bbox.r2);
-	        var bAdd = offset.offsetRow > 0 || offset.offsetCol > 0;
-	        for (var i = 0, length = elems.length; i < length; i++) {
-	            var elem = elems[i];
-	            var to = null;
-	            if (!bShift || bAdd || !bboxAsc.containsRange(elem.bbox)) {
-	                to = elem.bbox.clone();
-	                to.setOffset(offset);
-	            }
-	            aToChange.push({ elem: elem, to: to });
-	        }
-	    }
-        //сначала сортируем чтобы не было конфликтов при сдвиге
-	    aToChange.sort(function (a, b) { return shiftSort(a, b, offset); });
-
-	    if (null != this.fChange) {
-	        for (var i = 0, length = aToChange.length; i < length; ++i) {
-	            var item = aToChange[i];
-	            this.fChange.call(this, item.elem.data, item.elem.bbox, item.to);
-	        }
-	    }
-	    //убираем fChange, чтобы потом послать его только на одну операцию, а не 2
-	    var fOldChange = this.fChange;
-	    this.fChange = null;
-	    //сначала удаляем все чтобы не было конфликтов
-	    for (var i = 0, length = aToChange.length; i < length; ++i) {
-	        var item = aToChange[i];
-	        var elem = item.elem;
-	        this.removeElement(elem);
-	    }
-	    //добавляем измененные ячейки
-	    for (var i = 0, length = aToChange.length; i < length; ++i) {
-	        var item = aToChange[i];
-	        if (null != item.to)
-	            this.add(item.to.r1, item.to.c1, item.elem.data);
-	    }
-	    this.fChange = fOldChange;
-	},
-	getAll : function(){
-		var aRes = [];
-		var oRows = this.rows.getNodeAll();
-		for(var i = 0, length = oRows.length; i < length; i++)
-		{
-			var row = oRows[i];
-			if(row.storedValue)
-			{
-				var cells = row.storedValue.getNodeAll();
-				for(var j = 0, length2 = cells.length; j < length2; j++)
-				{
-					var elem = cells[j];
-					aRes.push(elem.storedValue);
-				}
-			}
-		}
-		return aRes;
 	}
 };
 
@@ -4835,8 +4822,6 @@ CellArea.prototype = {
     };
 
 	sparklineGroup.prototype.set = function (val) {
-		var t = this;
-
 		var getColor = function (color) {
 			return color instanceof Asc.asc_CColor ? CorrectAscColor(color) : color ? color.clone(): color;
 		};
@@ -4910,10 +4895,12 @@ CellArea.prototype = {
 		var sparklineRange;
 		for (var i = 0; i < this.arrSparklines.length; ++i) {
 			sparklineRange = this.arrSparklines[i]._f;
-			for (var j = 0; j < ranges.length; ++j) {
-				if (sparklineRange.isIntersect(ranges[j], sheet)) {
-					this.arrSparklines[i].oCacheView = null;
-					break;
+			if (sparklineRange) {
+				for (var j = 0; j < ranges.length; ++j) {
+					if (sparklineRange.isIntersect(ranges[j], sheet)) {
+						this.arrSparklines[i].oCacheView = null;
+						break;
+					}
 				}
 			}
 		}
@@ -4942,11 +4929,7 @@ CellArea.prototype = {
 				--i;
 			}
 		}
-
-		var bRemove = 0 === this.arrSparklines.length;
-		if (bRemove) {
-			History.Add(new AscDFH.CChangesDrawingsSparklinesRemove(this));
-		}
+		var bRemove = (0 === this.arrSparklines.length);
 		return bRemove;
 	};
 	sparklineGroup.prototype.getLocationRanges = function (onlySingle) {
@@ -4967,12 +4950,16 @@ CellArea.prototype = {
 		var sheet = this.worksheet.getName();
 		var result = new AscCommonExcel.SelectionRange();
 		this.arrSparklines.forEach(function (item, i) {
-			isUnion = isUnion && sheet === item._f.sheet;
-			if (0 === i) {
-				result.assign2(item._f);
+			if (item._f) {
+				isUnion = isUnion && sheet === item._f.sheet;
+				if (0 === i) {
+					result.assign2(item._f);
+				} else {
+					result.addRange();
+					result.getLast().assign2(item._f);
+				}
 			} else {
-				result.addRange();
-				result.getLast().assign2(item._f);
+				isUnion = false;
 			}
 		});
 		var unionRange = isUnion ? result.getUnion() : result;
@@ -5018,7 +5005,7 @@ CellArea.prototype = {
 		return null !== this.minAxisType ? this.minAxisType : Asc.c_oAscSparklineAxisMinMax.Individual;
 	};
 	sparklineGroup.prototype.asc_getMaxAxisType = function () {
-		return null !== this.maxAxisType ? this.minAxisType : Asc.c_oAscSparklineAxisMinMax.Individual;
+		return null !== this.maxAxisType ? this.maxAxisType : Asc.c_oAscSparklineAxisMinMax.Individual;
 	};
 	sparklineGroup.prototype.asc_getRightToLeft = function () {
 		return this.rightToLeft;
@@ -5065,7 +5052,7 @@ CellArea.prototype = {
 			}
 		} else {
 			this.arrSparklines.forEach(function (item) {
-				arrResultData.push(item.f);
+				arrResultData.push(item.f || cErrorOrigin['ref']);
 				arrResultLocation.push(item.sqref.getAbsName());
 			});
 		}
@@ -5183,10 +5170,9 @@ CellArea.prototype = {
 
 	sparklineGroup.prototype._drawThumbBySparklineGroup = function (oSparkline, oSparklineGroup, oSparklineView, oGraphics) {
 		oSparklineView.initFromSparkline(oSparkline, oSparklineGroup, null, true);
-		var api_sheet = Asc['editor'];
-
+		var t = this;
 		AscFormat.ExecuteNoHistory(function () {
-			oSparklineView.chartSpace.setWorksheet(api_sheet.wb.getWorksheet().model);
+			oSparklineView.chartSpace.setWorksheet(t.worksheet);
 		}, this, []);
 
 		oSparklineView.chartSpace.extX = 100;
@@ -5243,11 +5229,14 @@ CellArea.prototype = {
 			equalColors(this.colorHigh, oSparklineGroup.colorHigh) && equalColors(this.colorLow, oSparklineGroup.colorLow);
 	};
 
-	sparklineGroup.prototype.asc_getStyles = function () {
+	sparklineGroup.prototype.asc_getStyles = function (type) {
 		History.TurnOff();
 		var aRet = [];
 		var nStyleIndex = -1;
 		var oSparklineGroup = this.clone(true);
+		if ('undefined' !== typeof type) {
+			oSparklineGroup.asc_setType(type);
+		}
 
 		var canvas = document.createElement('canvas');
 		canvas.width = 50;
@@ -5320,9 +5309,12 @@ CellArea.prototype = {
 		this._f = AscCommonExcel.g_oRangeCache.getRange3D(this.f);
 	};
 	sparkline.prototype.updateWorksheet = function (sheet, oldSheet) {
+		var t = this;
 		if (this._f && oldSheet === this._f.sheet && (null === this._f.sheet2 || oldSheet === this._f.sheet2)) {
 			this._f.setSheet(sheet);
-			this.f = this._f.getName();
+			AscCommonExcel.executeInR1C1Mode(false,function (){
+				t.f = t._f.getName();
+			});
 		}
 	};
 	sparkline.prototype.checkInRange = function (range) {
@@ -5335,59 +5327,65 @@ CellArea.prototype = {
 		return this.sqref ? this.sqref.intersectionSimple(range) : false;
 	};
 
-// For Auto Filters
-/** @constructor */
-function TablePart(handlers) {
-	this.Ref = null;
-	this.HeaderRowCount = null;
-	this.TotalsRowCount = null;
-	this.DisplayName = null;
-	this.AutoFilter = null;
-	this.SortState = null;
-	this.TableColumns = null;
-	this.TableStyleInfo = null;
-	
-	this.altText = null;
-	this.altTextSummary = null;
-	
-	this.result = null;
-	this.handlers = handlers;
-}
-TablePart.prototype.clone = function() {
-	var i, res = new TablePart(this.handlers);
-	res.Ref = this.Ref ? this.Ref.clone() : null;
-	res.HeaderRowCount = this.HeaderRowCount;
-	res.TotalsRowCount = this.TotalsRowCount;
-	if (this.AutoFilter)
-		res.AutoFilter = this.AutoFilter.clone();
-	if (this.SortState)
-		res.SortState = this.SortState.clone();
-	if (this.TableColumns) {
-		res.TableColumns = [];
-		for (i = 0; i < this.TableColumns.length; ++i)
-			res.TableColumns.push(this.TableColumns[i].clone());
+	// For Auto Filters
+	/** @constructor */
+	function TablePart(handlers) {
+		this.Ref = null;
+		this.HeaderRowCount = null;
+		this.TotalsRowCount = null;
+		this.DisplayName = null;
+		this.AutoFilter = null;
+		this.SortState = null;
+		this.TableColumns = null;
+		this.TableStyleInfo = null;
+
+		this.altText = null;
+		this.altTextSummary = null;
+
+		this.result = null;
+		this.handlers = handlers;
 	}
-	if (this.TableStyleInfo)
-		res.TableStyleInfo = this.TableStyleInfo.clone();
-	
-	if (this.result) {
-		res.result = [];
-		for (i = 0; i < this.result.length; ++i)
-			res.result.push(this.result[i].clone());
-	}
-	res.DisplayName = this.DisplayName;
-	
-	res.altText = this.altText;
-	res.altTextSummary = this.altTextSummary;
-	
-	return res;
-};
-	TablePart.prototype.renameSheetCopy = function(ws, renameParams) {
+
+	TablePart.prototype.clone = function () {
+		var i, res = new TablePart(this.handlers);
+		res.Ref = this.Ref ? this.Ref.clone() : null;
+		res.HeaderRowCount = this.HeaderRowCount;
+		res.TotalsRowCount = this.TotalsRowCount;
+		if (this.AutoFilter) {
+			res.AutoFilter = this.AutoFilter.clone();
+		}
+		if (this.SortState) {
+			res.SortState = this.SortState.clone();
+		}
+		if (this.TableColumns) {
+			res.TableColumns = [];
+			for (i = 0; i < this.TableColumns.length; ++i) {
+				res.TableColumns.push(this.TableColumns[i].clone());
+			}
+		}
+		if (this.TableStyleInfo) {
+			res.TableStyleInfo = this.TableStyleInfo.clone();
+		}
+
+		if (this.result) {
+			res.result = [];
+			for (i = 0; i < this.result.length; ++i) {
+				res.result.push(this.result[i].clone());
+			}
+		}
+		res.DisplayName = this.DisplayName;
+
+		res.altText = this.altText;
+		res.altTextSummary = this.altTextSummary;
+
+		return res;
+	};
+	TablePart.prototype.renameSheetCopy = function (ws, renameParams) {
 		for (var i = 0; i < this.TableColumns.length; ++i) {
 			this.TableColumns[i].renameSheetCopy(ws, renameParams);
 		}
 	};
-	TablePart.prototype.removeDependencies = function(opt_cols) {
+	TablePart.prototype.removeDependencies = function (opt_cols) {
 		if (!opt_cols) {
 			opt_cols = this.TableColumns;
 		}
@@ -5395,902 +5393,1009 @@ TablePart.prototype.clone = function() {
 			opt_cols[i].removeDependencies();
 		}
 	};
-	TablePart.prototype.buildDependencies = function() {
+	TablePart.prototype.buildDependencies = function () {
 		for (var i = 0; i < this.TableColumns.length; ++i) {
 			this.TableColumns[i].buildDependencies();
 		}
 	};
-	TablePart.prototype.getAllFormulas = function(formulas) {
+	TablePart.prototype.getAllFormulas = function (formulas) {
 		for (var i = 0; i < this.TableColumns.length; ++i) {
 			this.TableColumns[i].getAllFormulas(formulas);
 		}
 	};
-TablePart.prototype.moveRef = function(col, row) {
-	var ref = this.Ref.clone();
-	ref.setOffset({offsetCol: col ? col : 0, offsetRow: row ? row : 0});
+	TablePart.prototype.moveRef = function (col, row) {
+		var ref = this.Ref.clone();
+		ref.setOffset(new AscCommon.CellBase(row || 0, col || 0));
 
-	this.Ref = ref;
-	//event
-	this.handlers.trigger("changeRefTablePart", this);
+		this.Ref = ref;
+		//event
+		this.handlers.trigger("changeRefTablePart", this);
 
-	if(this.AutoFilter)
-	{
-		this.AutoFilter.moveRef(col, row);
-	}	
-	if(this.SortState)
-	{
-		this.SortState.moveRef(col, row);
-	}
-};
-TablePart.prototype.changeRef = function(col, row, bIsFirst, bIsNotChangeAutoFilter) {
-	var ref = this.Ref.clone();
-	if(bIsFirst)
-		ref.setOffsetFirst({offsetCol: col ? col : 0, offsetRow: row ? row : 0});
-	else
-		ref.setOffsetLast({offsetCol: col ? col : 0, offsetRow: row ? row : 0});
-	
-	this.Ref = ref;
-	
-	//event
-	this.handlers.trigger("changeRefTablePart", this);
-	
-	if(this.AutoFilter && !bIsNotChangeAutoFilter)
-	{
-		this.AutoFilter.changeRef(col, row, bIsFirst);
-	}
-	if(this.SortState)
-	{
-		this.SortState.changeRef(col, row, bIsFirst);
-	}
-};
-TablePart.prototype.changeRefOnRange = function(range, autoFilters, generateNewTableColumns) {
-	if(!range)
-		return;
-	
-	//add table columns
-	if(generateNewTableColumns)
-	{
-		var newTableColumns = [];
-		var intersectionRanges = this.Ref.intersection(range);
-		
-		if(null !== intersectionRanges)
-		{
-			this.removeDependencies();
-			var tableColumn;
-			for(var i = range.c1; i <= range.c2; i++)
-			{
-				if(i >= intersectionRanges.c1 && i <= intersectionRanges.c2)
-				{
-					var tableIndex = i - this.Ref.c1;
-					tableColumn = this.TableColumns[tableIndex];
-				}
-				else
-				{
-					tableColumn = new TableColumn();
-				}
-				
-				newTableColumns.push(tableColumn);
-			}
-			
-			for(var j = 0; j < newTableColumns.length; j++)
-			{
-				tableColumn = newTableColumns[j];
-				if(tableColumn.Name === null)
-					tableColumn.Name = autoFilters._generateColumnName2(newTableColumns);
-			}
-			
-			this.TableColumns = newTableColumns;
-			this.buildDependencies();
+		if (this.AutoFilter) {
+			this.AutoFilter.moveRef(col, row);
 		}
-	}
-	this.Ref = Asc.Range(range.c1, range.r1, range.c2, range.r2);
-	//event
-	this.handlers.trigger("changeRefTablePart", this);
-	
-	if(this.AutoFilter)
-		this.AutoFilter.changeRefOnRange(range);
-};
-TablePart.prototype.isApplyAutoFilter = function() {
-	var res = false;
-	
-	if(this.AutoFilter)
-		res = this.AutoFilter.isApplyAutoFilter();
-		
-	return res;
-};
-TablePart.prototype.isApplySortConditions = function() {
-	var res = false;
-	
-	if(this.SortState && this.SortState.SortConditions && this.SortState.SortConditions[0])
-		res = true;
-		
-	return res;
-};
-
-TablePart.prototype.setHandlers = function(handlers) {
-	if(this.handlers === null)
-		this.handlers = handlers;
-};
-
-TablePart.prototype.deleteTableColumns = function(activeRange)
-{
-	if(!activeRange)
-		return;
-	
-	var diff = null, startCol;
-	if(activeRange.c1 < this.Ref.c1 && activeRange.c2 > this.Ref.c1 && activeRange.c2 < this.Ref.c2)//until
-	{
-		diff = activeRange.c2 - this.Ref.c1 + 1;
-		startCol = 0;
-	}
-	else if(activeRange.c1 < this.Ref.c2 && activeRange.c2 > this.Ref.c2 && activeRange.c1 > this.Ref.c1)//after
-	{
-		diff = this.Ref.c2 - activeRange.c1 + 1;
-		startCol = activeRange.c1 - this.Ref.c1;
-	}
-	else if(activeRange.c1 >= this.Ref.c1 && activeRange.c2 <= this.Ref.c2)//inside
-	{
-		diff = activeRange.c2 - activeRange.c1 + 1;
-		startCol = activeRange.c1 - this.Ref.c1;
-	}
-
-	if (diff !== null) {
-		var deleted = this.TableColumns.splice(startCol, diff);
-		this.removeDependencies(deleted);
-
-		//todo undo
-		var deletedMap = {};
-		for (var i = 0; i < deleted.length; ++i) {
-			deletedMap[deleted[i].Name] = 1;
+		if (this.SortState) {
+			this.SortState.moveRef(col, row);
 		}
-		this.handlers.trigger("deleteColumnTablePart", this.DisplayName, deletedMap);
-		
-		if(this.SortState) 
+	};
+	TablePart.prototype.changeRef = function (col, row, bIsFirst, bIsNotChangeAutoFilter) {
+		var ref = this.Ref.clone();
+		var offset = new AscCommon.CellBase(row || 0, col || 0);
+		if (bIsFirst) {
+			ref.setOffsetFirst(offset);
+		} else {
+			ref.setOffsetLast(offset);
+		}
+
+		this.Ref = ref;
+
+		//event
+		this.handlers.trigger("changeRefTablePart", this);
+
+		if (this.AutoFilter && !bIsNotChangeAutoFilter) {
+			this.AutoFilter.changeRef(col, row, bIsFirst);
+		}
+		if (this.SortState) {
+			this.SortState.changeRef(col, row, bIsFirst);
+		}
+	};
+	TablePart.prototype.changeRefOnRange = function (range, autoFilters, generateNewTableColumns) {
+		if (!range) {
+			return;
+		}
+
+		//add table columns
+		if (generateNewTableColumns) {
+			var newTableColumns = [];
+			var intersectionRanges = this.Ref.intersection(range);
+
+			if (null !== intersectionRanges) {
+				this.removeDependencies();
+				var tableColumn;
+				var headerRow = this.isHeaderRow() ? this.Ref.r1 : this.Ref.r1 - 1;
+				for (var i = range.c1; i <= range.c2; i++) {
+					if (i >= intersectionRanges.c1 && i <= intersectionRanges.c2) {
+						var tableIndex = i - this.Ref.c1;
+						tableColumn = this.TableColumns[tableIndex];
+					} else {
+						tableColumn = new TableColumn();
+						var cell = autoFilters.worksheet.getCell3(headerRow, i);
+						if (!cell.isNullText()) {
+							tableColumn.Name =
+								autoFilters.checkTableColumnName(newTableColumns.concat(this.TableColumns),
+									cell.getValueWithoutFormat());
+						}
+					}
+
+					newTableColumns.push(tableColumn);
+				}
+
+				for (var j = 0; j < newTableColumns.length; j++) {
+					tableColumn = newTableColumns[j];
+					if (tableColumn.Name === null) {
+						tableColumn.Name = autoFilters._generateColumnName2(newTableColumns);
+					}
+				}
+
+				this.TableColumns = newTableColumns;
+				this.buildDependencies();
+			}
+		}
+		this.Ref = Asc.Range(range.c1, range.r1, range.c2, range.r2);
+		//event
+		this.handlers.trigger("changeRefTablePart", this);
+
+		if (this.AutoFilter) {
+			this.AutoFilter.changeRefOnRange(range);
+		}
+	};
+	TablePart.prototype.isApplyAutoFilter = function () {
+		var res = false;
+
+		if (this.AutoFilter) {
+			res = this.AutoFilter.isApplyAutoFilter();
+		}
+
+		return res;
+	};
+	TablePart.prototype.isApplySortConditions = function () {
+		var res = false;
+
+		if (this.SortState && this.SortState.SortConditions && this.SortState.SortConditions[0]) {
+			res = true;
+		}
+
+		return res;
+	};
+
+	TablePart.prototype.setHandlers = function (handlers) {
+		if (this.handlers === null) {
+			this.handlers = handlers;
+		}
+	};
+
+	TablePart.prototype.deleteTableColumns = function (activeRange) {
+		if (!activeRange) {
+			return;
+		}
+
+		var diff = null, startCol;
+		if (activeRange.c1 < this.Ref.c1 && activeRange.c2 >= this.Ref.c1 && activeRange.c2 < this.Ref.c2)//until
 		{
+			diff = activeRange.c2 - this.Ref.c1 + 1;
+			startCol = 0;
+		} else if (activeRange.c1 <= this.Ref.c2 && activeRange.c2 > this.Ref.c2 && activeRange.c1 > this.Ref.c1)//after
+		{
+			diff = this.Ref.c2 - activeRange.c1 + 1;
+			startCol = activeRange.c1 - this.Ref.c1;
+		} else if (activeRange.c1 >= this.Ref.c1 && activeRange.c2 <= this.Ref.c2)//inside
+		{
+			diff = activeRange.c2 - activeRange.c1 + 1;
+			startCol = activeRange.c1 - this.Ref.c1;
+		}
+
+		if (diff !== null) {
+			var deleted = this.TableColumns.splice(startCol, diff);
+			this.removeDependencies(deleted);
+
+			//todo undo
+			var deletedMap = {};
+			for (var i = 0; i < deleted.length; ++i) {
+				deletedMap[deleted[i].Name] = 1;
+			}
+			this.handlers.trigger("deleteColumnTablePart", this.DisplayName, deletedMap);
+
+			if (this.SortState) {
+				var bIsDeleteSortState = this.SortState.changeColumns(activeRange, true);
+				if (bIsDeleteSortState) {
+					this.SortState = null;
+				}
+			}
+		}
+
+	};
+
+	TablePart.prototype.addTableColumns = function (activeRange, autoFilters) {
+		var newTableColumns = [], num = 0;
+		this.removeDependencies();
+		for (var j = 0; j < this.TableColumns.length;) {
+			var curCol = num + this.Ref.c1;
+			if (activeRange.c1 <= curCol && activeRange.c2 >= curCol) {
+				newTableColumns[newTableColumns.length] = new TableColumn();
+			} else {
+				newTableColumns[newTableColumns.length] = this.TableColumns[j];
+				j++
+			}
+
+			num++;
+		}
+
+		for (var j = 0; j < newTableColumns.length; j++) {
+			var tableColumn = newTableColumns[j];
+			if (tableColumn.Name === null) {
+				tableColumn.Name = autoFilters._generateColumnName2(newTableColumns);
+			}
+		}
+
+		this.TableColumns = newTableColumns;
+
+		/*if(this.SortState && this.SortState.SortConditions && this.SortState.SortConditions[0])
+		 {
+		 var SortConditions = this.SortState.SortConditions[0];
+		 if(activeRange.c1 <= SortConditions.Ref.c1)
+		 {
+		 var offset = activeRange.c2 - activeRange.c1 + 1;
+		 SortConditions.Ref.c1 += offset;
+		 SortConditions.Ref.c2 += offset;
+		 }
+		 }*/
+
+		if (this.SortState) {
+			this.SortState.changeColumns(activeRange);
+		}
+
+		this.buildDependencies();
+	};
+
+	TablePart.prototype.addTableLastColumn = function (activeRange, autoFilters, isAddLastColumn) {
+		this.removeDependencies();
+		var newTableColumns = this.TableColumns;
+		newTableColumns.push(new TableColumn());
+		newTableColumns[newTableColumns.length - 1].Name = autoFilters._generateColumnName2(newTableColumns);
+
+		this.TableColumns = newTableColumns;
+		this.buildDependencies();
+	};
+
+	TablePart.prototype.isAutoFilter = function () {
+		return false;
+	};
+
+	TablePart.prototype.getAutoFilter = function () {
+		return this.AutoFilter;
+	};
+
+	TablePart.prototype.getTableRangeForFormula = function (objectParam) {
+		var res = null;
+		var startRow = this.HeaderRowCount === null ? this.Ref.r1 + 1 : this.Ref.r1;
+		var endRow = this.TotalsRowCount ? this.Ref.r2 - 1 : this.Ref.r2;
+		switch (objectParam.param) {
+			case FormulaTablePartInfo.all: {
+				res = new Asc.Range(this.Ref.c1, this.Ref.r1, this.Ref.c2, this.Ref.r2);
+				break;
+			}
+			case FormulaTablePartInfo.data: {
+				res = new Asc.Range(this.Ref.c1, startRow, this.Ref.c2, endRow);
+				break;
+			}
+			case FormulaTablePartInfo.headers: {
+				if (this.HeaderRowCount === null) {
+					res = new Asc.Range(this.Ref.c1, this.Ref.r1, this.Ref.c2, this.Ref.r1);
+				} else if (!objectParam.toRef || objectParam.bConvertTableFormulaToRef) {
+					res = new Asc.Range(this.Ref.c1, startRow, this.Ref.c2, endRow);
+				}
+				break;
+			}
+			case FormulaTablePartInfo.totals: {
+				if (this.TotalsRowCount) {
+					res = new Asc.Range(this.Ref.c1, this.Ref.r2, this.Ref.c2, this.Ref.r2);
+				} else if (!objectParam.toRef || objectParam.bConvertTableFormulaToRef) {
+					res = new Asc.Range(this.Ref.c1, startRow, this.Ref.c2, endRow);
+				}
+				break;
+			}
+			case FormulaTablePartInfo.thisRow: {
+				if (objectParam.cell) {
+					if (startRow <= objectParam.cell.r1 && objectParam.cell.r1 <= endRow) {
+						res = new Asc.Range(this.Ref.c1, objectParam.cell.r1, this.Ref.c2, objectParam.cell.r1);
+					} else if (objectParam.bConvertTableFormulaToRef) {
+						res = new Asc.Range(this.Ref.c1, startRow, this.Ref.c2, endRow);
+					}
+				} else {
+					if (objectParam.bConvertTableFormulaToRef) {
+						res = new Asc.Range(this.Ref.c1, 0, this.Ref.c2, 0);
+					} else {
+						res = new Asc.Range(this.Ref.c1, startRow, this.Ref.c2, endRow);
+					}
+				}
+				break;
+			}
+			case FormulaTablePartInfo.columns: {
+				var startCol = this.getTableIndexColumnByName(objectParam.startCol);
+				var endCol = this.getTableIndexColumnByName(objectParam.endCol);
+
+				if (startCol === null) {
+					break;
+				}
+				if (endCol === null) {
+					endCol = startCol;
+				}
+
+				res = new Asc.Range(this.Ref.c1 + startCol, startRow, this.Ref.c1 + endCol, endRow);
+				break;
+			}
+		}
+		if (res) {
+			if (objectParam.param === FormulaTablePartInfo.thisRow) {
+				res.setAbs(false, true, false, true);
+			} else {
+				res.setAbs(true, true, true, true);
+			}
+		}
+		return res;
+	};
+
+	TablePart.prototype.getTableIndexColumnByName = function (name) {
+		var res = null;
+		if (name === null || name === undefined || !this.TableColumns) {
+			return res;
+		}
+
+		for (var i = 0; i < this.TableColumns.length; i++) {
+			if (name.toLowerCase() === this.TableColumns[i].Name.toLowerCase()) {
+				res = i;
+				break;
+			}
+		}
+
+		return res;
+	};
+
+	TablePart.prototype.getTableNameColumnByIndex = function (index) {
+		var res = null;
+		if (index === null || index === undefined || !this.TableColumns) {
+			return res;
+		}
+
+		for (var i = 0; i < this.TableColumns.length; i++) {
+			if (index === i) {
+				res = this.TableColumns[i].Name;
+				break;
+			}
+		}
+
+		return res;
+	};
+
+	TablePart.prototype.showButton = function (val) {
+		if (val === false) {
+			if (!this.AutoFilter) {
+				this.AutoFilter = new AutoFilter();
+				this.AutoFilter.Ref = this.Ref;
+			}
+
+			this.AutoFilter.showButton(val);
+		} else {
+			if (this.AutoFilter && this.AutoFilter.FilterColumns && this.AutoFilter.FilterColumns.length) {
+				this.AutoFilter.showButton(val);
+			}
+		}
+	};
+
+	TablePart.prototype.isShowButton = function () {
+		var res = false;
+
+		if (this.AutoFilter) {
+			res = this.AutoFilter.isShowButton();
+		} else {
+			res = null;
+		}
+
+		return res;
+	};
+
+	TablePart.prototype.generateTotalsRowLabel = function (ws) {
+		if (!this.TableColumns) {
+			return;
+		}
+
+		//в случае одной колонки выставляем только формулу
+		if (this.TableColumns.length > 1) {
+			this.TableColumns[0].generateTotalsRowLabel();
+		}
+		this.TableColumns[this.TableColumns.length - 1].generateTotalsRowFunction(ws, this);
+	};
+
+	TablePart.prototype.changeDisplayName = function (newName) {
+		this.DisplayName = newName;
+	};
+
+	TablePart.prototype.getRangeWithoutHeaderFooter = function () {
+		var startRow = this.HeaderRowCount === null ? this.Ref.r1 + 1 : this.Ref.r1;
+		var endRow = this.TotalsRowCount ? this.Ref.r2 - 1 : this.Ref.r2;
+
+		return Asc.Range(this.Ref.c1, startRow, this.Ref.c2, endRow);
+	};
+
+	TablePart.prototype.checkTotalRowFormula = function (ws) {
+		for (var i = 0; i < this.TableColumns.length; i++) {
+			this.TableColumns[i].checkTotalRowFormula(ws, this);
+		}
+	};
+
+	TablePart.prototype.changeAltText = function (val) {
+		this.altText = val;
+	};
+
+	TablePart.prototype.changeAltTextSummary = function (val) {
+		this.altTextSummary = val;
+	};
+
+	TablePart.prototype.addAutoFilter = function () {
+		var autoFilter = new AscCommonExcel.AutoFilter();
+		var cloneRef = this.Ref.clone();
+		if (this.TotalsRowCount) {
+			cloneRef.r2--
+		}
+		autoFilter.Ref = cloneRef;
+
+		this.AutoFilter = autoFilter;
+		return autoFilter;
+	};
+
+	TablePart.prototype.isHeaderRow = function () {
+		return null === this.HeaderRowCount || this.HeaderRowCount > 0;
+	};
+
+	TablePart.prototype.isTotalsRow = function () {
+		return this.TotalsRowCount > 0;
+	};
+
+	TablePart.prototype.generateSortState = function () {
+		this.SortState = new AscCommonExcel.SortState();
+		this.SortState.SortConditions = [];
+		this.SortState.SortConditions[0] = new AscCommonExcel.SortCondition();
+	};
+
+	/** @constructor */
+	function AutoFilter() {
+		this.Ref = null;
+		this.FilterColumns = null;
+		this.SortState = null;
+
+		this.result = null;
+	}
+
+	AutoFilter.prototype.clone = function () {
+		var i, res = new AutoFilter();
+		res.Ref = this.Ref ? this.Ref.clone() : null;
+		res.refTable = this.refTable ? this.refTable.clone() : null;
+		if (this.FilterColumns) {
+			res.FilterColumns = [];
+			for (i = 0; i < this.FilterColumns.length; ++i) {
+				res.FilterColumns.push(this.FilterColumns[i].clone());
+			}
+		}
+
+		if (this.SortState) {
+			res.SortState = this.SortState.clone();
+		}
+
+		if (this.result) {
+			res.result = [];
+			for (i = 0; i < this.result.length; ++i) {
+				res.result.push(this.result[i].clone());
+			}
+		}
+
+		return res;
+	};
+
+	AutoFilter.prototype.addFilterColumn = function () {
+		if (this.FilterColumns === null) {
+			this.FilterColumns = [];
+		}
+
+		var oNewElem = new FilterColumn();
+		this.FilterColumns.push(oNewElem);
+
+		return oNewElem;
+	};
+	AutoFilter.prototype.moveRef = function (col, row) {
+		var ref = this.Ref.clone();
+		ref.setOffset(new AscCommon.CellBase(row || 0, col || 0));
+
+		if (this.SortState) {
+			this.SortState.moveRef(col, row);
+		}
+
+		this.Ref = ref;
+	};
+	AutoFilter.prototype.changeRef = function (col, row, bIsFirst) {
+		var ref = this.Ref.clone();
+		var offset = new AscCommon.CellBase(row || 0, col || 0);
+		if (bIsFirst) {
+			ref.setOffsetFirst(offset);
+		} else {
+			ref.setOffsetLast(offset);
+		}
+
+		this.Ref = ref;
+	};
+	AutoFilter.prototype.changeRefOnRange = function (range) {
+		if (!range) {
+			return;
+		}
+
+		this.Ref = Asc.Range(range.c1, range.r1, range.c2, range.r2);
+
+		if (this.AutoFilter) {
+			this.AutoFilter.changeRefOnRange(range);
+		}
+	};
+	AutoFilter.prototype.isApplyAutoFilter = function () {
+		var res = false;
+
+		if (this.FilterColumns && this.FilterColumns.length) {
+			for (var i = 0; i < this.FilterColumns.length; i++) {
+				if (this.FilterColumns[i].isApplyAutoFilter()) {
+					res = true;
+					break;
+				}
+			}
+		}
+
+		return res;
+	};
+
+	AutoFilter.prototype.isApplySortConditions = function () {
+		var res = false;
+
+		if (this.SortState && this.SortState.SortConditions && this.SortState.SortConditions[0]) {
+			res = true;
+		}
+
+		return res;
+	};
+
+	AutoFilter.prototype.isAutoFilter = function () {
+		return true;
+	};
+
+	AutoFilter.prototype.cleanFilters = function () {
+		if (!this.FilterColumns) {
+			return;
+		}
+
+		for (var i = 0; i < this.FilterColumns.length; i++) {
+			if (this.FilterColumns[i].ShowButton === false) {
+				this.FilterColumns[i].clean();
+			} else {
+				this.FilterColumns.splice(i, 1);
+				i--;
+			}
+		}
+	};
+
+	AutoFilter.prototype.showButton = function (val) {
+
+		if (val === false) {
+			if (this.FilterColumns === null) {
+				this.FilterColumns = [];
+			}
+
+			var columnsLength = this.Ref.c2 - this.Ref.c1 + 1;
+			for (var i = 0; i < columnsLength; i++) {
+				var filterColumn = this._getFilterColumnByColId(i);
+				if (filterColumn) {
+					filterColumn.ShowButton = false;
+				} else {
+					filterColumn = new FilterColumn();
+					filterColumn.ColId = i;
+					filterColumn.ShowButton = false;
+					this.FilterColumns.push(filterColumn);
+				}
+			}
+		} else {
+			if (this.FilterColumns && this.FilterColumns.length) {
+				for (var i = 0; i < this.FilterColumns.length; i++) {
+					this.FilterColumns[i].ShowButton = true;
+				}
+			}
+		}
+	};
+
+	AutoFilter.prototype.isShowButton = function () {
+		var res = true;
+
+		if (this.FilterColumns && this.FilterColumns.length) {
+			for (var i = 0; i < this.FilterColumns.length; i++) {
+				if (this.FilterColumns[i].ShowButton === false) {
+					res = false;
+					break;
+				}
+			}
+		}
+
+		return res;
+	};
+
+	AutoFilter.prototype.getRangeWithoutHeaderFooter = function () {
+		return Asc.Range(this.Ref.c1, this.Ref.r1 + 1, this.Ref.c2, this.Ref.r2);
+	};
+
+	AutoFilter.prototype._getFilterColumnByColId = function (colId) {
+		var res = false;
+
+		if (this.FilterColumns && this.FilterColumns.length) {
+			for (var i = 0; i < this.FilterColumns.length; i++) {
+				if (this.FilterColumns[i].ColId === colId) {
+					res = this.FilterColumns[i];
+					break;
+				}
+			}
+		}
+
+		return res;
+	};
+
+	//функция используется только для изменения данных сортировки, называется так как и в классе TablePart. возможно стоит переименовать.
+	AutoFilter.prototype.deleteTableColumns = function (activeRange) {
+		if (this.SortState) {
 			var bIsDeleteSortState = this.SortState.changeColumns(activeRange, true);
-			if(bIsDeleteSortState)
-			{
+			if (bIsDeleteSortState) {
 				this.SortState = null;
 			}
 		}
-	}
+	};
 
-};
+	//функция используется только для изменения данных сортировки, называется так как и в классе TablePart. возможно стоит переименовать.
+	AutoFilter.prototype.addTableColumns = function (activeRange) {
+		if (this.SortState) {
+			this.SortState.changeColumns(activeRange);
+		}
+	};
 
-TablePart.prototype.addTableColumns = function(activeRange, autoFilters)
-{
-	var newTableColumns = [], num = 0;
-	this.removeDependencies();
-	for(var j = 0; j < this.TableColumns.length;)
-	{
-		var curCol = num + this.Ref.c1;
-		if(activeRange.c1 <= curCol && activeRange.c2 >= curCol)
-		{
-			newTableColumns[newTableColumns.length] = new TableColumn();
-		}
-		else
-		{
-			newTableColumns[newTableColumns.length] = this.TableColumns[j];
-			j++
-		}
-		
-		num++;
-	}
-	
-	for(var j = 0; j < newTableColumns.length; j++)
-	{
-		var tableColumn = newTableColumns[j];
-		if(tableColumn.Name === null)
-			tableColumn.Name = autoFilters._generateColumnName2(newTableColumns);
-	}
-	
-	this.TableColumns = newTableColumns;
-	
-	/*if(this.SortState && this.SortState.SortConditions && this.SortState.SortConditions[0])
-	{
-		var SortConditions = this.SortState.SortConditions[0];
-		if(activeRange.c1 <= SortConditions.Ref.c1)
-		{
-			var offset = activeRange.c2 - activeRange.c1 + 1;
-			SortConditions.Ref.c1 += offset;
-			SortConditions.Ref.c2 += offset;
-		}
-	}*/
-	
-	if(this.SortState) 
-	{
-		this.SortState.changeColumns(activeRange);
-	}
-	
-	this.buildDependencies();
-};
+	AutoFilter.prototype.getIndexByColId = function (colId) {
+		var res = null;
 
-TablePart.prototype.addTableLastColumn = function(activeRange, autoFilters, isAddLastColumn)
-{
-	this.removeDependencies();
-	var newTableColumns = this.TableColumns;
-	newTableColumns.push(new TableColumn());
-	newTableColumns[newTableColumns.length - 1].Name = autoFilters._generateColumnName2(newTableColumns);
-	
-	this.TableColumns = newTableColumns;
-	this.buildDependencies();
-};
+		if (!this.FilterColumns) {
+			return res;
+		}
 
-TablePart.prototype.isAutoFilter = function()
-{
-	return false;
-};
-
-TablePart.prototype.getTableRangeForFormula = function(objectParam)
-{
-	var res = null;
-	var startRow = this.HeaderRowCount === null ? this.Ref.r1 + 1 : this.Ref.r1;
-	var endRow = this.TotalsRowCount ? this.Ref.r2 - 1 : this.Ref.r2;
-	switch(objectParam.param)
-	{
-		case FormulaTablePartInfo.all:
-		{
-			res = new Asc.Range(this.Ref.c1, this.Ref.r1, this.Ref.c2, this.Ref.r2);
-			break;
-		}
-		case FormulaTablePartInfo.data:
-		{
-			res = new Asc.Range(this.Ref.c1, startRow, this.Ref.c2, endRow);
-			break;
-		}
-		case FormulaTablePartInfo.headers:
-		{
-			if(this.HeaderRowCount === null) {
-				res = new Asc.Range(this.Ref.c1, this.Ref.r1, this.Ref.c2, this.Ref.r1);
-			} else if(!objectParam.toRef) {
-				res = new Asc.Range(this.Ref.c1, startRow, this.Ref.c2, endRow);
-			}
-			break;
-		}
-		case FormulaTablePartInfo.totals:
-		{
-			if(this.TotalsRowCount) {
-				res = new Asc.Range(this.Ref.c1, this.Ref.r2, this.Ref.c2, this.Ref.r2);
-			} else if(!objectParam.toRef) {
-				res = new Asc.Range(this.Ref.c1, startRow, this.Ref.c2, endRow);
-			}
-			break;
-		}
-		case FormulaTablePartInfo.thisRow:
-		{
-			if (objectParam.cell) {
-				if (startRow <= objectParam.cell.r1 && objectParam.cell.r1 <= endRow) {
-					res = new Asc.Range(this.Ref.c1, objectParam.cell.r1, this.Ref.c2, objectParam.cell.r1);
-				}
-			} else {
-				res = new Asc.Range(this.Ref.c1, startRow, this.Ref.c2, endRow);
-			}
-			break;
-		}
-		case FormulaTablePartInfo.columns:
-		{
-			var startCol = this.getTableIndexColumnByName(objectParam.startCol);
-			var endCol = this.getTableIndexColumnByName(objectParam.endCol);
-			
-			if(startCol === null)
+		for (var i = 0; i < this.FilterColumns.length; i++) {
+			if (this.FilterColumns[i].ColId === colId) {
+				res = i;
 				break;
-			if(endCol === null)
-				endCol = startCol;
-
-			res = new Asc.Range(this.Ref.c1 + startCol, startRow, this.Ref.c1 + endCol, endRow);
-			break;
+			}
 		}
-	}
-	return res;
-};
 
-TablePart.prototype.getTableIndexColumnByName = function(name)
-{
-	var res = null;
-	if(name === null || name === undefined || !this.TableColumns)
 		return res;
-		
-	for(var i = 0; i < this.TableColumns.length; i++)
-	{
-		if(name.toLowerCase() === this.TableColumns[i].Name.toLowerCase())
-		{
-			res = i;
-			break;
+	};
+
+	AutoFilter.prototype.getFilterColumn = function (colId) {
+		var res = null;
+
+		if (!this.FilterColumns) {
+			return res;
 		}
-	}
-	
-	return res;
-};
 
-TablePart.prototype.getTableNameColumnByIndex = function(index)
-{
-	var res = null;
-	if(index === null || index === undefined || !this.TableColumns)
-		return res;
-		
-	for(var i = 0; i < this.TableColumns.length; i++)
-	{
-		if(index === i)
-		{
-			res = this.TableColumns[i].Name;
-			break;
-		}
-	}
-	
-	return res;
-};
-
-TablePart.prototype.showButton = function(val)
-{
-	if(val === false)
-	{
-		if(!this.AutoFilter)
-		{
-			this.AutoFilter = new AutoFilter();
-			this.AutoFilter.Ref = this.Ref;
-		}
-		
-		this.AutoFilter.showButton(val);
-	}
-	else
-	{
-		if(this.AutoFilter && this.AutoFilter.FilterColumns && this.AutoFilter.FilterColumns.length)
-		{
-			this.AutoFilter.showButton(val);
-		}
-	}
-};
-
-TablePart.prototype.isShowButton = function()
-{
-	var res = false;
-	
-	if(this.AutoFilter)
-	{
-		res = this.AutoFilter.isShowButton();
-	}
-	else
-	{
-		res = null;
-	}
-	
-	return res;
-};
-
-TablePart.prototype.generateTotalsRowLabel = function(ws)
-{
-	if(!this.TableColumns)
-	{
-		return;
-	}
-	
-	//в случае одной колонки выставляем только формулу
-	if(this.TableColumns.length > 1)
-	{
-		this.TableColumns[0].generateTotalsRowLabel();
-	}
-	this.TableColumns[this.TableColumns.length - 1].generateTotalsRowFunction(ws, this);
-};
-
-TablePart.prototype.changeDisplayName = function(newName)
-{
-	this.DisplayName = newName;
-}; 
-
-TablePart.prototype.getRangeWithoutHeaderFooter = function()
-{
-	var startRow = this.HeaderRowCount === null ? this.Ref.r1 + 1 : this.Ref.r1;
-	var endRow = this.TotalsRowCount ? this.Ref.r2 - 1 : this.Ref.r2;
-	
-	return Asc.Range(this.Ref.c1, startRow, this.Ref.c2, endRow);
-};
-
-TablePart.prototype.checkTotalRowFormula = function(ws)
-{
-	for (var i = 0; i < this.TableColumns.length; i++) {
-		this.TableColumns[i].checkTotalRowFormula(ws, this);
-	}
-};
-
-TablePart.prototype.changeAltText = function(val)
-{
-	this.altText = val;
-};
-
-TablePart.prototype.changeAltTextSummary = function(val)
-{
-	this.altTextSummary = val;
-};
-
-TablePart.prototype.addAutoFilter = function()
-{
-	var autoFilter = new AscCommonExcel.AutoFilter();
-	var cloneRef = this.Ref.clone();
-	if(this.TotalsRowCount)
-	{
-		cloneRef.r2--
-	}
-	autoFilter.Ref = cloneRef;
-	
-	this.AutoFilter = autoFilter;
-	return autoFilter;
-};
-
-TablePart.prototype.isHeaderRow = function()
-{
-	return null === this.HeaderRowCount || this.HeaderRowCount > 0; 
-};
-
-TablePart.prototype.isTotalsRow = function()
-{
-	return this.TotalsRowCount > 0; 
-};
-
-
-/** @constructor */
-function AutoFilter() {
-	this.Ref = null;
-	this.FilterColumns = null;
-	this.SortState = null;
-	
-	this.result = null;
-}
-AutoFilter.prototype.clone = function() {
-	var i, res = new AutoFilter();
-	res.Ref = this.Ref ? this.Ref.clone() : null;
-	res.refTable = this.refTable ? this.refTable.clone() : null;
-	if (this.FilterColumns) {
-		res.FilterColumns = [];
-		for (i = 0; i < this.FilterColumns.length; ++i)
-			res.FilterColumns.push(this.FilterColumns[i].clone());
-	}
-	
-	if (this.SortState)
-		res.SortState = this.SortState.clone();
-		
-	if (this.result) {
-		res.result = [];
-		for (i = 0; i < this.result.length; ++i)
-			res.result.push(this.result[i].clone());
-	}
-	
-	return res;
-};
-
-AutoFilter.prototype.addFilterColumn = function() {
-	if(this.FilterColumns === null)
-		this.FilterColumns = [];
-	
-	var oNewElem = new FilterColumn();
-	this.FilterColumns.push(oNewElem);
-	
-	return oNewElem;
-};
-AutoFilter.prototype.moveRef = function(col, row) {
-	var ref = this.Ref.clone();
-	ref.setOffset({offsetCol: col ? col : 0, offsetRow: row ? row : 0});
-	
-	if(this.SortState)
-	{
-		this.SortState.moveRef(col, row);
-	}
-	
-	this.Ref = ref;
-};
-AutoFilter.prototype.changeRef = function(col, row, bIsFirst) {
-	var ref = this.Ref.clone();
-	if(bIsFirst)
-		ref.setOffsetFirst({offsetCol: col ? col : 0, offsetRow: row ? row : 0});
-	else
-		ref.setOffsetLast({offsetCol: col ? col : 0, offsetRow: row ? row : 0});
-	
-	this.Ref = ref;
-};
-AutoFilter.prototype.changeRefOnRange = function(range) {
-	if(!range)
-		return;
-		
-	this.Ref = Asc.Range(range.c1, range.r1, range.c2, range.r2);
-	
-	if(this.AutoFilter)
-		this.AutoFilter.changeRefOnRange(range);
-};
-AutoFilter.prototype.isApplyAutoFilter = function() {
-	var res = false;
-	
-	if(this.FilterColumns && this.FilterColumns.length)
-	{
-		for(var i = 0; i < this.FilterColumns.length; i++)
-		{
-			if(this.FilterColumns[i].isApplyAutoFilter())
-			{
-				res = true;
-				break;
-			}
-		}
-	}
-		
-	return res;
-};
-
-AutoFilter.prototype.isApplySortConditions = function() {
-	var res = false;
-	
-	if(this.SortState && this.SortState.SortConditions && this.SortState.SortConditions[0])
-		res = true;
-		
-	return res;
-};
-
-AutoFilter.prototype.isAutoFilter = function()
-{
-	return true;
-};
-
-AutoFilter.prototype.cleanFilters = function() {
-	if(!this.FilterColumns)
-		return;
-	
-	for(var i = 0; i < this.FilterColumns.length; i++)
-	{
-		if(this.FilterColumns[i].ShowButton === false)
-			this.FilterColumns[i].clean();
-		else
-		{
-			this.FilterColumns.splice(i, 1);
-			i--;
-		}	
-	}
-};
-
-AutoFilter.prototype.showButton = function(val) {
-	
-	if(val === false)
-	{
-		if(this.FilterColumns === null)
-		{
-			this.FilterColumns = [];
-		}
-		
-		var columnsLength = this.Ref.c2 - this.Ref.c1 + 1;
-		for(var i = 0; i < columnsLength; i++)
-		{
-			var filterColumn = this._getFilterColumnByColId(i);
-			if(filterColumn)
-			{
-				filterColumn.ShowButton = false;
-			}
-			else
-			{
-				filterColumn = new FilterColumn();
-				filterColumn.ColId = i;
-				filterColumn.ShowButton = false;
-				this.FilterColumns.push(filterColumn);
-			}
-		}
-	}
-	else
-	{
-		if(this.FilterColumns && this.FilterColumns.length)
-		{
-			for(var i = 0; i < this.FilterColumns.length; i++)
-			{
-				this.FilterColumns[i].ShowButton = true;
-			}
-		}
-	}
-};
-
-AutoFilter.prototype.isShowButton = function()
-{
-	var res = true;
-	
-	if(this.FilterColumns && this.FilterColumns.length)
-	{
-		for(var i = 0; i < this.FilterColumns.length; i++)
-		{
-			if(this.FilterColumns[i].ShowButton === false)
-			{
-				res = false;
-				break;
-			}
-		}
-	}
-	
-	return res;
-};
-
-AutoFilter.prototype.getRangeWithoutHeaderFooter = function()
-{
-	return Asc.Range(this.Ref.c1, this.Ref.r1 + 1, this.Ref.c2, this.Ref.r2);
-}; 
-
-AutoFilter.prototype._getFilterColumnByColId = function(colId)
-{
-	var res = false;
-	
-	if(this.FilterColumns && this.FilterColumns.length)
-	{
-		for(var i = 0; i < this.FilterColumns.length; i++)
-		{
-			if(this.FilterColumns[i].ColId === colId)
-			{
+		for (var i = 0; i < this.FilterColumns.length; i++) {
+			if (this.FilterColumns[i].ColId === colId) {
 				res = this.FilterColumns[i];
 				break;
 			}
 		}
-	}
-	
-	return res;
-};
 
-//функция используется только для изменения данных сортировки, называется так как и в классе TablePart. возможно стоит переименовать.
-AutoFilter.prototype.deleteTableColumns = function(activeRange)
-{
-	if(this.SortState) 
-	{
-		var bIsDeleteSortState = this.SortState.changeColumns(activeRange, true);
-		if(bIsDeleteSortState)
-		{
-			this.SortState = null;
-		}
-	}
-};
+		return res;
+	};
 
-//функция используется только для изменения данных сортировки, называется так как и в классе TablePart. возможно стоит переименовать.
-AutoFilter.prototype.addTableColumns = function(activeRange)
-{
-	if(this.SortState) 
-	{
-		this.SortState.changeColumns(activeRange);
-	}
-};
+	AutoFilter.prototype.getAutoFilter = function () {
+		return this;
+	};
 
-function FilterColumns() {
-	this.ColId = null;
-	this.CustomFiltersObj = null;
-}
-FilterColumns.prototype.clone = function() {
-	var res = new FilterColumns();
-	res.ColId = this.ColId;
-	if(this.CustomFiltersObj)
-		res.CustomFiltersObj = this.CustomFiltersObj.clone();
-	
-	return res;
-};
+	AutoFilter.prototype.hiddenByAnotherFilter = function (worksheet, cellId, row, col) {
+		var result = false;
 
-/** @constructor */
-function SortState() {
-	this.Ref = null;
-	this.CaseSensitive = null;
-	this.SortConditions = null;
-}
+		var filterColumns = this.FilterColumns;
+		if (filterColumns) {
+			for (var j = 0; j < filterColumns.length; j++) {
+				var colId = filterColumns[j].ColId;
+				if (colId !== cellId) {
+					var cell = worksheet.getCell3(row, colId + col);
+					var isDateTimeFormat = cell.getNumFormat().isDateTimeFormat() && cell.getType() === window["AscCommon"].CellValueType.Number;
 
-SortState.prototype.clone = function() {
-	var i, res = new SortState();
-	res.Ref = this.Ref ? this.Ref.clone() : null;
-	res.CaseSensitive = this.CaseSensitive;
-	if (this.SortConditions) {
-		res.SortConditions = [];
-		for (i = 0; i < this.SortConditions.length; ++i)
-			res.SortConditions.push(this.SortConditions[i].clone());
-	}
-	return res;
-};
-
-SortState.prototype.moveRef = function(col, row) {
-	var ref = this.Ref.clone();
-	ref.setOffset({offsetCol: col ? col : 0, offsetRow: row ? row : 0});
-	
-	this.Ref = ref;
-	
-	if (this.SortConditions) {
-		for (var i = 0; i < this.SortConditions.length; ++i)
-			this.SortConditions[i].moveRef(col, row);
-	}
-};
-
-SortState.prototype.changeRef = function(col, row, bIsFirst) {
-	var ref = this.Ref.clone();
-	if(bIsFirst)
-		ref.setOffsetFirst({offsetCol: col ? col : 0, offsetRow: row ? row : 0});
-	else
-		ref.setOffsetLast({offsetCol: col ? col : 0, offsetRow: row ? row : 0});
-	
-	this.Ref = ref;
-};
-
-SortState.prototype.changeColumns = function(activeRange, isDelete)
-{
-	var bIsSortStateDelete = true;
-	//если изменяем диапазон так, что удаляется колонка с сортировкой, удаляем ее
-	if (this.SortConditions) 
-	{
-		for (var i = 0; i < this.SortConditions.length; ++i)
-		{
-			var bIsSortConditionsDelete = this.SortConditions[i].changeColumns(activeRange, isDelete);
-			if(bIsSortConditionsDelete)
-			{
-				this.SortConditions[i] = null;
-			}
-			else
-			{
-				bIsSortStateDelete = false;
+					var isNumberFilter = filterColumns[j].isApplyCustomFilter();
+					var val = (isDateTimeFormat || isNumberFilter) ? cell.getValueWithoutFormat() : cell.getValueWithFormat();
+					if (filterColumns[j].isHideValue(val, isDateTimeFormat, null, cell)) {
+						result = true;
+						break;
+					}
+				}
 			}
 		}
+
+		return result;
+	};
+
+	AutoFilter.prototype.setRowHidden = function(worksheet, newFilterColumn) {
+		var startRow = this.Ref.r1 + 1;
+		var endRow = this.Ref.r2;
+
+		var colId = newFilterColumn ? newFilterColumn.ColId : null;
+		var minChangeRow = null;
+		var hiddenObj = {start: this.Ref.r1 + 1, h: null};
+		var nHiddenRowCount = 0;
+		var nRowsCount = 0;
+		for (var i = startRow; i <= endRow; i++) {
+
+			var isHidden = this.hiddenByAnotherFilter(worksheet, colId, i, this.Ref.c1);
+			if(!newFilterColumn) {
+				if (isHidden !== worksheet.getRowHidden(i)) {
+					if (minChangeRow === null) {
+						minChangeRow = i;
+					}
+				}
+
+				if (true === isHidden) {
+					worksheet.setRowHidden(isHidden, i, i);
+				}
+			} else {
+				if (!isHidden) {
+					var cell = worksheet.getCell3(i, colId + this.Ref.c1);
+					var isDateTimeFormat = cell.getNumFormat().isDateTimeFormat() && cell.getType() === window["AscCommon"].CellValueType.Number;
+					var isNumberFilter = false;
+					if (newFilterColumn.CustomFiltersObj || newFilterColumn.Top10 || newFilterColumn.DynamicFilter) {
+						isNumberFilter = true;
+					}
+
+					var currentValue = (isDateTimeFormat || isNumberFilter) ? cell.getValueWithoutFormat() : cell.getValueWithFormat();
+					currentValue = window["Asc"].trim(currentValue);
+					var isSetHidden = newFilterColumn.isHideValue(currentValue, isDateTimeFormat, null, cell);
+
+					if (isSetHidden !== worksheet.getRowHidden(i) && minChangeRow === null) {
+						minChangeRow = i;
+					}
+
+					//скрываем строки
+					if (hiddenObj.h === null) {
+						hiddenObj.h = isSetHidden;
+						hiddenObj.start = i;
+					} else if (hiddenObj.h !== isSetHidden) {
+						worksheet.setRowHidden(hiddenObj.h, hiddenObj.start, i - 1);
+						if (true === hiddenObj.h) {
+							nHiddenRowCount += i - hiddenObj.start;
+						}
+
+						hiddenObj.h = isSetHidden;
+						hiddenObj.start = i;
+					}
+
+					if (i === endRow) {
+						worksheet.setRowHidden(hiddenObj.h, hiddenObj.start, i);
+						if (true === hiddenObj.h) {
+							nHiddenRowCount += i + 1 - hiddenObj.start;
+						}
+					}
+					nRowsCount++;
+				} else if (hiddenObj.h !== null) {
+					worksheet.setRowHidden(hiddenObj.h, hiddenObj.start, i - 1);
+					if (true === hiddenObj.h) {
+						nHiddenRowCount += i - hiddenObj.start;
+					}
+					hiddenObj.h = null
+				}
+			}
+		}
+
+		return {nOpenRowsCount: nRowsCount - nHiddenRowCount, nAllRowsCount: endRow - startRow + 1, minChangeRow: minChangeRow};
+	};
+
+	AutoFilter.prototype.generateSortState = function () {
+		this.SortState = new AscCommonExcel.SortState();
+		this.SortState.SortConditions = [];
+		this.SortState.SortConditions[0] = new AscCommonExcel.SortCondition();
+	};
+
+	function FilterColumns() {
+		this.ColId = null;
+		this.CustomFiltersObj = null;
 	}
-	return bIsSortStateDelete;
-};
 
+	FilterColumns.prototype.clone = function () {
+		var res = new FilterColumns();
+		res.ColId = this.ColId;
+		if (this.CustomFiltersObj) {
+			res.CustomFiltersObj = this.CustomFiltersObj.clone();
+		}
 
-/** @constructor */
-function TableColumn() {
-	this.Name = null;
-	this.TotalsRowLabel = null;
-	this.TotalsRowFunction = null;
-	this.TotalsRowFormula = null;
-	this.dxf = null;
-	this.CalculatedColumnFormula = null;
-}
-	TableColumn.prototype.onFormulaEvent = function(type, eventData) {
-		if (AscCommon.c_oNotifyParentType.CanDo === type) {
-			return true;
-		} else if (AscCommon.c_oNotifyParentType.Change === type) {
-			this.TotalsRowFormula.setIsDirty(false);
+		return res;
+	};
+
+	/** @constructor */
+	function SortState() {
+		this.Ref = null;
+		this.CaseSensitive = null;
+		this.SortConditions = null;
+	}
+
+	SortState.prototype.clone = function () {
+		var i, res = new SortState();
+		res.Ref = this.Ref ? this.Ref.clone() : null;
+		res.CaseSensitive = this.CaseSensitive;
+		if (this.SortConditions) {
+			res.SortConditions = [];
+			for (i = 0; i < this.SortConditions.length; ++i) {
+				res.SortConditions.push(this.SortConditions[i].clone());
+			}
+		}
+		return res;
+	};
+
+	SortState.prototype.moveRef = function (col, row) {
+		var ref = this.Ref.clone();
+		ref.setOffset(new AscCommon.CellBase(row || 0, col || 0));
+
+		this.Ref = ref;
+
+		if (this.SortConditions) {
+			for (var i = 0; i < this.SortConditions.length; ++i) {
+				this.SortConditions[i].moveRef(col, row);
+			}
 		}
 	};
-	TableColumn.prototype.renameSheetCopy = function(ws, renameParams) {
+
+	SortState.prototype.changeRef = function (col, row, bIsFirst) {
+		var ref = this.Ref.clone();
+		var offset = new AscCommon.CellBase(row || 0, col || 0);
+		if (bIsFirst) {
+			ref.setOffsetFirst(offset);
+		} else {
+			ref.setOffsetLast(offset);
+		}
+
+		this.Ref = ref;
+	};
+
+	SortState.prototype.changeColumns = function (activeRange, isDelete) {
+		var bIsSortStateDelete = true;
+		//если изменяем диапазон так, что удаляется колонка с сортировкой, удаляем ее
+		if (this.SortConditions) {
+			for (var i = 0; i < this.SortConditions.length; ++i) {
+				var bIsSortConditionsDelete = this.SortConditions[i].changeColumns(activeRange, isDelete);
+				if (bIsSortConditionsDelete) {
+					this.SortConditions[i] = null;
+				} else {
+					bIsSortStateDelete = false;
+				}
+			}
+		}
+		return bIsSortStateDelete;
+	};
+
+
+	/** @constructor */
+	function TableColumn() {
+		this.Name = null;
+		this.TotalsRowLabel = null;
+		this.TotalsRowFunction = null;
+		this.TotalsRowFormula = null;
+		this.dxf = null;
+		this.CalculatedColumnFormula = null;
+	}
+
+	TableColumn.prototype.onFormulaEvent = function (type, eventData) {
+	};
+	TableColumn.prototype.renameSheetCopy = function (ws, renameParams) {
 		if (this.TotalsRowFormula) {
 			this.buildDependencies();
 			this.TotalsRowFormula.renameSheetCopy(renameParams);
 			this.applyTotalRowFormula(this.TotalsRowFormula.assemble(true), ws, true);
 		}
 	};
-	TableColumn.prototype.buildDependencies = function() {
+	TableColumn.prototype.buildDependencies = function () {
 		if (this.TotalsRowFormula) {
 			this.TotalsRowFormula.parse();
 			this.TotalsRowFormula.buildDependencies();
 		}
 	};
-	TableColumn.prototype.removeDependencies = function() {
+	TableColumn.prototype.removeDependencies = function () {
 		if (this.TotalsRowFormula) {
 			this.TotalsRowFormula.removeDependencies();
 		}
 	};
-	TableColumn.prototype.getAllFormulas = function(formulas) {
+	TableColumn.prototype.getAllFormulas = function (formulas) {
 		if (this.TotalsRowFormula) {
 			formulas.push(this.TotalsRowFormula);
 		}
 	};
-TableColumn.prototype.clone = function() {
-	var res = new TableColumn();
-	res.Name = this.Name;
-	res.TotalsRowLabel = this.TotalsRowLabel;
-	res.TotalsRowFunction = this.TotalsRowFunction;
+	TableColumn.prototype.clone = function () {
+		var res = new TableColumn();
+		res.Name = this.Name;
+		res.TotalsRowLabel = this.TotalsRowLabel;
+		res.TotalsRowFunction = this.TotalsRowFunction;
 
-	if (this.TotalsRowFormula) {
-		res.applyTotalRowFormula(this.TotalsRowFormula.Formula, this.TotalsRowFormula.ws, false);
-	}
-	if (this.dxf)
-		res.dxf = this.dxf.clone;
-	res.CalculatedColumnFormula = this.CalculatedColumnFormula;
-	return res;
-};
-TableColumn.prototype.generateTotalsRowLabel = function(){
-	//TODO добавить в перевод
-	if(this.TotalsRowLabel === null)
-	{	
-		this.TotalsRowLabel = "Summary";
-	}
-};
-TableColumn.prototype.generateTotalsRowFunction = function(ws, tablePart){
-	//TODO добавить в перевод
-	if(null === this.TotalsRowFunction && null === this.TotalsRowLabel)
-	{	
-		this.TotalsRowFunction = Asc.ETotalsRowFunction.totalrowfunctionSum;
-		//this.setTotalsRowFormula("SUBTOTAL(109," + tablePart.DisplayName + "[" + this.Name + "])", ws);
-	}
-};
+		if (this.TotalsRowFormula) {
+		res.applyTotalRowFormula(this.TotalsRowFormula.getFormula(), this.TotalsRowFormula.ws, false);
+		}
+		if (this.dxf) {
+			res.dxf = this.dxf.clone;
+		}
+		res.CalculatedColumnFormula = this.CalculatedColumnFormula;
+		return res;
+	};
+	TableColumn.prototype.generateTotalsRowLabel = function () {
+		//TODO добавить в перевод
+		if (this.TotalsRowLabel === null) {
+			this.TotalsRowLabel = "Summary";
+		}
+	};
+	TableColumn.prototype.generateTotalsRowFunction = function (ws, tablePart) {
+		//TODO добавить в перевод
+		if (null === this.TotalsRowFunction && null === this.TotalsRowLabel) {
+			var columnRange = this.getRange(tablePart);
 
-TableColumn.prototype.getTotalRowFormula = function(tablePart){
-	var res = null;
-	
-	if(null !== this.TotalsRowFunction)
-	{
-		switch(this.TotalsRowFunction)
-		{
-			case Asc.ETotalsRowFunction.totalrowfunctionAverage:
-			{
-				res = "SUBTOTAL(101," + tablePart.DisplayName + "[" + this.Name + "])";
-				break;
+			var totalFunction = Asc.ETotalsRowFunction.totalrowfunctionSum;
+			if (null !== columnRange) {
+				for (var i = columnRange.r1; i <= columnRange.r2; i++) {
+					var type = ws.getCell3(i, columnRange.c1).getType();
+					if (null !== type && CellValueType.Number !== type) {
+						totalFunction = Asc.ETotalsRowFunction.totalrowfunctionCount;
+						break;
+					}
+				}
 			}
-			case Asc.ETotalsRowFunction.totalrowfunctionCount:
-			{
-				res = "SUBTOTAL(103," + tablePart.DisplayName + "[" + this.Name + "])";
-				break;
-			}
-			case Asc.ETotalsRowFunction.totalrowfunctionCountNums:
-			{
-				break;
-			}
-			case Asc.ETotalsRowFunction.totalrowfunctionCustom:
-			{
-				res = this.getTotalsRowFormula();
-				break;
-			}
-			case Asc.ETotalsRowFunction.totalrowfunctionMax:
-			{
-				res = "SUBTOTAL(104," + tablePart.DisplayName + "[" + this.Name + "])";
-				break;
-			}
-			case Asc.ETotalsRowFunction.totalrowfunctionMin:
-			{
-				res = "SUBTOTAL(105," + tablePart.DisplayName + "[" + this.Name + "])";
-				break;
-			}
-			case Asc.ETotalsRowFunction.totalrowfunctionNone:
-			{
-				break;
-			}
-			case Asc.ETotalsRowFunction.totalrowfunctionStdDev:
-			{
-				res = "SUBTOTAL(107," + tablePart.DisplayName + "[" + this.Name + "])";
-				break;
-			}
-			case Asc.ETotalsRowFunction.totalrowfunctionSum:
-			{
-				res = "SUBTOTAL(109," + tablePart.DisplayName + "[" + this.Name + "])";
-				break;
-			}
-			case Asc.ETotalsRowFunction.totalrowfunctionVar:
-			{
-				res = "SUBTOTAL(110," + tablePart.DisplayName + "[" + this.Name + "])";
-				break;
+
+			this.TotalsRowFunction = totalFunction;
+		}
+	};
+
+	TableColumn.prototype.getTotalRowFormula = function (tablePart) {
+		var res = null;
+
+		if (null !== this.TotalsRowFunction) {
+			switch (this.TotalsRowFunction) {
+				case Asc.ETotalsRowFunction.totalrowfunctionAverage: {
+					res = "SUBTOTAL(101," + tablePart.DisplayName + "[" + this.Name + "])";
+					break;
+				}
+				case Asc.ETotalsRowFunction.totalrowfunctionCount: {
+					res = "SUBTOTAL(103," + tablePart.DisplayName + "[" + this.Name + "])";
+					break;
+				}
+				case Asc.ETotalsRowFunction.totalrowfunctionCountNums: {
+					break;
+				}
+				case Asc.ETotalsRowFunction.totalrowfunctionCustom: {
+					res = this.getTotalsRowFormula();
+					break;
+				}
+				case Asc.ETotalsRowFunction.totalrowfunctionMax: {
+					res = "SUBTOTAL(104," + tablePart.DisplayName + "[" + this.Name + "])";
+					break;
+				}
+				case Asc.ETotalsRowFunction.totalrowfunctionMin: {
+					res = "SUBTOTAL(105," + tablePart.DisplayName + "[" + this.Name + "])";
+					break;
+				}
+				case Asc.ETotalsRowFunction.totalrowfunctionNone: {
+					break;
+				}
+				case Asc.ETotalsRowFunction.totalrowfunctionStdDev: {
+					res = "SUBTOTAL(107," + tablePart.DisplayName + "[" + this.Name + "])";
+					break;
+				}
+				case Asc.ETotalsRowFunction.totalrowfunctionSum: {
+					res = "SUBTOTAL(109," + tablePart.DisplayName + "[" + this.Name + "])";
+					break;
+				}
+				case Asc.ETotalsRowFunction.totalrowfunctionVar: {
+					res = "SUBTOTAL(110," + tablePart.DisplayName + "[" + this.Name + "])";
+					break;
+				}
 			}
 		}
-	}
-	
-	return res;
-};
 
-TableColumn.prototype.cleanTotalsData = function(){
-	this.CalculatedColumnFormula = null;
-	this.applyTotalRowFormula(null, null, false);
-	this.TotalsRowFunction = null;
-	this.TotalsRowLabel = null;
-};
-	TableColumn.prototype.getTotalsRowFormula = function(){
+		return res;
+	};
+
+	TableColumn.prototype.cleanTotalsData = function () {
+		this.CalculatedColumnFormula = null;
+		this.applyTotalRowFormula(null, null, false);
+		this.TotalsRowFunction = null;
+		this.TotalsRowLabel = null;
+	};
+	TableColumn.prototype.getTotalsRowFormula = function () {
 		return this.TotalsRowFormula ? this.TotalsRowFormula.getFormula() : null;
 	};
-TableColumn.prototype.setTotalsRowFormula = function(val, ws){
-	this.cleanTotalsData();
-	if("=" === val[0])
-	{
-		val = val.substring(1);
-	}
-	this.applyTotalRowFormula(val, ws, true);
-	this.TotalsRowFunction = Asc.ETotalsRowFunction.totalrowfunctionCustom;
-};
-
-TableColumn.prototype.setTotalsRowLabel = function(val){
-	this.cleanTotalsData();
-	
-	this.TotalsRowLabel = val;
-};
-
-TableColumn.prototype.checkTotalRowFormula = function(ws, tablePart){
-	if(null !== this.TotalsRowFunction && Asc.ETotalsRowFunction.totalrowfunctionCustom !== this.TotalsRowFunction)
-	{
-		var totalRowFormula = this.getTotalRowFormula(tablePart);
-		
-		if(null !== totalRowFormula)
-		{
-			this.applyTotalRowFormula(totalRowFormula, ws, true);
-			this.TotalsRowFunction = Asc.ETotalsRowFunction.totalrowfunctionCustom;
+	TableColumn.prototype.getTotalsRowFunction = function () {
+		return this.TotalsRowFunction;
+	};
+	TableColumn.prototype.getTotalsRowLabel = function () {
+		return this.TotalsRowLabel ? this.TotalsRowFormula.TotalsRowLabel : null;
+	};
+	TableColumn.prototype.setTotalsRowFormula = function (val, ws) {
+		this.cleanTotalsData();
+		if ("=" === val[0]) {
+			val = val.substring(1);
 		}
-	}
-};
-	TableColumn.prototype.applyTotalRowFormula = function(val, opt_ws, opt_buildDep) {
+		this.applyTotalRowFormula(val, ws, true);
+		this.TotalsRowFunction = Asc.ETotalsRowFunction.totalrowfunctionCustom;
+	};
+	TableColumn.prototype.setTotalsRowFunction = function (val) {
+		//функция работает только на undo/redo
+		//для того, чтобы работала из меню, необходимо генерировать и добавлять формулу в ячейку
+		this.cleanTotalsData();
+		this.TotalsRowFunction = val;
+	};
+
+	TableColumn.prototype.setTotalsRowLabel = function (val) {
+		this.cleanTotalsData();
+		this.TotalsRowLabel = val;
+	};
+
+	TableColumn.prototype.checkTotalRowFormula = function (ws, tablePart) {
+		if (null !== this.TotalsRowFunction &&
+			Asc.ETotalsRowFunction.totalrowfunctionCustom !== this.TotalsRowFunction) {
+			var totalRowFormula = this.getTotalRowFormula(tablePart);
+
+			if (null !== totalRowFormula) {
+				this.applyTotalRowFormula(totalRowFormula, ws, true);
+				this.TotalsRowFunction = Asc.ETotalsRowFunction.totalrowfunctionCustom;
+			}
+		}
+	};
+	TableColumn.prototype.applyTotalRowFormula = function (val, opt_ws, opt_buildDep) {
 		this.removeDependencies();
 		if (val) {
 			this.TotalsRowFormula = new AscCommonExcel.parserFormula(val, this, opt_ws);
@@ -6302,299 +6407,332 @@ TableColumn.prototype.checkTotalRowFormula = function(ws, tablePart){
 		}
 	};
 
-/** @constructor */
-function TableStyleInfo() {
-	this.Name = null;
-	this.ShowColumnStripes = null;
-	this.ShowRowStripes = null;
-	this.ShowFirstColumn = null;
-	this.ShowLastColumn = null;
-}
-TableStyleInfo.prototype.clone = function() {
-	var res = new TableStyleInfo();
-	res.Name = this.Name;
-	res.ShowColumnStripes = this.ShowColumnStripes;
-	res.ShowRowStripes = this.ShowRowStripes;
-	res.ShowFirstColumn = this.ShowFirstColumn;
-	res.ShowLastColumn = this.ShowLastColumn;
-	return res;
-};
-/** @constructor */
-function FilterColumn() {
-	this.ColId = null;
-	this.Filters = null;
-	this.CustomFiltersObj = null;
-	this.DynamicFilter = null;
-	this.ColorFilter = null;
-	this.Top10 = null;
-	this.ShowButton = true;
-}
-FilterColumn.prototype.clone = function() {
-	var res = new FilterColumn();
-	res.ColId = this.ColId;
-	if (this.Filters) {
-		res.Filters = this.Filters.clone();
-	}
-	if (this.CustomFiltersObj) {
-		res.CustomFiltersObj = this.CustomFiltersObj.clone();
-	}
-	if (this.DynamicFilter) {
-		res.DynamicFilter = this.DynamicFilter.clone();
-	}
-	if (this.ColorFilter) {
-		res.ColorFilter = this.ColorFilter.clone();
-	}
-	if (this.Top10) {
-		res.Top10 = this.Top10.clone();
-	}
-	res.ShowButton = this.ShowButton;
-	return res;
-};
-FilterColumn.prototype.isHideValue = function(val, isDateTimeFormat, top10Length, cell) {
-	var res = false;
-	if(this.Filters)
-	{
-		this.Filters._initLowerCaseValues();
-		res = this.Filters.isHideValue(val.toLowerCase(), isDateTimeFormat);
-	}
-	else if(this.CustomFiltersObj)
-	{
-		res = this.CustomFiltersObj.isHideValue(val);
-	}
-	else if(this.Top10)
-	{
-		res = this.Top10.isHideValue(val, top10Length);
-	}
-	else if(this.ColorFilter)
-	{
-		res = this.ColorFilter.isHideValue(cell);
-	}
-	else if(this.DynamicFilter)
-	{
-		res = this.DynamicFilter.isHideValue(val);
-	}
-		
-	return res;
-};
-FilterColumn.prototype.clean = function() {
-	this.Filters = null;
-	this.CustomFiltersObj = null;
-	this.DynamicFilter = null;
-	this.ColorFilter = null;
-	this.Top10 = null;
-};
-FilterColumn.prototype.createFilter = function(obj) {
-	
-	var allFilterOpenElements = false;
-	var newFilter;
-	
-	switch (obj.filter.type)
-	{
-		case c_oAscAutoFilterTypes.ColorFilter:
-		{
-			this.ColorFilter = obj.filter.filter.clone();
-			break;
-		}
-		case c_oAscAutoFilterTypes.CustomFilters:
-		{
-			this.CustomFiltersObj = obj.filter.filter.clone();
-			break;
-		}	
-		case c_oAscAutoFilterTypes.DynamicFilter:
-		{
-			this.DynamicFilter = obj.filter.filter.clone();
-			break;
-		}
-		case c_oAscAutoFilterTypes.Top10:
-		{
-			this.Top10 = obj.filter.filter.clone();
-			break;
-		}	
-		case c_oAscAutoFilterTypes.Filters:
-		{
-			newFilter = new Filters();
-			allFilterOpenElements = newFilter.init(obj);
-			
-			if(!allFilterOpenElements)
-			{
-				this.Filters = newFilter;
+	TableColumn.prototype.getRange = function (tablePart, includeHeader, includeTotal) {
+		var res = null;
+
+		var ref = tablePart.Ref;
+		var startRow = (includeHeader && tablePart.isHeaderRow()) || (!tablePart.isHeaderRow()) ? ref.r1 : ref.r1 + 1;
+		var endRow = (includeTotal && tablePart.isTotalsRow()) || (!tablePart.isTotalsRow()) ? ref.r2 : ref.r2 - 1;
+		var col = null;
+		for (var i = 0; i < tablePart.TableColumns.length; i++) {
+			if (this.Name === tablePart.TableColumns[i].Name) {
+				col = ref.c1 + i;
+				break;
 			}
-			
-			break;
-		}	
-	}	
-	
-	return allFilterOpenElements;
-};
-FilterColumn.prototype.isApplyAutoFilter = function() {
-	var res = false;
-	
-	if(this.Filters !== null || this.CustomFiltersObj !== null || this.DynamicFilter !== null || this.ColorFilter !== null || this.Top10 !== null)
-		res = true;
-		
-	return res;
-};
+		}
 
-FilterColumn.prototype.init = function(range) {
-	
-	//добавляем данные, которые не передаются из меню при примененни а/ф(в данном случае только DynamicFilter)
-	if(null !== this.DynamicFilter)
-	{
-		this.DynamicFilter.init(range);
+		if (null !== col) {
+			res = Asc.Range(col, startRow, col, endRow);
+		}
+
+		return res;
+	};
+
+	/** @constructor */
+	function TableStyleInfo() {
+		this.Name = null;
+		this.ShowColumnStripes = null;
+		this.ShowRowStripes = null;
+		this.ShowFirstColumn = null;
+		this.ShowLastColumn = null;
 	}
-	else if(null !== this.Top10)
-	{
-		this.Top10.init(range);
+
+	TableStyleInfo.prototype.clone = function () {
+		var res = new TableStyleInfo();
+		res.Name = this.Name;
+		res.ShowColumnStripes = this.ShowColumnStripes;
+		res.ShowRowStripes = this.ShowRowStripes;
+		res.ShowFirstColumn = this.ShowFirstColumn;
+		res.ShowLastColumn = this.ShowLastColumn;
+		return res;
+	};
+	TableStyleInfo.prototype.setName = function (val) {
+		this.Name = val;
+	};
+
+	/** @constructor */
+	function FilterColumn() {
+		this.ColId = null;
+		this.Filters = null;
+		this.CustomFiltersObj = null;
+		this.DynamicFilter = null;
+		this.ColorFilter = null;
+		this.Top10 = null;
+		this.ShowButton = true;
 	}
-	
-};
 
+	FilterColumn.prototype.clone = function () {
+		var res = new FilterColumn();
+		res.ColId = this.ColId;
+		if (this.Filters) {
+			res.Filters = this.Filters.clone();
+		}
+		if (this.CustomFiltersObj) {
+			res.CustomFiltersObj = this.CustomFiltersObj.clone();
+		}
+		if (this.DynamicFilter) {
+			res.DynamicFilter = this.DynamicFilter.clone();
+		}
+		if (this.ColorFilter) {
+			res.ColorFilter = this.ColorFilter.clone();
+		}
+		if (this.Top10) {
+			res.Top10 = this.Top10.clone();
+		}
+		res.ShowButton = this.ShowButton;
+		return res;
+	};
+	FilterColumn.prototype.isHideValue = function (val, isDateTimeFormat, top10Length, cell) {
+		var res = false;
+		if (this.Filters) {
+			this.Filters._initLowerCaseValues();
+			res = this.Filters.isHideValue(val.toLowerCase(), isDateTimeFormat);
+		} else if (this.CustomFiltersObj) {
+			res = this.CustomFiltersObj.isHideValue(val);
+		} else if (this.Top10) {
+			res = this.Top10.isHideValue(val, top10Length);
+		} else if (this.ColorFilter) {
+			res = this.ColorFilter.isHideValue(cell);
+		} else if (this.DynamicFilter) {
+			res = this.DynamicFilter.isHideValue(val);
+		}
 
+		return res;
+	};
+	FilterColumn.prototype.clean = function () {
+		this.Filters = null;
+		this.CustomFiltersObj = null;
+		this.DynamicFilter = null;
+		this.ColorFilter = null;
+		this.Top10 = null;
+	};
+	FilterColumn.prototype.createFilter = function (obj) {
 
-/** @constructor */
-function Filters() {
-	this.Values = {};
-	this.Dates = [];
-	this.Blank = null;
-	
-	this.lowerCaseValues = null;
-}
-Filters.prototype.clone = function() {
-	var i, res = new Filters();
-	for(var i in this.Values)
-		res.Values[i] = this.Values[i];
-	if (this.Dates) {
-		for (i = 0; i < this.Dates.length; ++i)
-			res.Dates.push(this.Dates[i].clone());
-	}
-	res.Blank = this.Blank;
-	return res;
-};
-Filters.prototype.init = function(obj) {
-	var allFilterOpenElements = true;
-	for(var i = 0; i < obj.values.length; i++)
-	{
-		if(obj.values[i].visible)
-		{
-			if(obj.values[i].isDateFormat)
-			{
-				if(obj.values[i].text === "")
-				{
-					this.Blank = true;
+		var allFilterOpenElements = false;
+		var newFilter;
+
+		switch (obj.filter.type) {
+			case c_oAscAutoFilterTypes.ColorFilter: {
+				this.ColorFilter = obj.filter.filter.clone();
+				break;
+			}
+			case c_oAscAutoFilterTypes.CustomFilters: {
+				obj.filter.filter.check();
+				this.CustomFiltersObj = obj.filter.filter.clone();
+				break;
+			}
+			case c_oAscAutoFilterTypes.DynamicFilter: {
+				this.DynamicFilter = obj.filter.filter.clone();
+				break;
+			}
+			case c_oAscAutoFilterTypes.Top10: {
+				this.Top10 = obj.filter.filter.clone();
+				break;
+			}
+			case c_oAscAutoFilterTypes.Filters: {
+				//если приходит только скрытое Blank, тогда добавляем CustomFilter, так же делает MS
+				var addCustomFilter = false;
+				for (var i = 0; i < obj.values.length; i++) {
+					if ("" === obj.values[i].text && false === obj.values[i].visible) {
+						addCustomFilter = true;
+					} else if ("" !== obj.values[i].text && false === obj.values[i].visible) {
+						addCustomFilter = false;
+						break;
+					}
 				}
-				else
-				{
-					var dateGroupItem = new DateGroupItem();
-					var autoFilterDateElem = new AutoFilterDateElem(obj.values[i].val, obj.values[i].val, 1);
-					dateGroupItem.convertRangeToDateGroupItem(autoFilterDateElem);
-					autoFilterDateElem.convertDateGroupItemToRange(dateGroupItem);
-					
-					this.Dates.push(autoFilterDateElem);
+
+				if (addCustomFilter) {
+					this.CustomFiltersObj = new CustomFilters();
+					this.CustomFiltersObj._generateEmptyValueFilter();
+				} else {
+					newFilter = new Filters();
+					allFilterOpenElements = newFilter.init(obj);
+
+					if (!allFilterOpenElements) {
+						this.Filters = newFilter;
+					}
 				}
+
+				break;
 			}
-			else
-			{
-				if(obj.values[i].text === "")
-					this.Blank = true;
-				else
-					this.Values[obj.values[i].text] = true;
+		}
+
+		return allFilterOpenElements;
+	};
+
+	FilterColumn.prototype.isApplyAutoFilter = function () {
+		var res = false;
+
+		if (this.Filters !== null || this.CustomFiltersObj !== null || this.DynamicFilter !== null ||
+			this.ColorFilter !== null || this.Top10 !== null) {
+			res = true;
+		}
+
+		return res;
+	};
+
+	FilterColumn.prototype.init = function (range) {
+
+		//добавляем данные, которые не передаются из меню при примененни а/ф(в данном случае только DynamicFilter)
+		if (null !== this.DynamicFilter) {
+			this.DynamicFilter.init(range);
+		} else if (null !== this.Top10) {
+			this.Top10.init(range);
+		}
+
+	};
+
+	FilterColumn.prototype.isApplyCustomFilter = function () {
+		var res = false;
+
+		if (this.Top10 || this.CustomFiltersObj || this.ColorFilter || this.DynamicFilter) {
+			res = true;
+		}
+
+		return res;
+	};
+
+	FilterColumn.prototype.isOnlyNotEqualEmpty = function () {
+		var res = false;
+
+		if (this.CustomFiltersObj) {
+			var customFilters = this.CustomFiltersObj.CustomFilters;
+			var customFilter = customFilters && 1 === customFilters.length ? customFilters[0] : null;
+			if (customFilter && c_oAscCustomAutoFilter.doesNotEqual === customFilter.Operator && " " === customFilter.Val) {
+				res = true;
 			}
-		}	
-		else
-			allFilterOpenElements = false;
-	}
-	this._sortDate();
-	this._initLowerCaseValues();
+		}
 
-	return allFilterOpenElements;
-};
-Filters.prototype.isHideValue = function(val, isDateTimeFormat) {
-	var res = false;
-	
-	if(isDateTimeFormat && this.Dates)
-	{
-		if(val === "")
-		{
-			res = !this.Blank ? true : false;
-		}
-		else
-		{
-			res = this.binarySearch(val, this.Dates) !== -1 ? false : true;
-		}
-	}
-	else if(this.Values)
-	{
-		if(val === "")
-		{
-			res = !this.Blank ? true : false;
-		}
-		else
-		{
-			res = !this.lowerCaseValues[val] ? true : false;
-		}
-	}
-	
-	return res;
-};
+		return res;
+	};
 
-Filters.prototype.binarySearch = function(val, array) {
-	var i = 0, j = array.length - 1, k;
-	val = parseFloat(val);
 
-	while (i <= j)
-	{
-		k = Math.floor((i + j) / 2);
-		
-		if (val >= array[k].start && val < array[k].end) 
-			return k;
-		else if (val < array[k].start)
-			j = k - 1;
-		else
-			i = k + 1;
+	/** @constructor */
+	function Filters() {
+		this.Values = {};
+		this.Dates = [];
+		this.Blank = null;
+
+		this.lowerCaseValues = null;
 	}
 
-	return -1; 
-};
+	Filters.prototype.clone = function () {
+		var i, res = new Filters();
+		for (var i in this.Values) {
+			res.Values[i] = this.Values[i];
+		}
+		if (this.Dates) {
+			for (i = 0; i < this.Dates.length; ++i) {
+				res.Dates.push(this.Dates[i].clone());
+			}
+		}
+		res.Blank = this.Blank;
+		return res;
+	};
+	Filters.prototype.init = function (obj) {
+		var allFilterOpenElements = true;
+		for (var i = 0; i < obj.values.length; i++) {
+			if (obj.values[i].visible) {
+				if (obj.values[i].isDateFormat) {
+					if (obj.values[i].text === "") {
+						this.Blank = true;
+					} else {
+						var dateGroupItem = new DateGroupItem();
+						var autoFilterDateElem = new AutoFilterDateElem(obj.values[i].val, obj.values[i].val, 1);
+						dateGroupItem.convertRangeToDateGroupItem(autoFilterDateElem);
+						autoFilterDateElem.convertDateGroupItemToRange(dateGroupItem);
 
-Filters.prototype.linearSearch = function(val, array) {
-	var n = array.length, i = 0;
-	val = parseFloat(val);
+						this.Dates.push(autoFilterDateElem);
+					}
+				} else {
+					if (obj.values[i].text === "") {
+						this.Blank = true;
+					} else {
+						this.Values[obj.values[i].text] = true;
+					}
+				}
+			} else {
+				allFilterOpenElements = false;
+			}
+		}
+		this._sortDate();
+		this._initLowerCaseValues();
 
-	while (i <= n && !(array[i] && val >= array[i].start && val < array[i].end))
-		i++;
- 
-	if (i < n)
-		return i;
-	else
+		return allFilterOpenElements;
+	};
+	Filters.prototype.isHideValue = function (val, isDateTimeFormat) {
+		var res = false;
+
+		if (isDateTimeFormat && this.Dates) {
+			if (val === "") {
+				res = !this.Blank ? true : false;
+			} else {
+				res = this.binarySearch(val, this.Dates) !== -1 ? false : true;
+			}
+		} else if (this.Values) {
+			if (val === "") {
+				res = !this.Blank ? true : false;
+			} else {
+				res = !this.lowerCaseValues[val] ? true : false;
+			}
+		}
+
+		return res;
+	};
+
+	Filters.prototype.binarySearch = function (val, array) {
+		var i = 0, j = array.length - 1, k;
+		val = parseFloat(val);
+
+		while (i <= j) {
+			k = Math.floor((i + j) / 2);
+
+			if (val >= array[k].start && val < array[k].end) {
+				return k;
+			} else if (val < array[k].start) {
+				j = k - 1;
+			} else {
+				i = k + 1;
+			}
+		}
+
 		return -1;
-};
-Filters.prototype._initLowerCaseValues = function() {
-	if(this.lowerCaseValues === null)
-	{
-		this.lowerCaseValues = {};
-		for(var i in this.Values)
-		{
-			this.lowerCaseValues[i.toLowerCase()] = true;
-		}
-	}
-};
-Filters.prototype._sortDate = function()
-{
-	if(this.Dates && this.Dates.length)
-	{
-		this.Dates.sort (function sortArr(a, b)
-		{
-			return a.start - b.start;
-		})
-	}
-};
+	};
 
-Filters.prototype.clean = function()
-{
-	this.Values = {};
-	this.Dates = [];
-	this.Blank = null;
-};
+	Filters.prototype.linearSearch = function (val, array) {
+		var n = array.length, i = 0;
+		val = parseFloat(val);
+
+		while (i <= n && !(array[i] && val >= array[i].start && val < array[i].end))
+			i++;
+
+		if (i < n) {
+			return i;
+		} else {
+			return -1;
+		}
+	};
+	Filters.prototype._initLowerCaseValues = function () {
+		if (this.lowerCaseValues === null) {
+			this.lowerCaseValues = {};
+			for (var i in this.Values) {
+				this.lowerCaseValues[i.toLowerCase()] = true;
+			}
+		}
+	};
+	Filters.prototype._sortDate = function () {
+		if (this.Dates && this.Dates.length) {
+			this.Dates.sort(function sortArr(a, b) {
+				return a.start - b.start;
+			})
+		}
+	};
+
+	Filters.prototype.clean = function () {
+		this.Values = {};
+		this.Dates = [];
+		this.Blank = null;
+	};
 	
 /** @constructor */
 function Filter() {
@@ -6752,6 +6890,22 @@ CustomFilters.prototype.asc_getCustomFilters = function () { return this.CustomF
 CustomFilters.prototype.asc_setAnd = function (val) { this.And = val; };
 CustomFilters.prototype.asc_setCustomFilters = function (val) { this.CustomFilters = val; };
 
+CustomFilters.prototype.check = function () {
+	if(this.CustomFilters) {
+		for(var i = 0; i < this.CustomFilters.length; i++) {
+			this.CustomFilters[i].check();
+		}
+	}
+};
+
+CustomFilters.prototype._generateEmptyValueFilter = function() {
+	this.And = true;
+	this.CustomFilters = [];
+	var customFilter = new CustomFilter();
+	customFilter._generateEmptyValueFilter();
+	this.CustomFilters.push(customFilter);
+};
+
 var g_oCustomFilter = {
 	Operator	 : 0,
 	Val	: 1
@@ -6797,7 +6951,7 @@ CustomFilter.prototype.init = function(operator, val) {
 CustomFilter.prototype.isHideValue = function(val) {
 
 	var result = false;
-	var isDigitValue = isNaN(val) ? false : true;
+	var isDigitValue = !isNaN(val);
 	if(!isDigitValue)
 	{
 		val = val.toLowerCase();
@@ -6818,7 +6972,7 @@ CustomFilter.prototype.isHideValue = function(val) {
 		}
 		else if(isNumberFilter)
 		{
-			if(isNaN(this.Val))
+			if(isNaN(this.Val) && isNaN(val))
 			{
 				filterVal =  this.Val;
 			}
@@ -6832,13 +6986,26 @@ CustomFilter.prototype.isHideValue = function(val) {
 		{
 			filterVal = isNaN(this.Val) ? this.Val.toLowerCase() : this.Val;
 		}
-		
+
+		var trimVal = "string" === typeof(val) ? window["Asc"].trim(val) : val;
+		var trimFilterVal = "string" === typeof(filterVal) ? window["Asc"].trim(filterVal) : filterVal;
+
+
+		var matchingValues = function(val1, val2, op) {
+			var matchingInfo = AscCommonExcel.matchingValue(new AscCommonExcel.cString(val1));
+			if(op) {
+				matchingInfo.op = op;
+			}
+			return AscCommonExcel.matching(new AscCommonExcel.cString(val2), matchingInfo);
+		};
+
 		switch (this.Operator)
 		{
 			case c_oAscCustomAutoFilter.equals://equals
 			{
-				if(val === filterVal)
-				{
+				if(!isDigitValue) {
+					result = matchingValues(trimFilterVal, trimVal);
+				} else if(trimVal === trimFilterVal) {
 					result = true;
 				}
 				
@@ -6846,8 +7013,9 @@ CustomFilter.prototype.isHideValue = function(val) {
 			}
 			case c_oAscCustomAutoFilter.doesNotEqual://doesNotEqual
 			{
-				if(val !== filterVal)
-				{
+				if(!isDigitValue) {
+					result = matchingValues(trimFilterVal, trimVal, "<>");
+				} else if(trimVal !== trimFilterVal) {
 					result = true;
 				}
 					
@@ -6968,6 +7136,18 @@ CustomFilter.prototype.asc_getVal = function () { return this.Val; };
 CustomFilter.prototype.asc_setOperator = function (val) { this.Operator = val; };
 CustomFilter.prototype.asc_setVal = function (val) { this.Val = val; };
 
+CustomFilter.prototype.check = function () {
+	if(c_oAscCustomAutoFilter.doesNotEqual === this.Operator) {
+		if("" === this.Val.replace(/ /g, "")){
+			this.Val = " ";
+		}
+	}
+};
+
+CustomFilter.prototype._generateEmptyValueFilter = function () {
+	this.Operator = c_oAscCustomAutoFilter.doesNotEqual;
+	this.Val = " ";
+};
 
 var g_oDynamicFilter = {
 	Type : 0,
@@ -7023,7 +7203,7 @@ DynamicFilter.prototype.init = function(range) {
 			var summ = 0;
 			var counter = 0;
 			
-			range._foreach2(function(cell){
+			range._foreachNoEmpty(function(cell){
 				var val = parseFloat(cell.getValueWithoutFormat());
 				
 				if(!isNaN(val))
@@ -7112,6 +7292,7 @@ ColorFilter.prototype.clone = function() {
 ColorFilter.prototype.isHideValue = function(cell) {
 	
 	var res = true;
+	var t = this;
 	
 	var isEqualColors = function(filterColor, cellColor)
 	{
@@ -7139,41 +7320,42 @@ ColorFilter.prototype.isHideValue = function(cell) {
 	if(this.dxf && this.dxf.fill && cell)
 	{
 		var filterColor = this.dxf.fill.bg;
-		cell = cell.getCells()[0];
-		
-		if(false === this.CellColor)//font color
-		{
-			if(cell.oValue.multiText !== null)
+		cell.getLeftTopCellNoEmpty(function(cell) {
+			if(false === t.CellColor)//font color
 			{
-				for(var j = 0; j < cell.oValue.multiText.length; j++)
+				var multiText;
+				if(cell && (multiText = cell.getValueMultiText()) !== null)
 				{
-					var fontColor = cell.oValue.multiText[j].format ? cell.oValue.multiText[j].format.getColor() : null;
-					if(isEqualColors(filterColor,fontColor ))
+					for(var j = 0; j < multiText.length; j++)
+					{
+						var fontColor = multiText[j].format ? multiText[j].format.getColor() : null;
+						if(isEqualColors(filterColor,fontColor ))
+						{
+							res = false;
+							break;
+						}
+					}
+				}
+				else
+				{
+					var fontColor = cell && cell.xfs && cell.xfs.font ? cell.xfs.font.getColor() : null;
+					if(isEqualColors(filterColor,fontColor))
 					{
 						res = false;
-						break;
 					}
 				}
 			}
 			else
 			{
-				var fontColor =  cell.xfs && cell.xfs.font ? cell.xfs.font.getColor() : null;
-				if(isEqualColors(filterColor,fontColor))
+				var color = cell ? cell.getStyle() : null;
+				var cellColor =  color !== null && color.fill && color.fill.bg ? color.fill.bg : null;
+
+				if(isEqualColors(filterColor, cellColor))
 				{
 					res = false;
 				}
 			}
-		}
-		else
-		{
-			var color = cell.getStyle();
-			var cellColor =  color !== null && color.fill && color.fill.bg ? color.fill.bg : null;
-			
-			if(isEqualColors(filterColor, cellColor))
-			{
-				res = false;
-			}
-		}
+		});
 	}
 	
 	return res;
@@ -7387,7 +7569,7 @@ SortCondition.prototype.clone = function() {
 };
 SortCondition.prototype.moveRef = function(col, row) {
 	var ref = this.Ref.clone();
-	ref.setOffset({offsetCol: col ? col : 0, offsetRow: row ? row : 0});
+	ref.setOffset(new AscCommon.CellBase(row || 0, col || 0));
 	
 	this.Ref = ref;
 };
@@ -7417,11 +7599,64 @@ SortCondition.prototype.changeColumns = function(activeRange, isDelete) {
 	
 	if(null !== offsetCol)
 	{
-		ref.setOffset({offsetCol: offsetCol, offsetRow: 0});
+		ref.setOffset(new AscCommon.CellBase(0, offsetCol));
 		this.Ref = ref;
 	}
 	
 	return bIsDeleteCurSortCondition;
+};
+
+SortCondition.prototype.getSortType = function() {
+	var res = null;
+
+	if(true === this.ConditionDescending) {
+		res = Asc.c_oAscSortOptions.Ascending;
+	} else if(false === this.ConditionDescending) {
+		res = Asc.c_oAscSortOptions.Descending;
+	} else if(Asc.ESortBy.sortbyCellColor === this.ConditionSortBy) {
+		res = Asc.c_oAscSortOptions.ByColorFill;
+	} else if(Asc.ESortBy.sortbyCellColor === this.sortbyFontColor) {
+		res = Asc.c_oAscSortOptions.ByColorFont;
+	}
+
+	return res;
+};
+
+SortCondition.prototype.getSortColor = function() {
+	var res = null;
+
+	if(this.dxf) {
+		if(this.dxf.fill && this.dxf.fill.bg) {
+			res = this.dxf.fill.bg;
+		} else if(this.dxf.font && this.dxf.font.c) {
+			res = this.dxf.font.c;
+		}
+	}
+
+	return res;
+};
+
+SortCondition.prototype.applySort = function(type, ref, color) {
+	this.Ref = ref;
+
+	if(type === Asc.c_oAscSortOptions.ByColorFill || type === Asc.c_oAscSortOptions.ByColorFont) {
+		var newDxf;
+		if (type === Asc.c_oAscSortOptions.ByColorFill) {
+			newDxf = new AscCommonExcel.CellXfs();
+			newDxf.fill = new AscCommonExcel.Fill();
+			newDxf.fill.bg = color;
+			this.ConditionSortBy = Asc.ESortBy.sortbyCellColor;
+		} else {
+			newDxf.font = new AscCommonExcel.Font();
+			newDxf.font.setColor(color);
+			this.ConditionSortBy = Asc.ESortBy.sortbyFontColor;
+		}
+
+		this.dxf = AscCommonExcel.g_StyleCache.addXf(newDxf, true);
+	} else if(type === Asc.c_oAscSortOptions.Ascending || type === Asc.c_oAscSortOptions.Descending) {
+		this.ConditionDescending = type !== Asc.c_oAscSortOptions.Ascending;
+	}
+
 };
 
 function AutoFilterDateElem(start, end, dateTimeGrouping) {
@@ -7443,7 +7678,7 @@ AutoFilterDateElem.prototype.convertDateGroupItemToRange = function(oDateGroupIt
 	{
 		case 1://day
 		{
-			date = new Date(Date.UTC( oDateGroupItem.Year, oDateGroupItem.Month - 1, oDateGroupItem.Day));
+			date = new cDate(Date.UTC( oDateGroupItem.Year, oDateGroupItem.Month - 1, oDateGroupItem.Day));
 			startDate = date.getExcelDateWithTime();
 			date.addDays(1)
 			endDate = date.getExcelDateWithTime();
@@ -7451,19 +7686,19 @@ AutoFilterDateElem.prototype.convertDateGroupItemToRange = function(oDateGroupIt
 		}
 		case 2://hour
 		{
-			startDate = new Date(Date.UTC( oDateGroupItem.Year, oDateGroupItem.Month - 1, oDateGroupItem.Day, oDateGroupItem.Hour, 1)).getExcelDateWithTime();
-			endDate = new Date(Date.UTC( oDateGroupItem.Year, oDateGroupItem.Month - 1, oDateGroupItem.Day, oDateGroupItem.Hour, 59)).getExcelDateWithTime();
+			startDate = new cDate(Date.UTC( oDateGroupItem.Year, oDateGroupItem.Month - 1, oDateGroupItem.Day, oDateGroupItem.Hour, 1)).getExcelDateWithTime();
+			endDate = new cDate(Date.UTC( oDateGroupItem.Year, oDateGroupItem.Month - 1, oDateGroupItem.Day, oDateGroupItem.Hour, 59)).getExcelDateWithTime();
 			break;
 		}
 		case 3://minute
 		{
-			startDate = new Date(Date.UTC( oDateGroupItem.Year, oDateGroupItem.Month - 1, oDateGroupItem.Day, oDateGroupItem.Hour, oDateGroupItem.Minute, 1)).getExcelDateWithTime();
-			endDate = new Date(Date.UTC( oDateGroupItem.Year, oDateGroupItem.Month - 1, oDateGroupItem.Day, oDateGroupItem.Hour, oDateGroupItem.Minute, 59)).getExcelDateWithTime();
+			startDate = new cDate(Date.UTC( oDateGroupItem.Year, oDateGroupItem.Month - 1, oDateGroupItem.Day, oDateGroupItem.Hour, oDateGroupItem.Minute, 1)).getExcelDateWithTime();
+			endDate = new cDate(Date.UTC( oDateGroupItem.Year, oDateGroupItem.Month - 1, oDateGroupItem.Day, oDateGroupItem.Hour, oDateGroupItem.Minute, 59)).getExcelDateWithTime();
 			break;
 		}
 		case 4://month
 		{
-			date = new Date(Date.UTC( oDateGroupItem.Year, oDateGroupItem.Month - 1, 1));
+			date = new cDate(Date.UTC( oDateGroupItem.Year, oDateGroupItem.Month - 1, 1));
 			startDate = date.getExcelDateWithTime();
 			date.addMonths(1)
 			endDate = date.getExcelDateWithTime();
@@ -7471,13 +7706,13 @@ AutoFilterDateElem.prototype.convertDateGroupItemToRange = function(oDateGroupIt
 		}
 		case 5://second
 		{
-			startDate = new Date(Date.UTC( oDateGroupItem.Year, oDateGroupItem.Month - 1, oDateGroupItem.Day, oDateGroupItem.Hour, oDateGroupItem.Second)).getExcelDateWithTime();
-			endDate = new Date(Date.UTC( oDateGroupItem.Year, oDateGroupItem.Month - 1, oDateGroupItem.Day, oDateGroupItem.Hour, oDateGroupItem.Second )).getExcelDateWithTime();
+			startDate = new cDate(Date.UTC( oDateGroupItem.Year, oDateGroupItem.Month - 1, oDateGroupItem.Day, oDateGroupItem.Hour, oDateGroupItem.Second)).getExcelDateWithTime();
+			endDate = new cDate(Date.UTC( oDateGroupItem.Year, oDateGroupItem.Month - 1, oDateGroupItem.Day, oDateGroupItem.Hour, oDateGroupItem.Second )).getExcelDateWithTime();
 			break;
 		}
 		case 6://year
 		{
-			date = new Date(Date.UTC( oDateGroupItem.Year, 0));
+			date = new cDate(Date.UTC( oDateGroupItem.Year, 0));
 			startDate = date.getExcelDateWithTime();
 			date.addYears(1)
 			endDate = date.getExcelDateWithTime();
@@ -7490,6 +7725,356 @@ AutoFilterDateElem.prototype.convertDateGroupItemToRange = function(oDateGroupIt
 	this.dateTimeGrouping = oDateGroupItem.DateTimeGrouping;
 };
 
+	if (typeof Map === 'undefined') {
+		(function() {
+			var Map = function() {
+				this.storage = {};
+			};
+			Map.prototype = {
+				set: function(key, value) {
+					this.storage[key] = value;
+				},
+				get: function(key) {
+					return this.storage[key];
+				},
+				delete: function(key) {
+					delete this.storage[key];
+				},
+				has: function(key) {
+					return !!this.storage[key];
+				}
+			};
+
+			window.Map = Map;
+		})();
+	}
+	/**
+	 * @constructor
+	 * @memberOf AscCommonExcel
+	 */
+	function CSharedStrings () {
+		this.all = [];
+		this.text = new Map();
+		//
+		this.multiText = [];
+		this.multiTextIndex = [];
+	}
+
+	CSharedStrings.prototype.addText = function(text) {
+		var index = this.text.get(text);
+		if (undefined === index) {
+			this.all.push(text);
+			index = this.all.length;
+			this.text.set(text, index);
+			if (AscFonts.IsCheckSymbols) {
+				AscFonts.FontPickerByCharacter.getFontsByString(text);
+			}
+		}
+		return index;
+	};
+	CSharedStrings.prototype.addMultiText = function(multiText) {
+		var index, i;
+		for (i = 0; i < this.multiText.length; ++i) {
+			if (AscCommonExcel.isEqualMultiText(multiText, this.multiText[i])) {
+				index = this.multiTextIndex[i];
+				break;
+			}
+		}
+		if (undefined === index) {
+			this.all.push(multiText);
+			index = this.all.length;
+			this.multiText.push(multiText);
+			this.multiTextIndex.push(index);
+			if (AscFonts.IsCheckSymbols) {
+				for (i = 0; i < multiText.length; ++i) {
+					AscFonts.FontPickerByCharacter.getFontsByString(multiText[i].text);
+				}
+			}
+		}
+		return index;
+	};
+	CSharedStrings.prototype.get = function(index) {
+		return 1 <= index && index <= this.all.length ? this.all[index - 1] : null;
+	};
+	CSharedStrings.prototype.getCount = function() {
+		return this.all.length;
+	};
+	CSharedStrings.prototype.generateFontMap = function(oFontMap) {
+		for (var i = 0; i < this.multiText.length; ++i) {
+			var multiText = this.multiText[i];
+			for (var j = 0; j < multiText.length; ++j) {
+				var part = multiText[j];
+				if (null != part.format) {
+					oFontMap[part.format.getName()] = 1;
+				}
+			}
+		}
+	};
+
+	/**
+	 * @constructor
+	 * @memberOf AscCommonExcel
+	 */
+	function CWorkbookFormulas () {
+		this.all = [];
+	}
+
+	CWorkbookFormulas.prototype.add = function(formula) {
+		var index = formula.getIndexNumber();
+		if (undefined === index) {
+			this.all.push(formula);
+			index = this.all.length;
+			formula.setIndexNumber(index);
+		}
+		return formula;
+	};
+	CWorkbookFormulas.prototype.get = function(index) {
+		return 1 <= index && index <= this.all.length ? this.all[index - 1] : null;
+	};
+	CWorkbookFormulas.prototype.getCount = function() {
+		return this.all.length;
+	};
+
+
+	/** @constructor */
+	function asc_CPageMargins (ws) {
+		this.left = null;
+		this.right = null;
+		this.top = null;
+		this.bottom = null;
+
+		this.ws = ws;
+
+		return this;
+	}
+	asc_CPageMargins.prototype.init = function () {
+		if (null == this.left)
+			this.left = c_oAscPrintDefaultSettings.PageLeftField;
+		if (null == this.top)
+			this.top = c_oAscPrintDefaultSettings.PageTopField;
+		if (null == this.right)
+			this.right = c_oAscPrintDefaultSettings.PageRightField;
+		if (null == this.bottom)
+			this.bottom = c_oAscPrintDefaultSettings.PageBottomField;
+	};
+	asc_CPageMargins.prototype.asc_getLeft = function () { return this.left; };
+	asc_CPageMargins.prototype.asc_getRight = function () { return this.right; };
+	asc_CPageMargins.prototype.asc_getTop = function () { return this.top; };
+	asc_CPageMargins.prototype.asc_getBottom = function () { return this.bottom; };
+
+	asc_CPageMargins.prototype.asc_setLeft = function (newVal) {
+		var oldVal = this.left;
+		this.left = newVal;
+		if (this.ws && History.Is_On() && oldVal !== this.left) {
+			History.Add(AscCommonExcel.g_oUndoRedoLayout, AscCH.historyitem_Layout_Left, this.ws.getId(),
+				null, new UndoRedoData_Layout(oldVal, newVal));
+		}
+	};
+	asc_CPageMargins.prototype.asc_setRight = function (newVal) {
+		var oldVal = this.right;
+		this.right = newVal;
+		if (this.ws && History.Is_On() && oldVal !== this.right) {
+			History.Add(AscCommonExcel.g_oUndoRedoLayout, AscCH.historyitem_Layout_Right, this.ws.getId(),
+				null, new UndoRedoData_Layout(oldVal, newVal));
+		}
+	};
+	asc_CPageMargins.prototype.asc_setTop = function (newVal) {
+		var oldVal = this.top;
+		this.top = newVal;
+		if (this.ws && History.Is_On() && oldVal !== this.top) {
+			History.Add(AscCommonExcel.g_oUndoRedoLayout, AscCH.historyitem_Layout_Top, this.ws.getId(),
+				null, new UndoRedoData_Layout(oldVal, newVal));
+		}
+	};
+	asc_CPageMargins.prototype.asc_setBottom = function (newVal) {
+		var oldVal = this.bottom;
+		this.bottom = newVal;
+		if (this.ws && History.Is_On() && oldVal !== this.bottom) {
+			History.Add(AscCommonExcel.g_oUndoRedoLayout, AscCH.historyitem_Layout_Bottom, this.ws.getId(),
+				null, new UndoRedoData_Layout(oldVal, newVal));
+		}
+	};
+	asc_CPageMargins.prototype.asc_setOptions = function (obj) {
+		var prop;
+		prop = obj.asc_getLeft();
+		if(prop !== this.asc_getLeft()) {
+			this.asc_setLeft(prop);
+		}
+		prop = obj.asc_getRight();
+		if(prop !== this.asc_getRight()) {
+			this.asc_setRight(prop);
+		}
+		prop = obj.asc_getBottom();
+		if(prop !== this.asc_getBottom()) {
+			this.asc_setBottom(prop);
+		}
+		prop = obj.asc_getTop();
+		if(prop !== this.asc_getTop()) {
+			this.asc_setTop(prop);
+		}
+	};
+
+	/** @constructor */
+	function asc_CPageSetup(ws) {
+		this.orientation = c_oAscPrintDefaultSettings.PageOrientation;
+		this.width = c_oAscPrintDefaultSettings.PageWidth;
+		this.height = c_oAscPrintDefaultSettings.PageHeight;
+
+		this.fitToWidth = false; //ToDo can be a number
+		this.fitToHeight = false; //ToDo can be a number
+
+		// ToDo
+		this.blackAndWhite = false;
+		this.cellComments = 0; // none ST_CellComments
+		this.copies = 1;
+		this.draft = false;
+		this.errors = 0; // displayed ST_PrintError
+		this.firstPageNumber = -1;
+		this.pageOrder = 0; // downThenOver ST_PageOrder
+		this.scale = 100;
+		this.useFirstPageNumber = false;
+		this.usePrinterDefaults = true;
+
+		this.ws = ws;
+
+		return this;
+	}
+	asc_CPageSetup.prototype.asc_getOrientation = function () { return this.orientation; };
+	asc_CPageSetup.prototype.asc_getWidth = function () { return this.width; };
+	asc_CPageSetup.prototype.asc_getHeight = function () { return this.height; };
+
+	asc_CPageSetup.prototype.asc_setOrientation = function (newVal) {
+		var oldVal = this.orientation;
+		this.orientation = newVal;
+		if (this.ws && History.Is_On() && oldVal !== this.orientation) {
+			History.Add(AscCommonExcel.g_oUndoRedoLayout, AscCH.historyitem_Layout_Orientation, this.ws.getId(),
+				null, new UndoRedoData_Layout(oldVal, newVal));
+		}
+	};
+	asc_CPageSetup.prototype.asc_setWidth = function (newVal) {
+		var oldVal = this.width;
+		this.width = newVal;
+		if (this.ws && History.Is_On() && oldVal !== this.width) {
+			History.Add(AscCommonExcel.g_oUndoRedoLayout, AscCH.historyitem_Layout_Width, this.ws.getId(),
+				null, new UndoRedoData_Layout(oldVal, newVal));
+		}
+	};
+	asc_CPageSetup.prototype.asc_setHeight = function (newVal) {
+		var oldVal = this.height;
+		this.height = newVal;
+		if (this.ws && History.Is_On() && oldVal !== this.height) {
+			History.Add(AscCommonExcel.g_oUndoRedoLayout, AscCH.historyitem_Layout_Height, this.ws.getId(),
+				null, new UndoRedoData_Layout(oldVal, newVal));
+		}
+	};
+
+	asc_CPageSetup.prototype.asc_getFitToWidth = function () { return this.fitToWidth; };
+	asc_CPageSetup.prototype.asc_getFitToHeight = function () { return this.fitToHeight; };
+
+	asc_CPageSetup.prototype.asc_setFitToWidth = function (newVal) {
+		var oldVal = this.fitToWidth;
+		this.fitToWidth = newVal;
+		if (this.ws && History.Is_On() && oldVal !== this.fitToWidth) {
+			History.Add(AscCommonExcel.g_oUndoRedoLayout, AscCH.historyitem_Layout_FitToWidth, this.ws.getId(),
+				null, new UndoRedoData_Layout(oldVal, newVal));
+		}
+	};
+	asc_CPageSetup.prototype.asc_setFitToHeight = function (newVal) {
+		var oldVal = this.fitToHeight;
+		this.fitToHeight = newVal;
+		if (this.ws && History.Is_On() && oldVal !== this.fitToHeight) {
+			History.Add(AscCommonExcel.g_oUndoRedoLayout, AscCH.historyitem_Layout_FitToHeight, this.ws.getId(),
+				null, new UndoRedoData_Layout(oldVal, newVal));
+		}
+	};
+	asc_CPageSetup.prototype.asc_setOptions = function (obj) {
+
+		var prop;
+		prop = obj.asc_getOrientation();
+		if(prop !== this.asc_getOrientation()) {
+			this.asc_setOrientation(prop);
+		}
+		prop = obj.asc_getWidth();
+		if(prop !== this.asc_getWidth()) {
+			this.asc_setWidth(prop);
+		}
+		prop = obj.asc_getHeight();
+		if(prop !== this.asc_getHeight()) {
+			this.asc_setHeight(prop);
+		}
+		prop = obj.asc_getHeight();
+		if(prop !== this.asc_getHeight()) {
+			this.asc_setHeight(prop);
+		}
+		prop = obj.asc_getFitToWidth();
+		if(prop !== this.asc_getFitToWidth()) {
+			this.asc_setFitToWidth(prop);
+		}
+		prop = obj.asc_getFitToHeight();
+		if(prop !== this.asc_getFitToHeight()) {
+			this.asc_setFitToHeight(prop);
+		}
+	};
+
+	/** @constructor */
+	//этот объект используется как в модели, так и в меню для передачи измененных опций page layout
+	//если определена ws - это означает, что этот объект лежит в модели и при изменении его свойств идёт запись в историю
+	//в противном случае запись в историю не происходит
+	function asc_CPageOptions(ws) {
+		this.pageMargins = new asc_CPageMargins(ws);
+		this.pageSetup = new asc_CPageSetup(ws);
+		this.gridLines = null;
+		this.headings = null;
+		this.ws = ws;
+
+		return this;
+	}
+	asc_CPageOptions.prototype.init = function () {
+		this.pageMargins.init();
+
+		if (null == this.gridLines)
+			this.gridLines = c_oAscPrintDefaultSettings.PageGridLines;
+		if (null == this.headings)
+			this.headings = c_oAscPrintDefaultSettings.PageHeadings;
+	};
+	asc_CPageOptions.prototype.asc_getPageMargins = function () { return this.pageMargins; };
+	asc_CPageOptions.prototype.asc_getPageSetup = function () { return this.pageSetup; };
+	asc_CPageOptions.prototype.asc_getGridLines = function () { return this.gridLines; };
+	asc_CPageOptions.prototype.asc_getHeadings = function () { return this.headings; };
+	//методы только для меню, без добавляем в историю
+	asc_CPageOptions.prototype.asc_setPageMargins = function (val) { this.pageMargins = val; };
+	asc_CPageOptions.prototype.asc_setPageSetup = function (val) { this.pageSetup = val; };
+
+	asc_CPageOptions.prototype.asc_setGridLines = function (newVal) {
+		var oldVal = this.gridLines;
+		this.gridLines = newVal;
+		if (this.ws && History.Is_On() && oldVal !== this.gridLines) {
+			History.Add(AscCommonExcel.g_oUndoRedoLayout, AscCH.historyitem_Layout_GridLines, this.ws.getId(),
+				null, new UndoRedoData_Layout(oldVal, newVal));
+		}
+	};
+	asc_CPageOptions.prototype.asc_setHeadings = function (newVal) {
+		var oldVal = this.headings;
+		this.headings = newVal;
+		if (this.ws && History.Is_On() && oldVal !== this.headings) {
+			History.Add(AscCommonExcel.g_oUndoRedoLayout, AscCH.historyitem_Layout_Headings, this.ws.getId(),
+				null, new UndoRedoData_Layout(oldVal, newVal));
+		}
+	};
+	asc_CPageOptions.prototype.asc_setOptions = function (obj) {
+		var gridLines = obj.asc_getGridLines();
+		if(gridLines !== this.asc_getGridLines()) {
+			this.asc_setGridLines(gridLines);
+		}
+		var heading = obj.asc_getHeadings();
+		if(gridLines !== this.asc_getHeadings()) {
+			this.asc_setHeadings(heading);
+		}
+
+		this.asc_getPageMargins().asc_setOptions(obj.asc_getPageMargins());
+		this.asc_getPageSetup().asc_setOptions(obj.asc_getPageSetup());
+	};
+
 	//----------------------------------------------------------export----------------------------------------------------
 	var prot;
 	window['Asc'] = window['Asc'] || {};
@@ -7499,8 +8084,12 @@ AutoFilterDateElem.prototype.convertDateGroupItemToRange = function(oDateGroupIt
 	window['AscCommonExcel'].g_nColorTextDefault = g_nColorTextDefault;
 	window['AscCommonExcel'].g_nColorHyperlink = g_nColorHyperlink;
 	window['AscCommonExcel'].g_oThemeColorsDefaultModsSpreadsheet = g_oThemeColorsDefaultModsSpreadsheet;
+	window['AscCommonExcel'].g_StyleCache = g_StyleCache;
 	window['AscCommonExcel'].map_themeExcel_to_themePresentation = map_themeExcel_to_themePresentation;
+	window['AscCommonExcel'].g_nRowStructSize = g_nRowStructSize;
 	window['AscCommonExcel'].shiftGetBBox = shiftGetBBox;
+	window['AscCommonExcel'].getStringFromMultiText = getStringFromMultiText;
+	window['AscCommonExcel'].isEqualMultiText = isEqualMultiText;
 	window['AscCommonExcel'].RgbColor = RgbColor;
 	window['AscCommonExcel'].createRgbColor = createRgbColor;
 	window['AscCommonExcel'].ThemeColor = ThemeColor;
@@ -7516,73 +8105,71 @@ AutoFilterDateElem.prototype.convertDateGroupItemToRange = function(oDateGroupIt
 	window['AscCommonExcel'].CCellStyles = CCellStyles;
 	window['AscCommonExcel'].CCellStyle = CCellStyle;
 	window['AscCommonExcel'].StyleManager = StyleManager;
+	window['AscCommonExcel'].SheetMergedStyles = SheetMergedStyles;
 	window['AscCommonExcel'].Hyperlink = Hyperlink;
 	window['AscCommonExcel'].SheetFormatPr = SheetFormatPr;
 	window['AscCommonExcel'].Col = Col;
-	window['AscCommonExcel'].g_nRowFlag_empty = g_nRowFlag_empty;
-	window['AscCommonExcel'].g_nRowFlag_hd = g_nRowFlag_hd;
-	window['AscCommonExcel'].g_nRowFlag_CustomHeight = g_nRowFlag_CustomHeight;
-	window['AscCommonExcel'].g_nRowFlag_CalcHeight = g_nRowFlag_CalcHeight;
 	window['AscCommonExcel'].Row = Row;
-	window['AscCommonExcel'].CCellValueMultiText = CCellValueMultiText;
+	window['AscCommonExcel'].CMultiTextElem = CMultiTextElem;
 	window['AscCommonExcel'].CCellValue = CCellValue;
 	window['AscCommonExcel'].RangeDataManagerElem = RangeDataManagerElem;
 	window['AscCommonExcel'].RangeDataManager = RangeDataManager;
-	window['AscCommonExcel'].CellArea = CellArea;
+	window['AscCommonExcel'].CSharedStrings = CSharedStrings;
+	window['AscCommonExcel'].CWorkbookFormulas = CWorkbookFormulas;
 	window["Asc"]["sparklineGroup"] = window['AscCommonExcel'].sparklineGroup = sparklineGroup;
 	prot = sparklineGroup.prototype;
-	prot["asc_getId"]							= prot.asc_getId;
-	prot["asc_getType"]						= prot.asc_getType;
-	prot["asc_getLineWeight"]			= prot.asc_getLineWeight;
-	prot["asc_getDisplayEmpty"]		= prot.asc_getDisplayEmpty;
-	prot["asc_getMarkersPoint"]		= prot.asc_getMarkersPoint;
-	prot["asc_getHighPoint"]			= prot.asc_getHighPoint;
-	prot["asc_getLowPoint"]				= prot.asc_getLowPoint;
-	prot["asc_getFirstPoint"]			= prot.asc_getFirstPoint;
-	prot["asc_getLastPoint"]			= prot.asc_getLastPoint;
-	prot["asc_getNegativePoint"]	= prot.asc_getNegativePoint;
-	prot["asc_getDisplayXAxis"]		= prot.asc_getDisplayXAxis;
-	prot["asc_getDisplayHidden"]	= prot.asc_getDisplayHidden;
-	prot["asc_getMinAxisType"]		= prot.asc_getMinAxisType;
-	prot["asc_getMaxAxisType"]		= prot.asc_getMaxAxisType;
-	prot["asc_getRightToLeft"]		= prot.asc_getRightToLeft;
-	prot["asc_getManualMax"]			= prot.asc_getManualMax;
-	prot["asc_getManualMin"]			= prot.asc_getManualMin;
-	prot["asc_getColorSeries"]		= prot.asc_getColorSeries;
-	prot["asc_getColorNegative"]	= prot.asc_getColorNegative;
-	prot["asc_getColorAxis"]			= prot.asc_getColorAxis;
-	prot["asc_getColorMarkers"]		= prot.asc_getColorMarkers;
-	prot["asc_getColorFirst"]			= prot.asc_getColorFirst;
-	prot["asc_getColorLast"]			= prot.asc_getColorLast;
-	prot["asc_getColorHigh"]			= prot.asc_getColorHigh;
-	prot["asc_getColorLow"]				= prot.asc_getColorLow;
-	prot["asc_getDataRanges"]			= prot.asc_getDataRanges;
-	prot["asc_setType"]					= prot.asc_setType;
-	prot["asc_setLineWeight"]			= prot.asc_setLineWeight;
-	prot["asc_setDisplayEmpty"]		= prot.asc_setDisplayEmpty;
-	prot["asc_setMarkersPoint"]		= prot.asc_setMarkersPoint;
-	prot["asc_setHighPoint"]			= prot.asc_setHighPoint;
-	prot["asc_setLowPoint"]				= prot.asc_setLowPoint;
-	prot["asc_setFirstPoint"]			= prot.asc_setFirstPoint;
-	prot["asc_setLastPoint"]			= prot.asc_setLastPoint;
-	prot["asc_setNegativePoint"]	= prot.asc_setNegativePoint;
-	prot["asc_setDisplayXAxis"]		= prot.asc_setDisplayXAxis;
-	prot["asc_setDisplayHidden"]	= prot.asc_setDisplayHidden;
-	prot["asc_setMinAxisType"]		= prot.asc_setMinAxisType;
-	prot["asc_setMaxAxisType"]		= prot.asc_setMaxAxisType;
-	prot["asc_setRightToLeft"]		= prot.asc_setRightToLeft;
-	prot["asc_setManualMax"]			= prot.asc_setManualMax;
-	prot["asc_setManualMin"]			= prot.asc_setManualMin;
-	prot["asc_setColorSeries"]		= prot.asc_setColorSeries;
-	prot["asc_setColorNegative"]	= prot.asc_setColorNegative;
-	prot["asc_setColorAxis"]			= prot.asc_setColorAxis;
-	prot["asc_setColorMarkers"]		= prot.asc_setColorMarkers;
-	prot["asc_setColorFirst"]			= prot.asc_setColorFirst;
-	prot["asc_setColorLast"]			= prot.asc_setColorLast;
-	prot["asc_setColorHigh"]			= prot.asc_setColorHigh;
-	prot["asc_setColorLow"]				= prot.asc_setColorLow;
-	prot["asc_getStyles"]				= prot.asc_getStyles;
-	prot["asc_setStyle"]				= prot.asc_setStyle;
+	prot["asc_getId"] = prot.asc_getId;
+	prot["asc_getType"] = prot.asc_getType;
+	prot["asc_getLineWeight"] = prot.asc_getLineWeight;
+	prot["asc_getDisplayEmpty"] = prot.asc_getDisplayEmpty;
+	prot["asc_getMarkersPoint"] = prot.asc_getMarkersPoint;
+	prot["asc_getHighPoint"] = prot.asc_getHighPoint;
+	prot["asc_getLowPoint"] = prot.asc_getLowPoint;
+	prot["asc_getFirstPoint"] = prot.asc_getFirstPoint;
+	prot["asc_getLastPoint"] = prot.asc_getLastPoint;
+	prot["asc_getNegativePoint"] = prot.asc_getNegativePoint;
+	prot["asc_getDisplayXAxis"] = prot.asc_getDisplayXAxis;
+	prot["asc_getDisplayHidden"] = prot.asc_getDisplayHidden;
+	prot["asc_getMinAxisType"] = prot.asc_getMinAxisType;
+	prot["asc_getMaxAxisType"] = prot.asc_getMaxAxisType;
+	prot["asc_getRightToLeft"] = prot.asc_getRightToLeft;
+	prot["asc_getManualMax"] = prot.asc_getManualMax;
+	prot["asc_getManualMin"] = prot.asc_getManualMin;
+	prot["asc_getColorSeries"] = prot.asc_getColorSeries;
+	prot["asc_getColorNegative"] = prot.asc_getColorNegative;
+	prot["asc_getColorAxis"] = prot.asc_getColorAxis;
+	prot["asc_getColorMarkers"] = prot.asc_getColorMarkers;
+	prot["asc_getColorFirst"] = prot.asc_getColorFirst;
+	prot["asc_getColorLast"] = prot.asc_getColorLast;
+	prot["asc_getColorHigh"] = prot.asc_getColorHigh;
+	prot["asc_getColorLow"] = prot.asc_getColorLow;
+	prot["asc_getDataRanges"] = prot.asc_getDataRanges;
+	prot["asc_setType"] = prot.asc_setType;
+	prot["asc_setLineWeight"] = prot.asc_setLineWeight;
+	prot["asc_setDisplayEmpty"] = prot.asc_setDisplayEmpty;
+	prot["asc_setMarkersPoint"] = prot.asc_setMarkersPoint;
+	prot["asc_setHighPoint"] = prot.asc_setHighPoint;
+	prot["asc_setLowPoint"] = prot.asc_setLowPoint;
+	prot["asc_setFirstPoint"] = prot.asc_setFirstPoint;
+	prot["asc_setLastPoint"] = prot.asc_setLastPoint;
+	prot["asc_setNegativePoint"] = prot.asc_setNegativePoint;
+	prot["asc_setDisplayXAxis"] = prot.asc_setDisplayXAxis;
+	prot["asc_setDisplayHidden"] = prot.asc_setDisplayHidden;
+	prot["asc_setMinAxisType"] = prot.asc_setMinAxisType;
+	prot["asc_setMaxAxisType"] = prot.asc_setMaxAxisType;
+	prot["asc_setRightToLeft"] = prot.asc_setRightToLeft;
+	prot["asc_setManualMax"] = prot.asc_setManualMax;
+	prot["asc_setManualMin"] = prot.asc_setManualMin;
+	prot["asc_setColorSeries"] = prot.asc_setColorSeries;
+	prot["asc_setColorNegative"] = prot.asc_setColorNegative;
+	prot["asc_setColorAxis"] = prot.asc_setColorAxis;
+	prot["asc_setColorMarkers"] = prot.asc_setColorMarkers;
+	prot["asc_setColorFirst"] = prot.asc_setColorFirst;
+	prot["asc_setColorLast"] = prot.asc_setColorLast;
+	prot["asc_setColorHigh"] = prot.asc_setColorHigh;
+	prot["asc_setColorLow"] = prot.asc_setColorLow;
+	prot["asc_getStyles"] = prot.asc_getStyles;
+	prot["asc_setStyle"] = prot.asc_setStyle;
 	window['AscCommonExcel'].sparkline = sparkline;
 	window['AscCommonExcel'].TablePart = TablePart;
 	window['AscCommonExcel'].AutoFilter = AutoFilter;
@@ -7596,56 +8183,92 @@ AutoFilterDateElem.prototype.convertDateGroupItemToRange = function(oDateGroupIt
 	window['AscCommonExcel'].SortCondition = SortCondition;
 	window['AscCommonExcel'].AutoFilterDateElem = AutoFilterDateElem;
 
-window["Asc"]["CustomFilters"]			= window["Asc"].CustomFilters = CustomFilters;
-prot									= CustomFilters.prototype;
-prot["asc_getAnd"]						= prot.asc_getAnd;
-prot["asc_getCustomFilters"]			= prot.asc_getCustomFilters;
-prot["asc_setAnd"]						= prot.asc_setAnd;
-prot["asc_setCustomFilters"]			= prot.asc_setCustomFilters;
+	window["Asc"]["CustomFilters"]			= window["Asc"].CustomFilters = CustomFilters;
+	prot									= CustomFilters.prototype;
+	prot["asc_getAnd"]						= prot.asc_getAnd;
+	prot["asc_getCustomFilters"]			= prot.asc_getCustomFilters;
+	prot["asc_setAnd"]						= prot.asc_setAnd;
+	prot["asc_setCustomFilters"]			= prot.asc_setCustomFilters;
 
-window["Asc"]["CustomFilter"]			= window["Asc"].CustomFilter = CustomFilter;
-prot									= CustomFilter.prototype;
-prot["asc_getOperator"]					= prot.asc_getOperator;
-prot["asc_getVal"]						= prot.asc_getVal;
-prot["asc_setOperator"]					= prot.asc_setOperator;
-prot["asc_setVal"]						= prot.asc_setVal;
+	window["Asc"]["CustomFilter"]			= window["Asc"].CustomFilter = CustomFilter;
+	prot									= CustomFilter.prototype;
+	prot["asc_getOperator"]					= prot.asc_getOperator;
+	prot["asc_getVal"]						= prot.asc_getVal;
+	prot["asc_setOperator"]					= prot.asc_setOperator;
+	prot["asc_setVal"]						= prot.asc_setVal;
 
-window["Asc"]["DynamicFilter"]			= window["Asc"].DynamicFilter = DynamicFilter;
-prot									= DynamicFilter.prototype;
-prot["asc_getType"]						= prot.asc_getType;
-prot["asc_getVal"]						= prot.asc_getVal;
-prot["asc_getMaxVal"]					= prot.asc_getMaxVal;
-prot["asc_setType"]						= prot.asc_setType;
-prot["asc_setVal"]						= prot.asc_setVal;
-prot["asc_setMaxVal"]					= prot.asc_setMaxVal;
+	window["Asc"]["DynamicFilter"]			= window["Asc"].DynamicFilter = DynamicFilter;
+	prot									= DynamicFilter.prototype;
+	prot["asc_getType"]						= prot.asc_getType;
+	prot["asc_getVal"]						= prot.asc_getVal;
+	prot["asc_getMaxVal"]					= prot.asc_getMaxVal;
+	prot["asc_setType"]						= prot.asc_setType;
+	prot["asc_setVal"]						= prot.asc_setVal;
+	prot["asc_setMaxVal"]					= prot.asc_setMaxVal;
 
-window["Asc"]["ColorFilter"]			= window["Asc"].ColorFilter = ColorFilter;
-prot									= ColorFilter.prototype;
-prot["asc_getCellColor"]				= prot.asc_getCellColor;
-prot["asc_getCColor"]					= prot.asc_getCColor;
-prot["asc_getDxf"]						= prot.asc_getDxf;
-prot["asc_setCellColor"]				= prot.asc_setCellColor;
-prot["asc_setDxf"]						= prot.asc_setDxf;
-prot["asc_setCColor"]					= prot.asc_setCColor;
+	window["Asc"]["ColorFilter"]			= window["Asc"].ColorFilter = ColorFilter;
+	prot									= ColorFilter.prototype;
+	prot["asc_getCellColor"]				= prot.asc_getCellColor;
+	prot["asc_getCColor"]					= prot.asc_getCColor;
+	prot["asc_getDxf"]						= prot.asc_getDxf;
+	prot["asc_setCellColor"]				= prot.asc_setCellColor;
+	prot["asc_setDxf"]						= prot.asc_setDxf;
+	prot["asc_setCColor"]					= prot.asc_setCColor;
 
-window["Asc"]["Top10"]					= window["Asc"].Top10 = Top10;
-prot									= Top10.prototype;
-prot["asc_getFilterVal"]				= prot.asc_getFilterVal;
-prot["asc_getPercent"]					= prot.asc_getPercent;
-prot["asc_getTop"]						= prot.asc_getTop;
-prot["asc_getVal"]						= prot.asc_getVal;
-prot["asc_setFilterVal"]				= prot.asc_setFilterVal;
-prot["asc_setPercent"]					= prot.asc_setPercent;
-prot["asc_setTop"]						= prot.asc_setTop;
-prot["asc_setVal"]						= prot.asc_setVal;
+	window["Asc"]["Top10"]					= window["Asc"].Top10 = Top10;
+	prot									= Top10.prototype;
+	prot["asc_getFilterVal"]				= prot.asc_getFilterVal;
+	prot["asc_getPercent"]					= prot.asc_getPercent;
+	prot["asc_getTop"]						= prot.asc_getTop;
+	prot["asc_getVal"]						= prot.asc_getVal;
+	prot["asc_setFilterVal"]				= prot.asc_setFilterVal;
+	prot["asc_setPercent"]					= prot.asc_setPercent;
+	prot["asc_setTop"]						= prot.asc_setTop;
+	prot["asc_setVal"]						= prot.asc_setVal;
 
-window["Asc"]["TreeRBNode"]			= window["Asc"].TreeRBNode = TreeRBNode;
-window["Asc"]["TreeRB"]			= window["Asc"].TreeRB = TreeRB;
-prot									= TreeRB.prototype;
-prot["insertOrGet"]						= prot.insertOrGet;
-prot["deleteNode"]			= prot.deleteNode;
-prot["enumerate"]						= prot.enumerate;
-prot["getElem"]			= prot.getElem;
-prot["getNodeAll"]			= prot.getNodeAll;
-prot["isEmpty"]			= prot.getNodeAll;
+	window["Asc"]["TreeRBNode"]			= window["Asc"].TreeRBNode = TreeRBNode;
+	window["Asc"]["TreeRB"]			= window["Asc"].TreeRB = TreeRB;
+	prot									= TreeRB.prototype;
+	prot["insertOrGet"]						= prot.insertOrGet;
+	prot["deleteNode"]			= prot.deleteNode;
+	prot["enumerate"]						= prot.enumerate;
+	prot["getElem"]			= prot.getElem;
+	prot["getNodeAll"]			= prot.getNodeAll;
+	prot["isEmpty"]			= prot.getNodeAll;
+
+
+	window["Asc"]["asc_CPageMargins"] = window["Asc"].asc_CPageMargins = asc_CPageMargins;
+	prot = asc_CPageMargins.prototype;
+	prot["asc_getLeft"] = prot.asc_getLeft;
+	prot["asc_getRight"] = prot.asc_getRight;
+	prot["asc_getTop"] = prot.asc_getTop;
+	prot["asc_getBottom"] = prot.asc_getBottom;
+	prot["asc_setLeft"] = prot.asc_setLeft;
+	prot["asc_setRight"] = prot.asc_setRight;
+	prot["asc_setTop"] = prot.asc_setTop;
+	prot["asc_setBottom"] = prot.asc_setBottom;
+
+	window["Asc"]["asc_CPageSetup"] = window["Asc"].asc_CPageSetup = asc_CPageSetup;
+	prot = asc_CPageSetup.prototype;
+	prot["asc_getOrientation"] = prot.asc_getOrientation;
+	prot["asc_getWidth"] = prot.asc_getWidth;
+	prot["asc_getHeight"] = prot.asc_getHeight;
+	prot["asc_setOrientation"] = prot.asc_setOrientation;
+	prot["asc_setWidth"] = prot.asc_setWidth;
+	prot["asc_setHeight"] = prot.asc_setHeight;
+	prot["asc_getFitToWidth"] = prot.asc_getFitToWidth;
+	prot["asc_getFitToHeight"] = prot.asc_getFitToHeight;
+	prot["asc_setFitToWidth"] = prot.asc_setFitToWidth;
+	prot["asc_setFitToHeight"] = prot.asc_setFitToHeight;
+
+	window["Asc"]["asc_CPageOptions"] = window["Asc"].asc_CPageOptions = asc_CPageOptions;
+	prot = asc_CPageOptions.prototype;
+	prot["asc_getPageMargins"] = prot.asc_getPageMargins;
+	prot["asc_getPageSetup"] = prot.asc_getPageSetup;
+	prot["asc_getGridLines"] = prot.asc_getGridLines;
+	prot["asc_getHeadings"] = prot.asc_getHeadings;
+	prot["asc_setPageMargins"] = prot.asc_setPageMargins;
+	prot["asc_setPageSetup"] = prot.asc_setPageSetup;
+	prot["asc_setGridLines"] = prot.asc_setGridLines;
+	prot["asc_setHeadings"] = prot.asc_setHeadings;
 })(window);

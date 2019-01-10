@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2018
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -744,7 +744,7 @@ CRadical.prototype.raw_SetHideDegree = function(Value)
         if(this.Pr.type === SQUARE_RADICAL && this.CurPos == 0) // находимся в степени
         {
             this.CurPos = 1;
-            this.Base.Cursor_MoveToStartPos();
+            this.Base.MoveCursorToStartPos();
         }
     }
 };

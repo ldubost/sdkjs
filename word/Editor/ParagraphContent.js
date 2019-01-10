@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2018
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -105,6 +105,10 @@ var para_FootnoteRef               = 0x0040; // Номер сноски (дол�
 var para_Separator                 = 0x0041; // Разделить, который используется для сносок
 var para_ContinuationSeparator     = 0x0042; // Большой разделитель, который используется для сносок
 var para_PageCount                 = 0x0043; // Количество страниц
+var para_InlineLevelSdt            = 0x0044; // Внутристроковый контейнер
+var para_FieldChar                 = 0x0045;
+var para_InstrText                 = 0x0046;
+var para_Bookmark                  = 0x0047;
 
 var break_Line   = 0x01;
 var break_Page   = 0x02;
@@ -114,27 +118,6 @@ var nbsp_charcode = 0x00A0;
 
 var nbsp_string = String.fromCharCode(0x00A0);
 var sp_string   = String.fromCharCode(0x0032);
-
-var g_aPunctuation =
-[
-	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-	0, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 1, 1,
-	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1,
-	1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1,
-	1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0
-];
-
-g_aPunctuation[0x002D] = 1; // символ -
-g_aPunctuation[0x00AB] = 1; // символ «
-g_aPunctuation[0x00BB] = 1; // символ »
-g_aPunctuation[0x2013] = 1; // символ –
-g_aPunctuation[0x201C] = 1; // символ “
-g_aPunctuation[0x201D] = 1; // символ ”
-g_aPunctuation[0x2026] = 1; // символ ...
-
 
 var g_aNumber     = [];
 g_aNumber[0x0030] = 1;
@@ -148,9 +131,27 @@ g_aNumber[0x0037] = 1;
 g_aNumber[0x0038] = 1;
 g_aNumber[0x0039] = 1;
 
+// Suitable Run content for the paragraph simple changes
+var g_oSRCFPSC             = [];
+g_oSRCFPSC[para_Text]      = 1;
+g_oSRCFPSC[para_Space]     = 1;
+g_oSRCFPSC[para_End]       = 1;
+g_oSRCFPSC[para_Tab]       = 1;
+g_oSRCFPSC[para_Sym]       = 1;
+g_oSRCFPSC[para_PageCount] = 1;
+g_oSRCFPSC[para_FieldChar] = 1;
+g_oSRCFPSC[para_InstrText] = 1;
+g_oSRCFPSC[para_Bookmark]  = 1;
+
 
 var g_aSpecialSymbols     = [];
 g_aSpecialSymbols[0x00AE] = 1;
+
+
+// Список символов, которые не могут находиться в конце строки
+// A characters that can not be at the end of a line
+var g_aCCNBAEL = [];
+
 
 var PARATEXT_FLAGS_MASK               = 0xFFFFFFFF; // 4 байта
 var PARATEXT_FLAGS_FONTKOEF_SCRIPT    = 0x00000001; // 0 бит
@@ -177,7 +178,7 @@ function CRunElementBase()
 CRunElementBase.prototype.Type             = para_RunBase;
 CRunElementBase.prototype.Get_Type         = function()
 {
-	return para_RunBase;
+	return this.Type;
 };
 CRunElementBase.prototype.Draw             = function(X, Y, Context, PDSE)
 {
@@ -223,353 +224,363 @@ CRunElementBase.prototype.GetType = function()
 {
 	return this.Type;
 };
-
-// Класс ParaText
-function ParaText(value)
+/**
+ * Проверять ли автозамену на вводе данного элемента
+ * @returns {boolean}
+ */
+CRunElementBase.prototype.CanStartAutoCorrect = function()
 {
-    this.Value        = (undefined !== value ? value.charCodeAt(0) : 0x00);    
-    this.Width        = 0x00000000 | 0;
-    this.WidthVisible = 0x00000000 | 0;
-    this.Flags        = 0x00000000 | 0;
-    
-    this.Set_SpaceAfter(45 === this.Value); // charCode символа "-"
-}
-
-ParaText.prototype =
-{
-    Type : para_Text,
-
-    Get_Type : function()
-    {
-        return para_Text;
-    },
-
-    Set_CharCode : function(CharCode)
-    {
-        this.Value = CharCode;
-        this.Set_SpaceAfter(45 === this.Value); // charCode символа "-"
-    },
-    
-    Draw : function(X, Y, Context)
-    {
-        var CharCode = this.Value;
-
-        var FontKoef = 1;
-        if ( this.Flags & PARATEXT_FLAGS_FONTKOEF_SCRIPT && this.Flags & PARATEXT_FLAGS_FONTKOEF_SMALLCAPS )
-            FontKoef = smallcaps_and_script_koef;
-        else if ( this.Flags & PARATEXT_FLAGS_FONTKOEF_SCRIPT )
-            FontKoef = vertalign_Koef_Size;
-        else if ( this.Flags & PARATEXT_FLAGS_FONTKOEF_SMALLCAPS )
-            FontKoef = smallcaps_Koef;
-
-        Context.SetFontSlot(((this.Flags >> 8) & 0xFF), FontKoef);
-        
-        var ResultCharCode = (this.Flags & PARATEXT_FLAGS_CAPITALS ? (String.fromCharCode(CharCode).toUpperCase()).charCodeAt(0) : CharCode);
-
-        if ( true === this.Is_NBSP() && editor && editor.ShowParaMarks )
-        {
-            Context.FillText(X, Y, String.fromCharCode(0x00B0));
-        }
-        else
-            Context.FillTextCode(X, Y, ResultCharCode);
-    },
-
-    Measure : function(Context, TextPr)
-    {
-        var bCapitals = false;
-        var CharCode = this.Value;
-        var ResultCharCode = CharCode;
-        
-        if (true === TextPr.Caps || true === TextPr.SmallCaps)
-        {
-            this.Flags |= PARATEXT_FLAGS_CAPITALS;
-            ResultCharCode = (String.fromCharCode(CharCode).toUpperCase()).charCodeAt(0);
-            bCapitals = (ResultCharCode === CharCode ? true : false);
-        }
-        else
-        {
-            this.Flags &= PARATEXT_FLAGS_NON_CAPITALS;
-            bCapitals = false;
-        }
-
-        if (TextPr.VertAlign !== AscCommon.vertalign_Baseline)
-            this.Flags |= PARATEXT_FLAGS_FONTKOEF_SCRIPT;
-        else
-            this.Flags &= PARATEXT_FLAGS_NON_FONTKOEF_SCRIPT;
-
-        if (true != TextPr.Caps && true === TextPr.SmallCaps && false === bCapitals)
-            this.Flags |= PARATEXT_FLAGS_FONTKOEF_SMALLCAPS;
-        else
-            this.Flags &= PARATEXT_FLAGS_NON_FONTKOEF_SMALLCAPS;
-
-        var Hint = TextPr.RFonts.Hint;
-        var bCS  = TextPr.CS;
-        var bRTL = TextPr.RTL;
-        var lcid = TextPr.Lang.EastAsia;
-
-        var FontSlot = g_font_detector.Get_FontClass(ResultCharCode, Hint, lcid, bCS, bRTL);
-
-        var Flags_0Byte = (this.Flags >>  0) & 0xFF;
-        var Flags_2Byte = (this.Flags >> 16) & 0xFF;
-
-        this.Flags = Flags_0Byte | ((FontSlot & 0xFF) << 8) | (Flags_2Byte << 16);
-
-        var FontKoef = 1;
-        if ( this.Flags & PARATEXT_FLAGS_FONTKOEF_SCRIPT && this.Flags & PARATEXT_FLAGS_FONTKOEF_SMALLCAPS )
-            FontKoef = smallcaps_and_script_koef;
-        else if ( this.Flags & PARATEXT_FLAGS_FONTKOEF_SCRIPT )
-            FontKoef = vertalign_Koef_Size;
-        else if ( this.Flags & PARATEXT_FLAGS_FONTKOEF_SMALLCAPS )
-            FontKoef = smallcaps_Koef;
-
-        // Разрешенные размеры шрифта только либо целое, либо целое/2. Даже после применения FontKoef, поэтому
-        // мы должны подкрутить коэффициент так, чтобы после домножения на него, у на получался разрешенный размер.
-        var FontSize = TextPr.FontSize;
-        if (1 !== FontKoef)
-            FontKoef = (((FontSize * FontKoef * 2 + 0.5) | 0) / 2) / FontSize;
-
-        Context.SetFontSlot(FontSlot, FontKoef);
-        var Temp = Context.MeasureCode(ResultCharCode);
-        
-        var ResultWidth   = (Math.max((Temp.Width + TextPr.Spacing), 0) * TEXTWIDTH_DIVIDER) | 0;
-                
-        this.Width        = ResultWidth;
-        this.WidthVisible = ResultWidth;
-    },
-
-    Get_Width : function()
-    {
-        return (this.Width / TEXTWIDTH_DIVIDER);
-    },
-    
-    Get_WidthVisible : function()
-    {
-        return (this.WidthVisible / TEXTWIDTH_DIVIDER);
-    },
-    
-    Set_WidthVisible : function(WidthVisible)
-    {
-        this.WidthVisible = (WidthVisible * TEXTWIDTH_DIVIDER) | 0;
-    },
-
-    Is_RealContent : function()
-    {
-        return true;
-    },
-
-    Can_AddNumbering : function()
-    {
-        return true;
-    },
-
-    Copy : function()
-    {
-        return new ParaText(String.fromCharCode(this.Value));
-    },
-
-    Is_NBSP : function()
-    {
-        return ( this.Value === nbsp_charcode ? true : false);
-    },
-
-    Is_Punctuation : function()
-    {
-        if ( 1 === g_aPunctuation[this.Value] )
-            return true;
-
-        return false;
-    },
-
-    Is_Number : function()
-    {
-        if ( 1 === g_aNumber[this.Value] )
-            return true;
-
-        return false;
-    },
-
-    Is_SpecialSymbol : function()
-    {
-        if ( 1 === g_aSpecialSymbols[this.Value] )
-            return true;
-
-        return false;
-    },
-    
-    Is_SpaceAfter : function()
-    {
-        return (this.Flags & PARATEXT_FLAGS_SPACEAFTER ? true : false); 
-    },
-
-    Get_CharForSpellCheck : function(bCaps)
-    {
-        // Закрывающуюся кавычку (0x2019), посылаем как апостроф
-
-        if (0x2019 === this.Value)
-            return String.fromCharCode(0x0027);
-        else
-        {
-            if (true === bCaps)
-                return (String.fromCharCode(this.Value)).toUpperCase();
-            else
-                return String.fromCharCode(this.Value);
-        }
-    },
-    
-    Set_SpaceAfter : function(bSpaceAfter)
-    {
-        if (bSpaceAfter )
-            this.Flags |= PARATEXT_FLAGS_SPACEAFTER;
-        else
-            this.Flags &= PARATEXT_FLAGS_NON_SPACEAFTER;
-    },
-
-    Is_NoBreakHyphen : function()
-    {
-        if (false === this.Is_SpaceAfter() && (this.Value === 0x002D || this.Value === 0x2013))
-            return true;
-
-        return false;
-    },
-
-    Write_ToBinary : function(Writer)
-    {
-        // Long : Type
-        // Long : Value
-
-        Writer.WriteLong( para_Text );
-        Writer.WriteLong( this.Value );
-    },
-
-    Read_FromBinary : function(Reader)
-    {
-        this.Value = Reader.GetLong();
-        this.Set_SpaceAfter(45 === this.Value);
-    }
+	return false;
 };
 
-// Класс ParaSpace
+/**
+ * Класс представляющий текстовый символ
+ * @param {Number} nCharCode - Юникодное значение символа
+ * @constructor
+ * @extends {CRunElementBase}
+ */
+function ParaText(nCharCode)
+{
+	CRunElementBase.call(this);
+
+	this.Value        = undefined !== nCharCode ? nCharCode : 0x00;
+	this.Width        = 0x00000000 | 0;
+	this.WidthVisible = 0x00000000 | 0;
+	this.Flags        = 0x00000000 | 0;
+
+	this.Set_SpaceAfter(this.private_IsSpaceAfter());
+
+	if (AscFonts.IsCheckSymbols)
+		AscFonts.FontPickerByCharacter.getFontBySymbol(this.Value);
+}
+ParaText.prototype = Object.create(CRunElementBase.prototype);
+ParaText.prototype.constructor = ParaText;
+
+ParaText.prototype.Type = para_Text;
+ParaText.prototype.Set_CharCode = function(CharCode)
+{
+	this.Value = CharCode;
+	this.Set_SpaceAfter(this.private_IsSpaceAfter());
+
+	if (AscFonts.IsCheckSymbols)
+		AscFonts.FontPickerByCharacter.getFontBySymbol(this.Value);
+};
+ParaText.prototype.Draw = function(X, Y, Context)
+{
+	var CharCode = this.Value;
+
+	var FontKoef = 1;
+	if (this.Flags & PARATEXT_FLAGS_FONTKOEF_SCRIPT && this.Flags & PARATEXT_FLAGS_FONTKOEF_SMALLCAPS)
+		FontKoef = smallcaps_and_script_koef;
+	else if (this.Flags & PARATEXT_FLAGS_FONTKOEF_SCRIPT)
+		FontKoef = vertalign_Koef_Size;
+	else if (this.Flags & PARATEXT_FLAGS_FONTKOEF_SMALLCAPS)
+		FontKoef = smallcaps_Koef;
+
+	Context.SetFontSlot(((this.Flags >> 8) & 0xFF), FontKoef);
+
+	var ResultCharCode = (this.Flags & PARATEXT_FLAGS_CAPITALS ? (String.fromCharCode(CharCode).toUpperCase()).charCodeAt(0) : CharCode);
+
+	if (true !== this.Is_NBSP())
+		Context.FillTextCode(X, Y, ResultCharCode);
+	else if (editor && editor.ShowParaMarks)
+		Context.FillText(X, Y, String.fromCharCode(0x00B0));
+};
+ParaText.prototype.Measure = function(Context, TextPr)
+{
+	var bCapitals      = false;
+	var CharCode       = this.Value;
+	var ResultCharCode = CharCode;
+
+	if (true === TextPr.Caps || true === TextPr.SmallCaps)
+	{
+		this.Flags |= PARATEXT_FLAGS_CAPITALS;
+		ResultCharCode = (String.fromCharCode(CharCode).toUpperCase()).charCodeAt(0);
+		bCapitals      = (ResultCharCode === CharCode ? true : false);
+	}
+	else
+	{
+		this.Flags &= PARATEXT_FLAGS_NON_CAPITALS;
+		bCapitals = false;
+	}
+
+	if (TextPr.VertAlign !== AscCommon.vertalign_Baseline)
+		this.Flags |= PARATEXT_FLAGS_FONTKOEF_SCRIPT;
+	else
+		this.Flags &= PARATEXT_FLAGS_NON_FONTKOEF_SCRIPT;
+
+	if (true != TextPr.Caps && true === TextPr.SmallCaps && false === bCapitals)
+		this.Flags |= PARATEXT_FLAGS_FONTKOEF_SMALLCAPS;
+	else
+		this.Flags &= PARATEXT_FLAGS_NON_FONTKOEF_SMALLCAPS;
+
+	var Hint = TextPr.RFonts.Hint;
+	var bCS  = TextPr.CS;
+	var bRTL = TextPr.RTL;
+	var lcid = TextPr.Lang.EastAsia;
+
+	var FontSlot = g_font_detector.Get_FontClass(ResultCharCode, Hint, lcid, bCS, bRTL);
+
+	var Flags_0Byte = (this.Flags >> 0) & 0xFF;
+	var Flags_2Byte = (this.Flags >> 16) & 0xFF;
+
+	this.Flags = Flags_0Byte | ((FontSlot & 0xFF) << 8) | (Flags_2Byte << 16);
+
+	var FontKoef = 1;
+	if (this.Flags & PARATEXT_FLAGS_FONTKOEF_SCRIPT && this.Flags & PARATEXT_FLAGS_FONTKOEF_SMALLCAPS)
+		FontKoef = smallcaps_and_script_koef;
+	else if (this.Flags & PARATEXT_FLAGS_FONTKOEF_SCRIPT)
+		FontKoef = vertalign_Koef_Size;
+	else if (this.Flags & PARATEXT_FLAGS_FONTKOEF_SMALLCAPS)
+		FontKoef = smallcaps_Koef;
+
+	// Разрешенные размеры шрифта только либо целое, либо целое/2. Даже после применения FontKoef, поэтому
+	// мы должны подкрутить коэффициент так, чтобы после домножения на него, у на получался разрешенный размер.
+	var FontSize = TextPr.FontSize;
+	if (1 !== FontKoef)
+		FontKoef = (((FontSize * FontKoef * 2 + 0.5) | 0) / 2) / FontSize;
+
+	Context.SetFontSlot(FontSlot, FontKoef);
+	var Temp = Context.MeasureCode(ResultCharCode);
+
+	var ResultWidth = (Math.max((Temp.Width + TextPr.Spacing), 0) * TEXTWIDTH_DIVIDER) | 0;
+
+	this.Width        = ResultWidth;
+	this.WidthVisible = ResultWidth;
+};
+ParaText.prototype.Is_RealContent = function()
+{
+	return true;
+};
+ParaText.prototype.Can_AddNumbering = function()
+{
+	return true;
+};
+ParaText.prototype.Copy = function()
+{
+	return new ParaText(this.Value);
+};
+ParaText.prototype.Is_NBSP = function()
+{
+	return ( this.Value === nbsp_charcode ? true : false);
+};
+ParaText.prototype.Is_Punctuation = function()
+{
+	if (undefined !== AscCommon.g_aPunctuation[this.Value])
+		return true;
+
+	return false;
+};
+ParaText.prototype.Is_Number = function()
+{
+	if (1 === g_aNumber[this.Value])
+		return true;
+
+	return false;
+};
+ParaText.prototype.Is_SpecialSymbol = function()
+{
+	if (1 === g_aSpecialSymbols[this.Value])
+		return true;
+
+	return false;
+};
+ParaText.prototype.IsSpaceAfter = function()
+{
+	return (this.Flags & PARATEXT_FLAGS_SPACEAFTER ? true : false);
+};
+/**
+ * Получаем символ для проверки орфографии
+ * @param bCaps {boolean}
+ * @return {string}
+ */
+ParaText.prototype.GetCharForSpellCheck = function(bCaps)
+{
+	// Закрывающуюся кавычку (0x2019), посылаем как апостроф
+
+	if (0x2019 === this.Value)
+		return String.fromCharCode(0x0027);
+	else
+	{
+		if (true === bCaps)
+			return (String.fromCharCode(this.Value)).toUpperCase();
+		else
+			return String.fromCharCode(this.Value);
+	}
+};
+ParaText.prototype.Set_SpaceAfter = function(bSpaceAfter)
+{
+	if (bSpaceAfter)
+		this.Flags |= PARATEXT_FLAGS_SPACEAFTER;
+	else
+		this.Flags &= PARATEXT_FLAGS_NON_SPACEAFTER;
+};
+ParaText.prototype.IsNoBreakHyphen = function()
+{
+	if (false === this.IsSpaceAfter() && this.Value === 0x002D)
+		return true;
+
+	return false;
+};
+ParaText.prototype.Write_ToBinary = function(Writer)
+{
+	// Long : Type
+	// Long : Value
+
+	Writer.WriteLong(para_Text);
+	Writer.WriteLong(this.Value);
+};
+ParaText.prototype.Read_FromBinary = function(Reader)
+{
+	this.Set_CharCode(Reader.GetLong());
+};
+ParaText.prototype.private_IsSpaceAfter = function()
+{
+	// Дефисы
+	if (0x002D === this.Value || 0x2014 === this.Value)
+		return true;
+
+	if (AscCommon.isEastAsianScript(this.Value) && this.CanBeAtEndOfLine())
+		return true;
+
+	return false;
+};
+ParaText.prototype.CanBeAtBeginOfLine = function()
+{
+	if (this.Is_NBSP())
+		return false;
+
+	return (!(AscCommon.g_aPunctuation[this.Value] & AscCommon.PUNCTUATION_FLAG_CANT_BE_AT_BEGIN));
+};
+ParaText.prototype.CanBeAtEndOfLine = function()
+{
+	if (this.Is_NBSP())
+		return false;
+
+	return (!(AscCommon.g_aPunctuation[this.Value] & AscCommon.PUNCTUATION_FLAG_CANT_BE_AT_END));
+};
+ParaText.prototype.CanStartAutoCorrect = function()
+{
+	// 34 "
+	// 39 '
+	// 45 -
+
+	return (34 === this.Value
+	|| 39 === this.Value
+	|| 45 === this.Value);
+};
+
+/**
+ * Класс представляющий пробелбный символ
+ * @constructor
+ * @extends {CRunElementBase}
+ */
 function ParaSpace()
 {
+	CRunElementBase.call(this);
+
     this.Flags        = 0x00000000 | 0;
     this.Width        = 0x00000000 | 0;
     this.WidthVisible = 0x00000000 | 0;
 }
-ParaSpace.prototype =
+ParaSpace.prototype = Object.create(CRunElementBase.prototype);
+ParaSpace.prototype.constructor = ParaSpace;
+
+ParaSpace.prototype.Type = para_Space;
+ParaSpace.prototype.Draw = function(X, Y, Context)
 {
-    Type : para_Space,
+	if (undefined !== editor && editor.ShowParaMarks)
+	{
+		Context.SetFontSlot(fontslot_ASCII, this.Get_FontKoef());
+		Context.FillText(X, Y, String.fromCharCode(0x00B7));
+	}
+};
+ParaSpace.prototype.Measure = function(Context, TextPr)
+{
+	this.Set_FontKoef_Script(TextPr.VertAlign !== AscCommon.vertalign_Baseline ? true : false);
+	this.Set_FontKoef_SmallCaps(true != TextPr.Caps && true === TextPr.SmallCaps ? true : false);
 
-    Get_Type : function()
-    {
-        return para_Space;
-    },
-    
-    Draw : function(X,Y, Context)
-    {
-        if ( undefined !== editor && editor.ShowParaMarks )
-        {
-            Context.SetFontSlot( fontslot_ASCII, this.Get_FontKoef() );
-            Context.FillText(X, Y, String.fromCharCode(0x00B7));
-        }
-    },
+	// Разрешенные размеры шрифта только либо целое, либо целое/2. Даже после применения FontKoef, поэтому
+	// мы должны подкрутить коэффициент так, чтобы после домножения на него, у на получался разрешенный размер.
+	var FontKoef = this.Get_FontKoef();
+	var FontSize = TextPr.FontSize;
+	if (1 !== FontKoef)
+		FontKoef = (((FontSize * FontKoef * 2 + 0.5) | 0) / 2) / FontSize;
 
-    Measure : function(Context, TextPr)
-    {
-        this.Set_FontKoef_Script( TextPr.VertAlign !== AscCommon.vertalign_Baseline ? true : false );
-        this.Set_FontKoef_SmallCaps( true != TextPr.Caps && true === TextPr.SmallCaps ? true : false );
+	Context.SetFontSlot(fontslot_ASCII, FontKoef);
 
-        // Разрешенные размеры шрифта только либо целое, либо целое/2. Даже после применения FontKoef, поэтому
-        // мы должны подкрутить коэффициент так, чтобы после домножения на него, у на получался разрешенный размер.
-        var FontKoef = this.Get_FontKoef();
-        var FontSize = TextPr.FontSize;
-        if (1 !== FontKoef)
-            FontKoef = (((FontSize * FontKoef * 2 + 0.5) | 0) / 2) / FontSize;
+	var Temp = Context.MeasureCode(0x20);
 
-        Context.SetFontSlot(fontslot_ASCII, FontKoef);
+	var ResultWidth = (Math.max((Temp.Width + TextPr.Spacing), 0) * 16384) | 0;
+	this.Width      = ResultWidth;
+	// Не меняем здесь WidthVisible, это значение для пробела высчитывается отдельно, и не должно меняться при пересчете
+};
+ParaSpace.prototype.Get_FontKoef = function()
+{
+	if (this.Flags & PARATEXT_FLAGS_FONTKOEF_SCRIPT && this.Flags & PARATEXT_FLAGS_FONTKOEF_SMALLCAPS)
+		return smallcaps_and_script_koef;
+	else if (this.Flags & PARATEXT_FLAGS_FONTKOEF_SCRIPT)
+		return vertalign_Koef_Size;
+	else if (this.Flags & PARATEXT_FLAGS_FONTKOEF_SMALLCAPS)
+		return smallcaps_Koef;
+	else
+		return 1;
+};
+ParaSpace.prototype.Set_FontKoef_Script = function(bScript)
+{
+	if (bScript)
+		this.Flags |= PARATEXT_FLAGS_FONTKOEF_SCRIPT;
+	else
+		this.Flags &= PARATEXT_FLAGS_NON_FONTKOEF_SCRIPT;
+};
+ParaSpace.prototype.Set_FontKoef_SmallCaps = function(bSmallCaps)
+{
+	if (bSmallCaps)
+		this.Flags |= PARATEXT_FLAGS_FONTKOEF_SMALLCAPS;
+	else
+		this.Flags &= PARATEXT_FLAGS_NON_FONTKOEF_SMALLCAPS;
+};
+ParaSpace.prototype.Is_RealContent = function()
+{
+	return true;
+};
+ParaSpace.prototype.Can_AddNumbering = function()
+{
+	return true;
+};
+ParaSpace.prototype.Copy = function()
+{
+	return new ParaSpace();
+};
+ParaSpace.prototype.Write_ToBinary = function(Writer)
+{
+	// Long : Type
+	// Long : Value
 
-        var Temp = Context.MeasureCode(0x20);
-
-        var ResultWidth = (Math.max((Temp.Width + TextPr.Spacing), 0) * 16384) | 0;
-        this.Width      = ResultWidth;
-        // Не меняем здесь WidthVisible, это значение для пробела высчитывается отдельно, и не должно меняться при пересчете
-    },
-
-    Get_FontKoef : function()
-    {
-        if ( this.Flags & PARATEXT_FLAGS_FONTKOEF_SCRIPT && this.Flags & PARATEXT_FLAGS_FONTKOEF_SMALLCAPS )
-            return smallcaps_and_script_koef;
-        else if ( this.Flags & PARATEXT_FLAGS_FONTKOEF_SCRIPT )
-            return vertalign_Koef_Size;
-        else if ( this.Flags & PARATEXT_FLAGS_FONTKOEF_SMALLCAPS )
-            return smallcaps_Koef;
-        else
-            return 1;
-    },
-
-    Set_FontKoef_Script : function(bScript)
-    {
-        if (bScript)
-            this.Flags |= PARATEXT_FLAGS_FONTKOEF_SCRIPT;
-        else
-            this.Flags &= PARATEXT_FLAGS_NON_FONTKOEF_SCRIPT;
-    },
-
-    Set_FontKoef_SmallCaps : function(bSmallCaps)
-    {
-        if (bSmallCaps)
-            this.Flags |= PARATEXT_FLAGS_FONTKOEF_SMALLCAPS;
-        else
-            this.Flags &= PARATEXT_FLAGS_NON_FONTKOEF_SMALLCAPS;
-    },
-
-    Get_Width : function()
-    {
-        return (this.Width / TEXTWIDTH_DIVIDER);
-    },
-    
-    Get_WidthVisible : function()
-    {
-        return (this.WidthVisible / TEXTWIDTH_DIVIDER);
-    },
-    
-    Set_WidthVisible : function(WidthVisible)
-    {
-        this.WidthVisible = (WidthVisible * TEXTWIDTH_DIVIDER) | 0;
-    },
-
-    Is_RealContent : function()
-    {
-        return true;
-    },
-
-    Can_AddNumbering : function()
-    {
-        return true;
-    },
-
-    Copy : function()
-    {
-        return new ParaSpace();
-    },
-
-    Write_ToBinary : function(Writer)
-    {
-        // Long : Type
-        // Long : Value
-
-        Writer.WriteLong( para_Space );
-        Writer.WriteLong( this.Value );
-    },
-
-    Read_FromBinary : function(Reader)
-    {
-        this.Value = Reader.GetLong();
-    }
+	Writer.WriteLong(para_Space);
+	Writer.WriteLong(this.Value);
+};
+ParaSpace.prototype.Read_FromBinary = function(Reader)
+{
+	this.Value = Reader.GetLong();
+};
+ParaSpace.prototype.CanStartAutoCorrect = function()
+{
+	return true;
 };
 
+
+/**
+ * Класс представляющий символ
+ * @param Char
+ * @param FontFamily
+ * @constructor
+ * @extends {CRunElementBase}
+ */
 function ParaSym(Char, FontFamily)
 {
-    this.Type       = para_Sym;
+	CRunElementBase.call(this);
+
     this.FontFamily = FontFamily;
     this.Char       = Char;
 
@@ -580,282 +591,300 @@ function ParaSym(Char, FontFamily)
     this.Height       = 0;
     this.WidthVisible = 0;
 }
+ParaSym.prototype = Object.create(CRunElementBase.prototype);
+ParaSym.prototype.constructor = ParaSym;
 
-ParaSym.prototype =
+ParaSym.prototype.Type = para_Sym;
+ParaSym.prototype.Draw = function(X,Y,Context, TextPr)
 {
-    Draw : function(X,Y,Context, TextPr)
-    {
-        var CurTextPr = TextPr.Copy();
+	var CurTextPr = TextPr.Copy();
 
-        switch ( this.FontSlot )
-        {
-            case fontslot_ASCII:    CurTextPr.RFonts.Ascii    = { Name : this.FontFamily, Index : -1 }; break;
-            case fontslot_CS:       CurTextPr.RFonts.CS       = { Name : this.FontFamily, Index : -1 }; break;
-            case fontslot_EastAsia: CurTextPr.RFonts.EastAsia = { Name : this.FontFamily, Index : -1 }; break;
-            case fontslot_HAnsi:    CurTextPr.RFonts.HAnsi    = { Name : this.FontFamily, Index : -1 }; break;
-        }
+	switch (this.FontSlot)
+	{
+		case fontslot_ASCII:
+			CurTextPr.RFonts.Ascii = {Name : this.FontFamily, Index : -1};
+			break;
+		case fontslot_CS:
+			CurTextPr.RFonts.CS = {Name : this.FontFamily, Index : -1};
+			break;
+		case fontslot_EastAsia:
+			CurTextPr.RFonts.EastAsia = {Name : this.FontFamily, Index : -1};
+			break;
+		case fontslot_HAnsi:
+			CurTextPr.RFonts.HAnsi = {Name : this.FontFamily, Index : -1};
+			break;
+	}
 
-        Context.SetTextPr( CurTextPr );
-        Context.SetFontSlot( this.FontSlot, this.FontKoef );
+	Context.SetTextPr(CurTextPr);
+	Context.SetFontSlot(this.FontSlot, this.FontKoef);
 
-        Context.FillText( X, Y, String.fromCharCode( this.Char ) );
-        Context.SetTextPr( TextPr );
-    },
+	Context.FillText(X, Y, String.fromCharCode(this.Char));
+	Context.SetTextPr(TextPr);
+};
+ParaSym.prototype.Measure = function(Context, TextPr)
+{
+	this.FontKoef = TextPr.Get_FontKoef();
 
-    Measure : function(Context, TextPr)
-    {
-        this.FontKoef = TextPr.Get_FontKoef();
+	var Hint = TextPr.RFonts.Hint;
+	var bCS  = TextPr.CS;
+	var bRTL = TextPr.RTL;
+	var lcid = TextPr.Lang.EastAsia;
 
-        var Hint = TextPr.RFonts.Hint;
-        var bCS  = TextPr.CS;
-        var bRTL = TextPr.RTL;
-        var lcid = TextPr.Lang.EastAsia;
+	this.FontSlot = g_font_detector.Get_FontClass(this.CalcValue.charCodeAt(0), Hint, lcid, bCS, bRTL);
 
-        this.FontSlot = g_font_detector.Get_FontClass( this.CalcValue.charCodeAt(0), Hint, lcid, bCS, bRTL );
+	var CurTextPr = TextPr.Copy();
 
-        var CurTextPr = TextPr.Copy();
+	switch (this.FontSlot)
+	{
+		case fontslot_ASCII:
+			CurTextPr.RFonts.Ascii = {Name : this.FontFamily, Index : -1};
+			break;
+		case fontslot_CS:
+			CurTextPr.RFonts.CS = {Name : this.FontFamily, Index : -1};
+			break;
+		case fontslot_EastAsia:
+			CurTextPr.RFonts.EastAsia = {Name : this.FontFamily, Index : -1};
+			break;
+		case fontslot_HAnsi:
+			CurTextPr.RFonts.HAnsi = {Name : this.FontFamily, Index : -1};
+			break;
+	}
 
-        switch ( this.FontSlot )
-        {
-            case fontslot_ASCII:    CurTextPr.RFonts.Ascii    = { Name : this.FontFamily, Index : -1 }; break;
-            case fontslot_CS:       CurTextPr.RFonts.CS       = { Name : this.FontFamily, Index : -1 }; break;
-            case fontslot_EastAsia: CurTextPr.RFonts.EastAsia = { Name : this.FontFamily, Index : -1 }; break;
-            case fontslot_HAnsi:    CurTextPr.RFonts.HAnsi    = { Name : this.FontFamily, Index : -1 }; break;
-        }
+	Context.SetTextPr(CurTextPr);
+	Context.SetFontSlot(this.FontSlot, this.FontKoef);
 
-        Context.SetTextPr( CurTextPr );
-        Context.SetFontSlot( this.FontSlot, this.FontKoef );
+	var Temp = Context.Measure(this.CalcValue);
+	Context.SetTextPr(TextPr);
 
-        var Temp = Context.Measure( this.CalcValue );
-        Context.SetTextPr( TextPr );
+	Temp.Width = Math.max(Temp.Width + TextPr.Spacing, 0);
 
-        Temp.Width = Math.max( Temp.Width + TextPr.Spacing, 0 );
+	this.Width        = Temp.Width;
+	this.Height       = Temp.Height;
+	this.WidthVisible = Temp.Width;
+};
+ParaSym.prototype.Is_RealContent = function()
+{
+	return true;
+};
+ParaSym.prototype.Can_AddNumbering = function()
+{
+	return true;
+};
+ParaSym.prototype.Copy = function()
+{
+	return new ParaSym(this.Char, this.FontFamily);
+};
+ParaSym.prototype.Write_ToBinary = function(Writer)
+{
+	// Long   : Type
+	// String : FontFamily
+	// Long   : Char
 
-        this.Width        = Temp.Width;
-        this.Height       = Temp.Height;
-        this.WidthVisible = Temp.Width;
-    },
+	Writer.WriteLong(this.Type);
+	Writer.WriteString2(this.FontFamily);
+	Writer.WriteLong(this.Char);
+};
+ParaSym.prototype.Read_FromBinary = function(Reader)
+{
+	// String : FontFamily
+	// Long   : Char
 
-    Is_RealContent : function()
-    {
-        return true;
-    },
-
-    Can_AddNumbering : function()
-    {
-        return true;
-    },
-
-    Copy : function()
-    {
-        return new ParaSym( this.Char, this.FontFamily );
-    },
-
-    Write_ToBinary : function(Writer)
-    {
-        // Long   : Type
-        // String : FontFamily
-        // Long   : Char
-
-        Writer.WriteLong( this.Type );
-        Writer.WriteString2( this.FontFamily );
-        Writer.WriteLong( this.Char );
-    },
-
-    Read_FromBinary : function(Reader)
-    {
-        // String : FontFamily
-        // Long   : Char
-
-        this.FontFamily = Reader.GetString2();
-        this.Char = Reader.GetLong();
-    }
+	this.FontFamily = Reader.GetString2();
+	this.Char       = Reader.GetLong();
 };
 
-// Класс окончание параграфа ParaEnd
+
+/**
+ * Класс представляющий символ конца параграфа
+ * @constructor
+ * @extends {CRunElementBase}
+ */
 function ParaEnd()
 {
+	CRunElementBase.call(this);
+
     this.SectionPr    = null;
     this.WidthVisible = 0x00000000 | 0; 
 }
+ParaEnd.prototype = Object.create(CRunElementBase.prototype);
+ParaEnd.prototype.constructor = ParaEnd;
 
-ParaEnd.prototype =
+ParaEnd.prototype.Type = para_End;
+ParaEnd.prototype.Draw = function(X, Y, Context, bEndCell, bForceDraw)
 {
-    Type : para_End,
+	if ((undefined !== editor && editor.ShowParaMarks) || true === bForceDraw)
+	{
+		Context.SetFontSlot(fontslot_ASCII);
 
-    Get_Type : function()
-    {
-        return para_End;
-    },
-    
-    Draw : function(X, Y, Context, bEndCell, bForceDraw)
-    {
-        if ((undefined !== editor && editor.ShowParaMarks) || true === bForceDraw)
-        {
-            Context.SetFontSlot( fontslot_ASCII );
+		if (null !== this.SectionPr)
+		{
+			Context.b_color1(0, 0, 0, 255);
+			Context.p_color(0, 0, 0, 255);
 
-            if ( null !== this.SectionPr )
-            {
-                Context.b_color1( 0, 0, 0, 255);
-                Context.p_color( 0, 0, 0, 255);
-                
-                Context.SetFont( {FontFamily: { Name : "Courier New", Index : -1 }, FontSize: 8, Italic: false, Bold : false} );
-                var Widths          = this.SectionPr.Widths;
-                var strSectionBreak = this.SectionPr.Str;
+			Context.SetFont({
+				FontFamily : {Name : "Courier New", Index : -1},
+				FontSize   : 8,
+				Italic     : false,
+				Bold       : false
+			});
+			var Widths = this.SectionPr.Widths;
+			var strSectionBreak = this.SectionPr.Str;
 
-                var Len = strSectionBreak.length;
+			var Len = strSectionBreak.length;
 
-                for ( var Index = 0; Index < Len; Index++ )
-                {
-                    Context.FillText( X, Y, strSectionBreak[Index] );
-                    X += Widths[Index];
-                }
-            }
-            else if ( true === bEndCell )
-                Context.FillText(X, Y, String.fromCharCode(0x00A4));
-            else
-                Context.FillText(X, Y, String.fromCharCode(0x00B6));
-        }
-    },
+			for (var Index = 0; Index < Len; Index++)
+			{
+				Context.FillText(X, Y, strSectionBreak[Index]);
+				X += Widths[Index];
+			}
+		}
+		else if (true === bEndCell)
+			Context.FillText(X, Y, String.fromCharCode(0x00A4));
+		else
+			Context.FillText(X, Y, String.fromCharCode(0x00B6));
+	}
+};
+ParaEnd.prototype.Measure = function(Context, bEndCell)
+{
+	Context.SetFontSlot(fontslot_ASCII);
 
-    Measure : function(Context, bEndCell)
-    {
-        Context.SetFontSlot(fontslot_ASCII);
+	if (true === bEndCell)
+		this.WidthVisible = (Context.Measure(String.fromCharCode(0x00A4)).Width * TEXTWIDTH_DIVIDER) | 0;
+	else
+		this.WidthVisible = (Context.Measure(String.fromCharCode(0x00B6)).Width * TEXTWIDTH_DIVIDER) | 0;
+};
+ParaEnd.prototype.Get_Width = function()
+{
+	return 0;
+};
+ParaEnd.prototype.Update_SectionPr = function(SectionPr, W)
+{
+	var Type = SectionPr.Type;
 
-        if ( true === bEndCell )
-            this.WidthVisible = (Context.Measure(String.fromCharCode(0x00A4)).Width * TEXTWIDTH_DIVIDER) | 0;
-        else
-            this.WidthVisible = (Context.Measure(String.fromCharCode(0x00B6)).Width * TEXTWIDTH_DIVIDER) | 0;
-    },
+	var strSectionBreak = "";
+	switch (Type)
+	{
+		case c_oAscSectionBreakType.Column     :
+			strSectionBreak = " End of Section ";
+			break;
+		case c_oAscSectionBreakType.Continuous :
+			strSectionBreak = " Section Break (Continuous) ";
+			break;
+		case c_oAscSectionBreakType.EvenPage   :
+			strSectionBreak = " Section Break (Even Page) ";
+			break;
+		case c_oAscSectionBreakType.NextPage   :
+			strSectionBreak = " Section Break (Next Page) ";
+			break;
+		case c_oAscSectionBreakType.OddPage    :
+			strSectionBreak = " Section Break (Odd Page) ";
+			break;
+	}
 
-    Get_Width : function()
-    {
-        return 0;
-    },
+	g_oTextMeasurer.SetFont({
+		FontFamily : {Name : "Courier New", Index : -1},
+		FontSize   : 8,
+		Italic     : false,
+		Bold       : false
+	});
 
-    Get_WidthVisible : function()
-    {
-        return (this.WidthVisible / TEXTWIDTH_DIVIDER);
-    },
+	var Widths = [];
 
-    Set_WidthVisible : function(WidthVisible)
-    {
-        this.WidthVisible = (WidthVisible * TEXTWIDTH_DIVIDER) | 0;
-    },
+	var nStrWidth = 0;
+	var Len       = strSectionBreak.length;
+	for (var Index = 0; Index < Len; Index++)
+	{
+		var Val       = g_oTextMeasurer.Measure(strSectionBreak[Index]).Width;
+		nStrWidth += Val;
+		Widths[Index] = Val;
+	}
 
-    Update_SectionPr : function(SectionPr, W)
-    {
-        var Type = SectionPr.Type;
+	var strSymbol = ":";
+	var nSymWidth = g_oTextMeasurer.Measure(strSymbol).Width * 2 / 3;
 
-        var strSectionBreak = "";
-        switch ( Type )
-        {
-            case c_oAscSectionBreakType.Column     : strSectionBreak = " End of Section "; break;
-            case c_oAscSectionBreakType.Continuous : strSectionBreak = " Section Break (Continuous) "; break;
-            case c_oAscSectionBreakType.EvenPage   : strSectionBreak = " Section Break (Even Page) "; break;
-            case c_oAscSectionBreakType.NextPage   : strSectionBreak = " Section Break (Next Page) "; break;
-            case c_oAscSectionBreakType.OddPage    : strSectionBreak = " Section Break (Odd Page) "; break;
-        }
+	var strResult = "";
+	if (W - 6 * nSymWidth >= nStrWidth)
+	{
+		var Count     = parseInt((W - nStrWidth) / ( 2 * nSymWidth ));
+		var strResult = strSectionBreak;
+		for (var Index = 0; Index < Count; Index++)
+		{
+			strResult = strSymbol + strResult + strSymbol;
+			Widths.splice(0, 0, nSymWidth);
+			Widths.splice(Widths.length, 0, nSymWidth);
+		}
+	}
+	else
+	{
+		var Count = parseInt(W / nSymWidth);
+		for (var Index = 0; Index < Count; Index++)
+		{
+			strResult += strSymbol;
+			Widths[Index] = nSymWidth;
+		}
+	}
 
-        g_oTextMeasurer.SetFont( {FontFamily: { Name : "Courier New", Index : -1 }, FontSize: 8, Italic: false, Bold : false} );
+	var ResultW = 0;
+	var Count   = Widths.length;
+	for (var Index = 0; Index < Count; Index++)
+	{
+		ResultW += Widths[Index];
+	}
 
-        var Widths = [];
+	var AddW = 0;
+	if (ResultW < W && Count > 1)
+	{
+		AddW = (W - ResultW) / (Count - 1);
+	}
 
-        var nStrWidth = 0;
-        var Len = strSectionBreak.length;
-        for ( var Index = 0; Index < Len; Index++ )
-        {
-            var Val = g_oTextMeasurer.Measure( strSectionBreak[Index] ).Width;
-            nStrWidth += Val;
-            Widths[Index] = Val;
-        }
+	for (var Index = 0; Index < Count - 1; Index++)
+	{
+		Widths[Index] += AddW;
+	}
 
-        var strSymbol = ":";
-        var nSymWidth = g_oTextMeasurer.Measure( strSymbol ).Width * 2/3;
+	this.SectionPr          = {};
+	this.SectionPr.OldWidth = this.Width;
+	this.SectionPr.Str      = strResult;
+	this.SectionPr.Widths   = Widths;
 
-        var strResult = "";
-        if ( W - 6 * nSymWidth >= nStrWidth )
-        {
-            var Count = parseInt( (W - nStrWidth) / ( 2 * nSymWidth ) );
-            var strResult = strSectionBreak;
-            for ( var Index = 0; Index < Count; Index++ )
-            {
-                strResult = strSymbol + strResult + strSymbol;
-                Widths.splice( 0, 0, nSymWidth );
-                Widths.splice( Widths.length, 0, nSymWidth );
-            }
-        }
-        else
-        {
-            var Count = parseInt( W / nSymWidth );
-            for ( var Index = 0; Index < Count; Index++ )
-            {
-                strResult += strSymbol;
-                Widths[Index] = nSymWidth;
-            }
-        }
-
-        var ResultW = 0;
-        var Count = Widths.length;
-        for ( var Index = 0; Index < Count; Index++ )
-        {
-            ResultW += Widths[Index];
-        }
-
-        var AddW = 0;
-        if ( ResultW < W && Count > 1 )
-        {
-            AddW = (W - ResultW) / (Count - 1);
-        }
-
-        for ( var Index = 0; Index < Count - 1; Index++ )
-        {
-            Widths[Index] += AddW;
-        }
-
-        this.SectionPr = {};
-        this.SectionPr.OldWidth = this.Width;
-        this.SectionPr.Str      = strResult;
-        this.SectionPr.Widths   = Widths;
-
-        var _W = (W * TEXTWIDTH_DIVIDER) | 0;
-        this.WidthVisible = _W;
-    },
-
-    Clear_SectionPr : function()
-    {
-        this.SectionPr = null;
-    },
-
-    Is_RealContent : function()
-    {
-        return true;
-    },
-
-    Can_AddNumbering : function()
-    {
-        return true;
-    },
-
-    Copy : function()
-    {
-        return new ParaEnd();
-    },
-
-    Write_ToBinary : function(Writer)
-    {
-        // Long   : Type
-        Writer.WriteLong( para_End );
-    },
-
-    Read_FromBinary : function(Reader)
-    {
-    }
+	var _W            = (W * TEXTWIDTH_DIVIDER) | 0;
+	this.WidthVisible = _W;
+};
+ParaEnd.prototype.Clear_SectionPr = function()
+{
+	this.SectionPr = null;
+};
+ParaEnd.prototype.Is_RealContent = function()
+{
+	return true;
+};
+ParaEnd.prototype.Can_AddNumbering = function()
+{
+	return true;
+};
+ParaEnd.prototype.Copy = function()
+{
+	return new ParaEnd();
+};
+ParaEnd.prototype.Write_ToBinary = function(Writer)
+{
+	// Long   : Type
+	Writer.WriteLong(para_End);
+};
+ParaEnd.prototype.Read_FromBinary = function(Reader)
+{
 };
 
-// Класс ParaNewLine
+/**
+ * Класс представляющий разрыв строки/колонки/страницы
+ * @param BreakType
+ * @constructor
+ * @extends {CRunElementBase}
+ */
 function ParaNewLine(BreakType)
 {
+	CRunElementBase.call(this);
+
     this.BreakType = BreakType;
 
     this.Flags = {}; // специальные флаги для разных break
@@ -868,340 +897,353 @@ function ParaNewLine(BreakType)
     this.Width        = 0;
     this.WidthVisible = 0;
 }
+ParaNewLine.prototype = Object.create(CRunElementBase.prototype);
+ParaNewLine.prototype.constructor = ParaNewLine;
 
-ParaNewLine.prototype =
+ParaNewLine.prototype.Type = para_NewLine;
+ParaNewLine.prototype.Draw = function(X, Y, Context)
 {
-    Type : para_NewLine,
+	if (false === this.Flags.Use)
+		return;
 
-    Get_Type : function()
-    {
-        return para_NewLine;
-    },
-    
-    Draw : function(X, Y, Context)
-    {
-        if ( false === this.Flags.Use )
-            return;
-        
-        if ( undefined !== editor && editor.ShowParaMarks )
-        {
-            // Цвет и шрифт можно не запоминать и не выставлять старый, т.к. на данном элемента всегда заканчивается
-            // отрезок обтекания или целая строка. 
+	if (undefined !== editor && editor.ShowParaMarks)
+	{
+		// Цвет и шрифт можно не запоминать и не выставлять старый, т.к. на данном элемента всегда заканчивается
+		// отрезок обтекания или целая строка.
 
-            switch( this.BreakType )
-            {
-                case break_Line:
-                {
-                    Context.b_color1(0, 0, 0, 255);
-                    Context.SetFont( {FontFamily: { Name : "ASCW3", Index : -1 }, FontSize: 10, Italic: false, Bold : false} );
-                    Context.FillText( X, Y, String.fromCharCode( 0x0038/*0x21B5*/ ) );
-                    break;
-                }
-                case break_Page:
-                case break_Column:
-                {
-                    var strPageBreak = this.Flags.BreakPageInfo.Str;
-                    var Widths       = this.Flags.BreakPageInfo.Widths;
+		switch (this.BreakType)
+		{
+			case break_Line:
+			{
+				Context.b_color1(0, 0, 0, 255);
+				Context.SetFont({
+					FontFamily : {Name : "ASCW3", Index : -1},
+					FontSize   : 10,
+					Italic     : false,
+					Bold       : false
+				});
+				Context.FillText(X, Y, String.fromCharCode(0x0038/*0x21B5*/));
+				break;
+			}
+			case break_Page:
+			case break_Column:
+			{
+				var strPageBreak = this.Flags.BreakPageInfo.Str;
+				var Widths       = this.Flags.BreakPageInfo.Widths;
 
-                    Context.b_color1( 0, 0 , 0, 255);
-                    Context.SetFont( {FontFamily: { Name : "Courier New", Index : -1 }, FontSize: 8, Italic: false, Bold : false} );
+				Context.b_color1(0, 0, 0, 255);
+				Context.SetFont({
+					FontFamily : {Name : "Courier New", Index : -1},
+					FontSize   : 8,
+					Italic     : false,
+					Bold       : false
+				});
 
-                    var Len = strPageBreak.length;
-                    for ( var Index = 0; Index < Len; Index++ )
-                    {
-                        Context.FillText( X, Y, strPageBreak[Index] );
-                        X += Widths[Index];
-                    }
+				var Len = strPageBreak.length;
+				for (var Index = 0; Index < Len; Index++)
+				{
+					Context.FillText(X, Y, strPageBreak[Index]);
+					X += Widths[Index];
+				}
 
-                    break;
-                }
-            }
+				break;
+			}
+		}
 
-        }
-    },
-
-    Measure : function(Context)
-    {
-        if ( false === this.Flags.Use )
-        {
-            this.Width        = 0;
-            this.WidthVisible = 0;
-            this.Height       = 0;
-            return;
-        }
-
-        switch( this.BreakType )
-        {
-            case break_Line:
-            {
-                this.Width  = 0;
-                this.Height = 0;
-
-                Context.SetFont( {FontFamily: { Name : "ASCW3", Index : -1 }, FontSize: 10, Italic: false, Bold : false} );
-                var Temp = Context.Measure( String.fromCharCode( 0x0038 ) );
-
-                // Почему-то в шрифте Wingding 3 символ 0x0038 имеет неправильную ширину
-                this.WidthVisible = Temp.Width * 1.7;
-
-                break;
-            }
-            case break_Page:
-            case break_Column:
-            {
-                this.Width  = 0;
-                this.Height = 0;
-
-                break;
-            }
-        }
-    },
-
-    Get_Width : function()
-    {
-        return this.Width;
-    },
-
-    Get_WidthVisible : function()
-    {
-        return this.WidthVisible;
-    },
-
-    Set_WidthVisible : function(WidthVisible)
-    {
-        this.WidthVisible = WidthVisible;
-    },    
-
-    Update_String : function(_W)
-    {
-        if ( false === this.Flags.Use )
-        {
-            this.Width        = 0;
-            this.WidthVisible = 0;
-            this.Height       = 0;
-            return;
-        }
-        
-        if (break_Page === this.BreakType || break_Column === this.BreakType)
-        {
-            var W = ( false === this.Flags.NewLine ? 50 : _W );
-
-            g_oTextMeasurer.SetFont({FontFamily: { Name: "Courier New", Index: -1 }, FontSize: 8, Italic: false, Bold: false});
-
-            var Widths = [];
-
-            var nStrWidth = 0;
-            var strBreakPage = break_Page === this.BreakType ? " Page Break " : " Column Break ";
-            var Len = strBreakPage.length;
-            for (var Index = 0; Index < Len; Index++)
-            {
-                var Val = g_oTextMeasurer.Measure(strBreakPage[Index]).Width;
-                nStrWidth += Val;
-                Widths[Index] = Val;
-            }
-
-            var strSymbol = String.fromCharCode("0x00B7");
-            var nSymWidth = g_oTextMeasurer.Measure(strSymbol).Width * 2 / 3;
-
-            var strResult = "";
-            if (W - 6 * nSymWidth >= nStrWidth)
-            {
-                var Count = parseInt((W - nStrWidth) / ( 2 * nSymWidth ));
-                var strResult = strBreakPage;
-                for (var Index = 0; Index < Count; Index++)
-                {
-                    strResult = strSymbol + strResult + strSymbol;
-                    Widths.splice(0, 0, nSymWidth);
-                    Widths.splice(Widths.length, 0, nSymWidth);
-                }
-            }
-            else
-            {
-                var Count = parseInt(W / nSymWidth);
-                for (var Index = 0; Index < Count; Index++)
-                {
-                    strResult += strSymbol;
-                    Widths[Index] = nSymWidth;
-                }
-            }
-
-            var ResultW = 0;
-            var Count = Widths.length;
-            for ( var Index = 0; Index < Count; Index++ )
-            {
-                ResultW += Widths[Index];
-            }
-
-            var AddW = 0;
-            if ( ResultW < W && Count > 1 )
-            {
-                AddW = (W - ResultW) / (Count - 1);
-            }
-
-            for ( var Index = 0; Index < Count - 1; Index++ )
-            {
-                Widths[Index] += AddW;
-            }
-
-            this.Flags.BreakPageInfo = {};
-            this.Flags.BreakPageInfo.Str = strResult;
-            this.Flags.BreakPageInfo.Widths = Widths;
-
-            this.Width        = W;
-            this.WidthVisible = W;
-        }
-    },
-
-    Is_RealContent : function()
-    {
-        return true;
-    },
-
-    Can_AddNumbering : function()
-    {
-        if ( break_Line === this.BreakType )
-            return true;
-
-        return false;
-    },
-
-    Copy : function()
-    {
-        return new ParaNewLine(this.BreakType);
-    },
-
-    // Функция проверяет особый случай, когда у нас PageBreak, после которого в параграфе ничего не идет
-    Is_NewLine : function()
-    {
-        if (break_Line === this.BreakType || ((break_Page === this.BreakType || break_Column === this.BreakType) && true === this.Flags.NewLine))
-            return true;
-
-        return false;
-    },
-
-    Write_ToBinary : function(Writer)
-    {
-        // Long   : Type
-        // Long   : BreakType
-        // Optional :
-        // Long   : Flags (breakPage)
-        Writer.WriteLong( para_NewLine );
-        Writer.WriteLong( this.BreakType );
-
-        if (break_Page === this.BreakType || break_Column === this.BreakType)
-        {
-            Writer.WriteBool( this.Flags.NewLine );
-        }
-    },
-
-    Read_FromBinary : function(Reader)
-    {
-        this.BreakType = Reader.GetLong();
-
-        if (break_Page === this.BreakType || break_Column === this.BreakType)
-            this.Flags = { NewLine : Reader.GetBool() };
-    },
-
-    Is_PageOrColumnBreak : function()
-    {
-        if (break_Page === this.BreakType || break_Column === this.BreakType)
-            return true;
-
-        return false;
-    }
+	}
 };
+ParaNewLine.prototype.Measure = function(Context)
+{
+	if (false === this.Flags.Use)
+	{
+		this.Width        = 0;
+		this.WidthVisible = 0;
+		this.Height       = 0;
+		return;
+	}
+
+	switch (this.BreakType)
+	{
+		case break_Line:
+		{
+			this.Width  = 0;
+			this.Height = 0;
+
+			Context.SetFont({FontFamily : {Name : "ASCW3", Index : -1}, FontSize : 10, Italic : false, Bold : false});
+			var Temp = Context.Measure(String.fromCharCode(0x0038));
+
+			// Почему-то в шрифте Wingding 3 символ 0x0038 имеет неправильную ширину
+			this.WidthVisible = Temp.Width * 1.7;
+
+			break;
+		}
+		case break_Page:
+		case break_Column:
+		{
+			this.Width  = 0;
+			this.Height = 0;
+
+			break;
+		}
+	}
+};
+ParaNewLine.prototype.Get_Width = function()
+{
+	return this.Width;
+};
+ParaNewLine.prototype.Get_WidthVisible = function()
+{
+	return this.WidthVisible;
+};
+ParaNewLine.prototype.Set_WidthVisible = function(WidthVisible)
+{
+	this.WidthVisible = WidthVisible;
+};
+ParaNewLine.prototype.Update_String = function(_W)
+{
+	if (false === this.Flags.Use)
+	{
+		this.Width        = 0;
+		this.WidthVisible = 0;
+		this.Height       = 0;
+		return;
+	}
+
+	if (break_Page === this.BreakType || break_Column === this.BreakType)
+	{
+		var W = ( false === this.Flags.NewLine ? 50 : _W );
+
+		g_oTextMeasurer.SetFont({
+			FontFamily : {Name : "Courier New", Index : -1},
+			FontSize   : 8,
+			Italic     : false,
+			Bold       : false
+		});
+
+		var Widths = [];
+
+		var nStrWidth    = 0;
+		var strBreakPage = break_Page === this.BreakType ? " Page Break " : " Column Break ";
+		var Len          = strBreakPage.length;
+		for (var Index = 0; Index < Len; Index++)
+		{
+			var Val       = g_oTextMeasurer.Measure(strBreakPage[Index]).Width;
+			nStrWidth += Val;
+			Widths[Index] = Val;
+		}
+
+		var strSymbol = String.fromCharCode("0x00B7");
+		var nSymWidth = g_oTextMeasurer.Measure(strSymbol).Width * 2 / 3;
+
+		var strResult = "";
+		if (W - 6 * nSymWidth >= nStrWidth)
+		{
+			var Count     = parseInt((W - nStrWidth) / ( 2 * nSymWidth ));
+			var strResult = strBreakPage;
+			for (var Index = 0; Index < Count; Index++)
+			{
+				strResult = strSymbol + strResult + strSymbol;
+				Widths.splice(0, 0, nSymWidth);
+				Widths.splice(Widths.length, 0, nSymWidth);
+			}
+		}
+		else
+		{
+			var Count = parseInt(W / nSymWidth);
+			for (var Index = 0; Index < Count; Index++)
+			{
+				strResult += strSymbol;
+				Widths[Index] = nSymWidth;
+			}
+		}
+
+		var ResultW = 0;
+		var Count   = Widths.length;
+		for (var Index = 0; Index < Count; Index++)
+		{
+			ResultW += Widths[Index];
+		}
+
+		var AddW = 0;
+		if (ResultW < W && Count > 1)
+		{
+			AddW = (W - ResultW) / (Count - 1);
+		}
+
+		for (var Index = 0; Index < Count - 1; Index++)
+		{
+			Widths[Index] += AddW;
+		}
+
+		this.Flags.BreakPageInfo        = {};
+		this.Flags.BreakPageInfo.Str    = strResult;
+		this.Flags.BreakPageInfo.Widths = Widths;
+
+		this.Width        = W;
+		this.WidthVisible = W;
+	}
+};
+ParaNewLine.prototype.Is_RealContent = function()
+{
+	return true;
+};
+ParaNewLine.prototype.Can_AddNumbering = function()
+{
+	if (break_Line === this.BreakType)
+		return true;
+
+	return false;
+};
+ParaNewLine.prototype.Copy = function()
+{
+	return new ParaNewLine(this.BreakType);
+};
+/**
+ * Функция проверяет особый случай, когда у нас PageBreak, после которого в параграфе ничего не идет
+ * @returns {boolean}
+ */
+ParaNewLine.prototype.Is_NewLine = function()
+{
+	if (break_Line === this.BreakType || ((break_Page === this.BreakType || break_Column === this.BreakType) && true === this.Flags.NewLine))
+		return true;
+
+	return false;
+};
+ParaNewLine.prototype.Write_ToBinary = function(Writer)
+{
+	// Long   : Type
+	// Long   : BreakType
+	// Optional :
+	// Long   : Flags (breakPage)
+	Writer.WriteLong(para_NewLine);
+	Writer.WriteLong(this.BreakType);
+
+	if (break_Page === this.BreakType || break_Column === this.BreakType)
+	{
+		Writer.WriteBool(this.Flags.NewLine);
+	}
+};
+ParaNewLine.prototype.Read_FromBinary = function(Reader)
+{
+	this.BreakType = Reader.GetLong();
+
+	if (break_Page === this.BreakType || break_Column === this.BreakType)
+		this.Flags = {NewLine : Reader.GetBool()};
+};
+/**
+ * Разрыв страницы или колонки?
+ * @returns {boolean}
+ */
 ParaNewLine.prototype.IsPageOrColumnBreak = function()
 {
 	return (break_Page === this.BreakType || break_Column === this.BreakType);
 };
+/**
+ * Разрыв страницы?
+ * @returns {boolean}
+ */
 ParaNewLine.prototype.IsPageBreak = function()
 {
 	return (break_Page === this.BreakType);
 };
+/**
+ * Разрыв колонки?
+ * @returns {boolean}
+ */
 ParaNewLine.prototype.IsColumnBreak = function()
 {
 	return (break_Column === this.BreakType);
 };
+/**
+ * Перенос строки?
+ * @returns {boolean}
+ */
+ParaNewLine.prototype.IsLineBreak = function()
+{
+	return (break_Line === this.BreakType);
+};
 
 
-// Класс ParaNumbering
+/**
+ * Класс представляющий символ(текст) нумерации параграфа
+ * @constructor
+ * @extends {CRunElementBase}
+ */
 function ParaNumbering()
 {
-    this.Type = para_Numbering;
+	CRunElementBase.call(this);
 
-    this.Item = null; // Элемент в ране, к которому привязана нумерация
-    this.Run  = null; // Ран, к которому привязана нумерация
+	this.Item = null; // Элемент в ране, к которому привязана нумерация
+	this.Run  = null; // Ран, к которому привязана нумерация
 
-    this.Line  = 0;
-    this.Range = 0;
+	this.Line  = 0;
+	this.Range = 0;
+	this.Page  = 0;
 
-    this.Internal =
-    {
-        NumInfo : undefined
-    };
+	this.Internal = {
+		NumInfo   : undefined,
+		CalcValue : -1
+	};
 }
+ParaNumbering.prototype = Object.create(CRunElementBase.prototype);
+ParaNumbering.prototype.constructor = ParaNumbering;
 
-ParaNumbering.prototype =
+ParaNumbering.prototype.Type = para_Numbering;
+ParaNumbering.prototype.Draw = function(X,Y,Context, Numbering, TextPr, NumPr, Theme)
 {
-    Type : para_Numbering,
+	Numbering.Draw(NumPr.NumId, NumPr.Lvl, X, Y, Context, this.Internal.NumInfo, TextPr, Theme);
+};
+ParaNumbering.prototype.Measure = function (Context, Numbering, NumInfo, TextPr, NumPr, Theme)
+{
+	this.Internal.NumInfo   = NumInfo;
+	this.Internal.CalcValue = NumInfo && NumPr ? NumInfo[NumPr.Lvl] : -1;
 
-    Draw : function(X,Y,Context, Numbering, TextPr, NumPr, Theme)
-    {
-        Numbering.Draw( NumPr.NumId, NumPr.Lvl, X, Y, Context, this.Internal.NumInfo, TextPr, Theme );
-    },
+	this.Width        = 0;
+	this.Height       = 0;
+	this.WidthVisible = 0;
+	this.WidthNum     = 0;
+	this.WidthSuff    = 0;
 
-    Measure : function (Context, Numbering, NumInfo, TextPr, NumPr, Theme)
-    {
-        this.Internal.NumInfo = NumInfo;
+	if (undefined === Numbering)
+		return {Width : this.Width, Height : this.Height, WidthVisible : this.WidthVisible};
 
-        this.Width        = 0;
-        this.Height       = 0;
-        this.WidthVisible = 0;
-        this.WidthNum     = 0;
-        this.WidthSuff    = 0;
+	var Temp          = Numbering.Measure(NumPr.NumId, NumPr.Lvl, Context, NumInfo, TextPr, Theme);
+	this.Width        = Temp.Width;
+	this.WidthVisible = Temp.Width;
+	this.WidthNum     = Temp.Width;
+	this.WidthSuff    = 0;
+	this.Height       = Temp.Ascent; // Это не вся высота, а только высота над BaseLine
+};
+ParaNumbering.prototype.Check_Range = function(Range, Line)
+{
+	if (null !== this.Item && null !== this.Run && Range === this.Range && Line === this.Line)
+		return true;
 
-        if ( undefined === Numbering )
-            return { Width : this.Width, Height : this.Height, WidthVisible : this.WidthVisible };
-
-        var Temp = Numbering.Measure( NumPr.NumId, NumPr.Lvl, Context, NumInfo, TextPr, Theme );
-        this.Width        = Temp.Width;
-        this.WidthVisible = Temp.Width;
-        this.WidthNum     = Temp.Width;
-        this.WidthSuff    = 0;
-        this.Height       = Temp.Ascent; // Это не вся высота, а только высота над BaseLine
-    },
-
-    Check_Range : function(Range, Line)
-    {
-        if ( null !== this.Item && null !== this.Run && Range === this.Range && Line === this.Line )
-            return true;
-
-        return false;
-    },
-
-    Is_RealContent : function()
-    {
-        return true;
-    },
-
-    Can_AddNumbering : function()
-    {
-        return false;
-    },
-
-    Copy : function()
-    {
-        return new ParaNumbering();
-    },
-
-    Write_ToBinary : function(Writer)
-    {
-        // Long   : Type
-        Writer.WriteLong( this.Type );
-    },
-
-    Read_FromBinary : function(Reader)
-    {
-    }
+	return false;
+};
+ParaNumbering.prototype.Is_RealContent = function()
+{
+	return true;
+};
+ParaNumbering.prototype.Can_AddNumbering = function()
+{
+	return false;
+};
+ParaNumbering.prototype.Copy = function()
+{
+	return new ParaNumbering();
+};
+ParaNumbering.prototype.Write_ToBinary = function(Writer)
+{
+	// Long   : Type
+	Writer.WriteLong(this.Type);
+};
+ParaNumbering.prototype.Read_FromBinary = function(Reader)
+{
+};
+ParaNumbering.prototype.GetCalculatedValue = function()
+{
+	return this.Internal.CalcValue;
 };
 
 // TODO: Реализовать табы по точке и с чертой.
@@ -1212,94 +1254,121 @@ var tab_Center = 0x03;
 
 var tab_Symbol = 0x0022;//0x2192;
 
-// Класс ParaTab
+/**
+ * Класс представляющий элемент табуляции.
+ * @constructor
+ * @extends {CRunElementBase}
+ */
 function ParaTab()
 {
-    this.TabType = tab_Left;
+	CRunElementBase.call(this);
 
-    this.Width        = 0;
-    this.WidthVisible = 0;
-    this.RealWidth    = 0;
+	this.Width        = 0;
+	this.WidthVisible = 0;
+	this.RealWidth    = 0;
+
+	this.DotWidth        = 0;
+	this.UnderscoreWidth = 0;
+	this.HyphenWidth     = 0;
+	this.Leader          = Asc.c_oAscTabLeader.None;
 }
+ParaTab.prototype = Object.create(CRunElementBase.prototype);
+ParaTab.prototype.constructor = ParaTab;
 
-ParaTab.prototype =
+ParaTab.prototype.Type = para_Tab;
+ParaTab.prototype.Draw = function(X, Y, Context)
 {
-    Type : para_Tab,
+	if (this.WidthVisible > 0.01)
+	{
+		var sChar = null, nCharWidth = 0;
+		switch (this.Leader)
+		{
+			case Asc.c_oAscTabLeader.Dot:
+				sChar      = '.';
+				nCharWidth = this.DotWidth;
+				break;
+			case Asc.c_oAscTabLeader.Heavy:
+			case Asc.c_oAscTabLeader.Underscore:
+				sChar      = '_';
+				nCharWidth = this.UnderscoreWidth;
+				break;
+			case Asc.c_oAscTabLeader.Hyphen:
+				sChar      = '-';
+				nCharWidth = this.HyphenWidth;
+				break;
+			case Asc.c_oAscTabLeader.MiddleDot:
+				sChar      = '·';
+				nCharWidth = this.MiddleDotWidth;
+				break;
+		}
 
-    Get_Type : function()
-    {
-        return para_Tab;
-    },
-    
-    Draw : function(X,Y,Context)
-    {
-        if ( typeof (editor) !== "undefined" && editor.ShowParaMarks )
-        {
-            var X0 = this.Width / 2 - this.RealWidth / 2;
+		if (null !== sChar && nCharWidth > 0.001)
+		{
+			Context.SetFontSlot(fontslot_ASCII, 1);
+			var nCharsCount = Math.floor(this.WidthVisible / nCharWidth);
 
-            Context.SetFont( {FontFamily: { Name : "ASCW3", Index : -1 }, FontSize: 10, Italic: false, Bold : false} );
+			var _X = X + (this.WidthVisible - nCharsCount * nCharWidth) / 2;
+			for (var nIndex = 0; nIndex < nCharsCount; ++nIndex, _X += nCharWidth)
+				Context.FillText(_X, Y, sChar);
+		}
+	}
 
-            if ( X0 > 0 )
-                Context.FillText2( X + X0, Y, String.fromCharCode( tab_Symbol ), 0, this.Width );
-            else
-                Context.FillText2( X, Y, String.fromCharCode( tab_Symbol ), this.RealWidth - this.Width, this.Width );
+	if (editor && editor.ShowParaMarks)
+	{
+		Context.p_color(0, 0, 0, 255);
+		Context.b_color1(0, 0, 0, 255);
 
-        }
-    },
+		var X0 = this.Width / 2 - this.RealWidth / 2;
 
-    Measure : function (Context)
-    {
-        Context.SetFont( {FontFamily: { Name : "ASCW3", Index : -1 }, FontSize: 10, Italic: false, Bold : false} );
-        this.RealWidth = Context.Measure( String.fromCharCode( tab_Symbol ) ).Width;
-    },
+		Context.SetFont({FontFamily : {Name : "ASCW3", Index : -1}, FontSize : 10, Italic : false, Bold : false});
 
-    Get_Width : function()
-    {
-        return this.Width;
-    },
+		if (X0 > 0)
+			Context.FillText2(X + X0, Y, String.fromCharCode(tab_Symbol), 0, this.Width);
+		else
+			Context.FillText2(X, Y, String.fromCharCode(tab_Symbol), this.RealWidth - this.Width, this.Width);
+	}
+};
+ParaTab.prototype.Measure = function(Context)
+{
+	this.DotWidth        = Context.Measure(".").Width;
+	this.UnderscoreWidth = Context.Measure("_").Width;
+	this.HyphenWidth     = Context.Measure("-").Width * 1.5;
+	this.MiddleDotWidth  = Context.Measure("·").Width;
 
-    Get_WidthVisible : function()
-    {
-        return this.WidthVisible;
-    },
-
-    Set_WidthVisible : function(WidthVisible)
-    {
-        this.WidthVisible = WidthVisible;
-    },
-
-    Is_RealContent : function()
-    {
-        return true;
-    },
-
-    Can_AddNumbering : function()
-    {
-        return true;
-    },
-
-    Copy : function()
-    {
-        return new ParaTab();
-    },
-
-    Write_ToBinary : function(Writer)
-    {
-        // Long   : Type
-        // Long   : TabType
-        Writer.WriteLong( para_Tab );
-        Writer.WriteLong( this.TabType );
-    },
-
-    Read_FromBinary : function(Reader)
-    {
-        this.TabType = Reader.GetLong();
-    }
+	Context.SetFont({FontFamily : {Name : "ASCW3", Index : -1}, FontSize : 10, Italic : false, Bold : false});
+	this.RealWidth = Context.Measure(String.fromCharCode(tab_Symbol)).Width;
+};
+ParaTab.prototype.SetLeader = function(nLeaderType)
+{
+	this.Leader = nLeaderType;
+};
+ParaTab.prototype.Get_Width = function()
+{
+	return this.Width;
+};
+ParaTab.prototype.Get_WidthVisible = function()
+{
+	return this.WidthVisible;
+};
+ParaTab.prototype.Set_WidthVisible = function(WidthVisible)
+{
+	this.WidthVisible = WidthVisible;
+};
+ParaTab.prototype.Copy = function()
+{
+	return new ParaTab();
 };
 
-// Класс ParaPageNum
+
+/**
+ * Класс представляющий элемент номер страницы
+ * @constructor
+ * @extends {CRunElementBase}
+ */
 function ParaPageNum()
 {
+	CRunElementBase.call(this);
+
     this.FontKoef = 1;
 
     this.NumWidths = [];
@@ -1309,138 +1378,119 @@ function ParaPageNum()
 
     this.Width        = 0;
     this.WidthVisible = 0;
+
+    this.Parent = null;
 }
+ParaPageNum.prototype = Object.create(CRunElementBase.prototype);
+ParaPageNum.prototype.constructor = ParaPageNum;
 
-ParaPageNum.prototype =
+ParaPageNum.prototype.Type = para_PageNum;
+ParaPageNum.prototype.Draw = function(X, Y, Context)
 {
-    Type : para_PageNum,
+	// Value - реальное значение, которое должно быть отрисовано.
+	// Align - прилегание параграфа, в котором лежит данный номер страницы.
 
-    Get_Type : function()
-    {
-        return para_PageNum;
-    },
-    
-    Draw : function(X, Y, Context)
-    {
-        // Value - реальное значение, которое должно быть отрисовано.
-        // Align - прилегание параграфа, в котором лежит данный номер страницы.
+	var Len = this.String.length;
 
-        var Len = this.String.length;
+	var _X = X;
+	var _Y = Y;
 
-        var _X = X;
-        var _Y = Y;
+	Context.SetFontSlot(fontslot_ASCII, this.FontKoef);
+	for (var Index = 0; Index < Len; Index++)
+	{
+		var Char = this.String.charAt(Index);
+		Context.FillText(_X, _Y, Char);
+		_X += this.Widths[Index];
+	}
+};
+ParaPageNum.prototype.Measure = function (Context, TextPr)
+{
+	this.FontKoef = TextPr.Get_FontKoef();
+	Context.SetFontSlot(fontslot_ASCII, this.FontKoef);
 
-        Context.SetFontSlot( fontslot_ASCII, this.FontKoef );
-        for ( var Index = 0; Index < Len; Index++ )
-        {
-            var Char = this.String.charAt(Index);
-            Context.FillText( _X, _Y, Char );
-            _X += this.Widths[Index];
-        }
-    },
+	for (var Index = 0; Index < 10; Index++)
+	{
+		this.NumWidths[Index] = Context.Measure("" + Index).Width;
+	}
 
-    Measure : function (Context, TextPr)
-    {
-        this.FontKoef = TextPr.Get_FontKoef();
-        Context.SetFontSlot( fontslot_ASCII, this.FontKoef );
+	this.Width        = 0;
+	this.Height       = 0;
+	this.WidthVisible = 0;
+};
+ParaPageNum.prototype.Get_Width = function()
+{
+	return this.Width;
+};
+ParaPageNum.prototype.Get_WidthVisible = function()
+{
+	return this.WidthVisible;
+};
+ParaPageNum.prototype.Set_WidthVisible = function(WidthVisible)
+{
+	this.WidthVisible = WidthVisible;
+};
+ParaPageNum.prototype.Set_Page = function(PageNum)
+{
+	this.String = "" + PageNum;
+	var Len     = this.String.length;
 
-        for ( var Index = 0; Index < 10; Index++ )
-        {
-            this.NumWidths[Index] = Context.Measure( "" + Index ).Width;
-        }
+	var RealWidth = 0;
+	for (var Index = 0; Index < Len; Index++)
+	{
+		var Char = parseInt(this.String.charAt(Index));
 
-        this.Width        = 0;
-        this.Height       = 0;
-        this.WidthVisible = 0;
-    },
+		this.Widths[Index] = this.NumWidths[Char];
+		RealWidth += this.NumWidths[Char];
+	}
 
-    Get_Width : function()
-    {
-        return this.Width;
-    },
+	this.Width        = RealWidth;
+	this.WidthVisible = RealWidth;
+};
+ParaPageNum.prototype.SaveRecalculateObject = function(Copy)
+{
+	return new CPageNumRecalculateObject(this.Type, this.Widths, this.String, this.Width, Copy);
+};
+ParaPageNum.prototype.LoadRecalculateObject = function(RecalcObj)
+{
+	this.Widths = RecalcObj.Widths;
+	this.String = RecalcObj.String;
 
-    Get_WidthVisible : function()
-    {
-        return this.WidthVisible;
-    },
-
-    Set_WidthVisible : function(WidthVisible)
-    {
-        this.WidthVisible = WidthVisible;
-    },
-
-    Set_Page : function(PageNum)
-    {
-        this.String = "" + PageNum;
-        var Len = this.String.length;
-
-        var RealWidth = 0;
-        for ( var Index = 0; Index < Len; Index++ )
-        {
-            var Char = parseInt(this.String.charAt(Index));
-
-            this.Widths[Index] = this.NumWidths[Char];
-            RealWidth         += this.NumWidths[Char];
-        }
-
-        this.Width        = RealWidth;
-        this.WidthVisible = RealWidth;
-    },
-
-    Save_RecalculateObject : function(Copy)
-    {
-        return new CPageNumRecalculateObject(this.Type, this.Widths, this.String, this.Width, Copy);
-    },
-
-    Load_RecalculateObject : function(RecalcObj)
-    {
-        this.Widths = RecalcObj.Widths;
-        this.String = RecalcObj.String;
-
-        this.Width  = RecalcObj.Width;
-        this.WidthVisible = this.Width;
-    },
-
-    Prepare_RecalculateObject : function()
-    {
-        this.Widths = [];
-        this.String = "";
-    },
-
-    Document_CreateFontCharMap : function(FontCharMap)
-    {
-        var sValue = "1234567890";
-        for ( var Index = 0; Index < sValue.length; Index++ )
-        {
-            var Char = sValue.charAt(Index);
-            FontCharMap.AddChar( Char );
-        }
-    },
-
-    Is_RealContent : function()
-    {
-        return true;
-    },
-
-    Can_AddNumbering : function()
-    {
-        return true;
-    },
-
-    Copy : function()
-    {
-        return new ParaPageNum();
-    },
-
-    Write_ToBinary : function(Writer)
-    {
-        // Long   : Type
-        Writer.WriteLong( para_PageNum );
-    },
-
-    Read_FromBinary : function(Reader)
-    {
-    }
+	this.Width        = RecalcObj.Width;
+	this.WidthVisible = this.Width;
+};
+ParaPageNum.prototype.PrepareRecalculateObject = function()
+{
+	this.Widths = [];
+	this.String = "";
+};
+ParaPageNum.prototype.Document_CreateFontCharMap = function(FontCharMap)
+{
+	var sValue = "1234567890";
+	for (var Index = 0; Index < sValue.length; Index++)
+	{
+		var Char = sValue.charAt(Index);
+		FontCharMap.AddChar(Char);
+	}
+};
+ParaPageNum.prototype.Is_RealContent = function()
+{
+	return true;
+};
+ParaPageNum.prototype.Can_AddNumbering = function()
+{
+	return true;
+};
+ParaPageNum.prototype.Copy = function()
+{
+	return new ParaPageNum();
+};
+ParaPageNum.prototype.Write_ToBinary = function(Writer)
+{
+	// Long   : Type
+	Writer.WriteLong(para_PageNum);
+}
+ParaPageNum.prototype.Read_FromBinary = function(Reader)
+{
 };
 ParaPageNum.prototype.GetPageNumValue = function()
 {
@@ -1453,6 +1503,22 @@ ParaPageNum.prototype.GetPageNumValue = function()
 ParaPageNum.prototype.GetType = function()
 {
 	return this.Type;
+};
+/**
+ * Выставляем родительский класс
+ * @param {ParaRun} oParent
+ */
+ParaPageNum.prototype.SetParent = function(oParent)
+{
+	this.Parent = oParent;
+};
+/**
+ * Получаем родительский класс
+ * @returns {?ParaRun}
+ */
+ParaPageNum.prototype.GetParent = function()
+{
+	return this.Parent;
 };
 
 function CPageNumRecalculateObject(Type, Widths, String, Width, Copy)
@@ -1471,68 +1537,65 @@ function CPageNumRecalculateObject(Type, Widths, String, Width, Copy)
     }
 }
 
-// Класс ParaPresentationNumbering
+
+/**
+ * Класс представляющий символ нумерации у параграфа в презентациях
+ * @constructor
+ * @extends {CRunElementBase}
+ */
 function ParaPresentationNumbering()
 {
+	CRunElementBase.call(this);
+
     // Эти данные заполняются во время пересчета, перед вызовом Measure
     this.Bullet    = null;
     this.BulletNum = null;
 }
+ParaPresentationNumbering.prototype = Object.create(CRunElementBase.prototype);
+ParaPresentationNumbering.prototype.constructor = ParaPresentationNumbering;
 
-ParaPresentationNumbering.prototype =
+ParaPresentationNumbering.prototype.Type = para_PresentationNumbering;
+ParaPresentationNumbering.prototype.Draw = function(X, Y, Context, FirstTextPr, PDSE)
 {
-    Type : para_PresentationNumbering,
+	this.Bullet.Draw(X, Y, Context, FirstTextPr, PDSE);
+};
+ParaPresentationNumbering.prototype.Measure = function (Context, FirstTextPr, Theme)
+{
+	this.Width        = 0;
+	this.Height       = 0;
+	this.WidthVisible = 0;
 
-    Draw : function(X, Y, Context, FirstTextPr, PDSE)
-    {
-        this.Bullet.Draw( X, Y, Context, FirstTextPr, PDSE );
-    },
+	var Temp = this.Bullet.Measure(Context, FirstTextPr, this.BulletNum, Theme);
 
-    Measure : function (Context, FirstTextPr, Theme)
-    {
-        this.Width        = 0;
-        this.Height       = 0;
-        this.WidthVisible = 0;
+	this.Width        = Temp.Width;
+	this.WidthVisible = Temp.Width;
+};
+ParaPresentationNumbering.prototype.Is_RealContent = function()
+{
+	return true;
+};
+ParaPresentationNumbering.prototype.Can_AddNumbering = function()
+{
+	return false;
+};
+ParaPresentationNumbering.prototype.Copy = function()
+{
+	return new ParaPresentationNumbering();
+};
+ParaPresentationNumbering.prototype.Write_ToBinary = function(Writer)
+{
+	// Long   : Type
+	Writer.WriteLong(this.Type);
+};
+ParaPresentationNumbering.prototype.Read_FromBinary = function(Reader)
+{
+};
+ParaPresentationNumbering.prototype.Check_Range = function(Range, Line)
+{
+	if (null !== this.Item && null !== this.Run && Range === this.Range && Line === this.Line)
+		return true;
 
-        var Temp = this.Bullet.Measure( Context, FirstTextPr, this.BulletNum, Theme );
-
-        this.Width        = Temp.Width;
-        this.WidthVisible = Temp.Width;
-    },
-
-    Is_RealContent : function()
-    {
-        return true;
-    },
-
-    Can_AddNumbering : function()
-    {
-        return false;
-    },
-
-
-    Copy : function()
-    {
-        return new ParaPresentationNumbering();
-    },
-
-    Write_ToBinary : function(Writer)
-    {
-        // Long   : Type
-        Writer.WriteLong( this.Type );
-    },
-
-    Read_FromBinary : function(Reader)
-    {
-    },
-
-    Check_Range : function(Range, Line)
-    {
-        if ( null !== this.Item && null !== this.Run && Range === this.Range && Line === this.Line )
-            return true;
-
-        return false;
-    }
+	return false;
 };
 
 
@@ -1551,13 +1614,14 @@ function ParaFootnoteReference(Footnote, CustomMark)
 	this.Width        = 0;
 	this.WidthVisible = 0;
 	this.Number       = 1;
-	this.NumFormat    = numbering_numfmt_Decimal;
+	this.NumFormat    = Asc.c_oAscNumberingFormat.Decimal;
 
 	this.Run          = null;
 	this.Widths       = [];
 }
 ParaFootnoteReference.prototype = Object.create(CRunElementBase.prototype);
 ParaFootnoteReference.prototype.constructor = ParaFootnoteReference;
+
 ParaFootnoteReference.prototype.Type = para_FootnoteReference;
 ParaFootnoteReference.prototype.Get_Type = function()
 {
@@ -1588,10 +1652,11 @@ ParaFootnoteReference.prototype.Draw = function(X, Y, Context, PDSE)
 		_X += this.Widths[nPos];
 	}
 
-	if (editor && editor.ShowParaMarks && Context.DrawFootnoteRect)
+	if (editor && editor.ShowParaMarks && Context.DrawFootnoteRect && this.Run)
 	{
-	    Context.p_color(0, 0, 0, 255);
-	    Context.DrawFootnoteRect(X, PDSE.LineTop, this.Get_Width(), PDSE.BaseLine - PDSE.LineTop);
+		var TextAscent = this.Run.TextAscent;
+		Context.p_color(0, 0, 0, 255);
+		Context.DrawFootnoteRect(X, PDSE.BaseLine - TextAscent, this.Get_Width(), TextAscent);
 	}
 };
 ParaFootnoteReference.prototype.Measure = function(Context, TextPr, MathInfo, Run)
@@ -1664,7 +1729,7 @@ ParaFootnoteReference.prototype.UpdateNumber = function(PRS)
 	else
 	{
 		this.Number    = 1;
-		this.NumFormat = numbering_numfmt_Decimal;
+		this.NumFormat = Asc.c_oAscNumberingFormat.Decimal;
 		this.private_Measure();
 	}
 };
@@ -1683,7 +1748,7 @@ ParaFootnoteReference.prototype.private_Measure = function()
 	var oMeasurer = g_oTextMeasurer;
 
 	var TextPr = this.Run.Get_CompiledPr(false);
-	var Theme  = this.Run.Get_Paragraph().Get_Theme();
+	var Theme  = this.Run.GetParagraph().Get_Theme();
 
     var FontKoef = 1;
     if (TextPr.VertAlign !== AscCommon.vertalign_Baseline)
@@ -1710,17 +1775,17 @@ ParaFootnoteReference.prototype.private_Measure = function()
 };
 ParaFootnoteReference.prototype.private_GetString = function()
 {
-	if (numbering_numfmt_Decimal === this.NumFormat)
+	if (Asc.c_oAscNumberingFormat.Decimal === this.NumFormat)
 		return Numbering_Number_To_String(this.Number);
-	if (numbering_numfmt_LowerRoman === this.NumFormat)
+	if (Asc.c_oAscNumberingFormat.LowerRoman === this.NumFormat)
 		return Numbering_Number_To_Roman(this.Number, true);
-	else if (numbering_numfmt_UpperRoman === this.NumFormat)
+	else if (Asc.c_oAscNumberingFormat.UpperRoman === this.NumFormat)
 		return Numbering_Number_To_Roman(this.Number, false);
-	else if (numbering_numfmt_LowerLetter === this.NumFormat)
+	else if (Asc.c_oAscNumberingFormat.LowerLetter === this.NumFormat)
 		return Numbering_Number_To_Alpha(this.Number, true);
-	else if (numbering_numfmt_UpperLetter === this.NumFormat)
+	else if (Asc.c_oAscNumberingFormat.UpperLetter === this.NumFormat)
 		return Numbering_Number_To_Alpha(this.Number, false);
-	else// if (numbering_numfmt_Decimal === this.NumFormat)
+	else// if (Asc.c_oAscNumberingFormat.Decimal === this.NumFormat)
 		return Numbering_Number_To_String(this.Number);
 };
 ParaFootnoteReference.prototype.IsCustomMarkFollows = function()
@@ -1730,6 +1795,21 @@ ParaFootnoteReference.prototype.IsCustomMarkFollows = function()
 ParaFootnoteReference.prototype.GetCustomText = function()
 {
 	return this.CustomMark;
+};
+ParaFootnoteReference.prototype.CreateDocumentFontMap = function(FontMap)
+{
+	if (this.Footnote)
+		this.Footnote.Document_CreateFontMap(FontMap);
+};
+ParaFootnoteReference.prototype.GetAllContentControls = function(arrContentControls)
+{
+	if (this.Footnote)
+		this.Footnote.GetAllContentControls(arrContentControls);
+};
+ParaFootnoteReference.prototype.GetAllFontNames = function(arrAllFonts)
+{
+	if (this.Footnote)
+		this.Footnote.Document_Get_AllFontNames(arrAllFonts);
 };
 
 /**
@@ -1744,6 +1824,7 @@ function ParaFootnoteRef(Footnote)
 }
 ParaFootnoteRef.prototype = Object.create(ParaFootnoteReference.prototype);
 ParaFootnoteRef.prototype.constructor = ParaFootnoteRef;
+
 ParaFootnoteRef.prototype.Type = para_FootnoteRef;
 ParaFootnoteRef.prototype.Get_Type = function()
 {
@@ -1765,7 +1846,7 @@ ParaFootnoteRef.prototype.UpdateNumber = function(oFootnote)
 	else
 	{
 		this.Number    = 1;
-		this.NumFormat = numbering_numfmt_Decimal;
+		this.NumFormat = Asc.c_oAscNumberingFormat.Decimal;
 		this.private_Measure();
 	}
 };
@@ -1782,6 +1863,7 @@ function ParaSeparator()
 }
 ParaSeparator.prototype = Object.create(CRunElementBase.prototype);
 ParaSeparator.prototype.constructor = ParaSeparator;
+
 ParaSeparator.prototype.Type     = para_Separator;
 ParaSeparator.prototype.Get_Type = function()
 {
@@ -1836,6 +1918,7 @@ function ParaContinuationSeparator()
 }
 ParaContinuationSeparator.prototype = Object.create(CRunElementBase.prototype);
 ParaContinuationSeparator.prototype.constructor = ParaContinuationSeparator;
+
 ParaContinuationSeparator.prototype.Type         = para_ContinuationSeparator;
 ParaContinuationSeparator.prototype.Get_Type     = function()
 {
@@ -1872,22 +1955,33 @@ ParaContinuationSeparator.prototype.UpdateWidth = function(PRS)
 	oPara.Parent.Update_ContentIndexing();
 	var oLimits = oPara.Parent.Get_PageContentStartPos2(oPara.PageNum, oPara.ColumnNum, nCurPage, oPara.Index);
 
-	var nWidth = ((oLimits.XLimit - oLimits.X) * TEXTWIDTH_DIVIDER) | 0;
+	var nWidth = (Math.max(oLimits.XLimit - PRS.X, 50) * TEXTWIDTH_DIVIDER) | 0;
 
 	this.Width        = nWidth;
 	this.WidthVisible = nWidth;
 };
 
+
+/**
+ * Класс представляющий элемент "количество страниц"
+ * @param PageCount
+ * @constructor
+ * @extends {CRunElementBase}
+ */
 function ParaPageCount(PageCount)
 {
+	CRunElementBase.call(this);
+
 	this.FontKoef  = 1;
 	this.NumWidths = [];
 	this.Widths    = [];
 	this.String    = "";
 	this.PageCount = undefined !== PageCount ? PageCount : 1;
+	this.Parent    = null;
 }
 ParaPageCount.prototype = Object.create(CRunElementBase.prototype);
 ParaPageCount.prototype.constructor = ParaPageCount;
+
 ParaPageCount.prototype.Type = para_PageCount;
 ParaPageCount.prototype.Copy = function()
 {
@@ -1942,6 +2036,10 @@ ParaPageCount.prototype.Update_PageCount = function(nPageCount)
 	this.PageCount = nPageCount;
 	this.private_UpdateWidth();
 };
+ParaPageCount.prototype.SetNumValue = function(nValue)
+{
+	this.Update_PageCount(nValue);
+};
 ParaPageCount.prototype.private_UpdateWidth = function()
 {
 	this.String = "" + this.PageCount;
@@ -1975,6 +2073,22 @@ ParaPageCount.prototype.GetPageCountValue = function()
 {
 	return this.PageCount;
 };
+/**
+ * Выставляем родительский класс
+ * @param {ParaRun} oParent
+ */
+ParaPageCount.prototype.SetParent = function(oParent)
+{
+	this.Parent = oParent;
+};
+/**
+ * Получаем родительский класс
+ * @returns {?ParaRun}
+ */
+ParaPageCount.prototype.GetParent = function()
+{
+	return this.Parent;
+};
 
 function ParagraphContent_Read_FromBinary(Reader)
 {
@@ -1983,9 +2097,11 @@ function ParagraphContent_Read_FromBinary(Reader)
 	var Element = null;
 	switch (ElementType)
 	{
-		case para_TextPr                :
-		case para_Drawing               :
-		case para_HyperlinkStart        :
+		case para_TextPr:
+		case para_Drawing:
+		case para_HyperlinkStart:
+		case para_InlineLevelSdt:
+		case para_Bookmark:
 		{
 			var ElementId = Reader.GetString2();
 			Element       = g_oTableId.Get_ById(ElementId);
@@ -2009,6 +2125,8 @@ function ParagraphContent_Read_FromBinary(Reader)
 		case para_Separator             : Element = new ParaSeparator(); break;
 		case para_ContinuationSeparator : Element = new ParaContinuationSeparator(); break;
 		case para_PageCount             : Element = new ParaPageCount(); break;
+		case para_FieldChar             : Element = new ParaFieldChar(); break;
+		case para_InstrText             : Element = new ParaInstrText(); break;
 	}
 
 	if (null != Element)
@@ -2019,7 +2137,11 @@ function ParagraphContent_Read_FromBinary(Reader)
 
 //--------------------------------------------------------export----------------------------------------------------
 window['AscCommonWord'] = window['AscCommonWord'] || {};
-window['AscCommonWord'].ParaNewLine = ParaNewLine;
+window['AscCommonWord'].ParaNewLine   = ParaNewLine;
+window['AscCommonWord'].ParaText      = ParaText;
+window['AscCommonWord'].ParaSpace     = ParaSpace;
+window['AscCommonWord'].ParaPageNum   = ParaPageNum;
+window['AscCommonWord'].ParaPageCount = ParaPageCount;
 
 window['AscCommonWord'].break_Page = break_Page;
 window['AscCommonWord'].break_Column = break_Column;

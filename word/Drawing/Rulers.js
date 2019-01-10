@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2018
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -38,10 +38,11 @@ var global_mouseEvent = AscCommon.global_mouseEvent;
 var g_dKoef_pix_to_mm = AscCommon.g_dKoef_pix_to_mm;
 var g_dKoef_mm_to_pix = AscCommon.g_dKoef_mm_to_pix;
 
-function CTab(pos,type)
+function CTab(pos, type, leader)
 {
-    this.pos   = pos;
-    this.type  = type;
+	this.pos    = pos;
+	this.type   = type;
+	this.leader = leader;
 }
 
 var g_array_objects_length = 1;
@@ -205,6 +206,8 @@ function CHorRuler()
                         // 8 - table
                         // 9 - column size
                         // 10 - column move
+
+    this.DragTypeMouseDown = 0;
 
     this.m_dIndentLeft_old      = -10000;
     this.m_dIndentLeftFirst_old = -10000;
@@ -531,6 +534,7 @@ function CHorRuler()
         context.fillStyle = GlobalSkin.BackgroundColor;
         context.fillRect(0, 0, this.m_oCanvas.width, this.m_oCanvas.height);
 
+		// промежуток между маргинами
         var left_margin  = 0;
         var right_margin = 0;
 
@@ -604,6 +608,7 @@ function CHorRuler()
             context.beginPath();
         }
 
+		// рамка
         //context.shadowBlur = 0;
         //context.shadowColor = "#81878F";
 
@@ -626,6 +631,7 @@ function CHorRuler()
 
         var mm_1_4 = 10 * dKoef_mm_to_pix / 4;
         var inch_1_8 = 25.4 * dKoef_mm_to_pix / 8;
+        var isDraw1_4 = (mm_1_4 > 7) ? true : false;
 
         var middleVert = (this.m_nTop + this.m_nBottom) / 2;
         var part1 = 1;
@@ -657,7 +663,7 @@ function CHorRuler()
                 lXPos -= (lWidthText / 2.0);
                 context.fillText(strNum, lXPos, this.m_nBottom - 3);
             }
-            else if (1 == index)
+            else if (1 == index && isDraw1_4)
             {
                 // 1/4
                 context.beginPath();
@@ -673,7 +679,7 @@ function CHorRuler()
                 context.lineTo(lXPos, middleVert + part2);
                 context.stroke();
             }
-            else
+            else if (isDraw1_4)
             {
                 // 1/4
                 context.beginPath();
@@ -702,7 +708,7 @@ function CHorRuler()
                 lXPos -= (lWidthText / 2.0);
                 context.fillText(strNum, lXPos, this.m_nBottom - 3);
             }
-            else if (1 == index)
+            else if (1 == index && isDraw1_4)
             {
                 // 1/4
                 context.beginPath();
@@ -718,7 +724,7 @@ function CHorRuler()
                 context.lineTo(lXPos, middleVert + part2);
                 context.stroke();
             }
-            else
+            else if (isDraw1_4)
             {
                 // 1/4
                 context.beginPath();
@@ -1093,10 +1099,11 @@ function CHorRuler()
 
         this.SimpleChanges.CheckMove();
 
+		// теперь определяем позицию относительно самой линейки. Все в миллиметрах
         var hor_ruler = word_control.m_oTopRuler_horRuler;
         var dKoefPxToMM = 100 * g_dKoef_pix_to_mm / word_control.m_nZoomValue;
 
-        var _x = global_mouseEvent.X - 5 * g_dKoef_mm_to_pix - left - word_control.X - word_control.m_oMainContent.AbsolutePosition.L * g_dKoef_mm_to_pix;
+        var _x = global_mouseEvent.X - 5 * g_dKoef_mm_to_pix - left - word_control.X - word_control.GetMainContentBounds().L * g_dKoef_mm_to_pix;
         _x *= dKoefPxToMM;
         var _y = (global_mouseEvent.Y - word_control.Y) * g_dKoef_pix_to_mm;
 
@@ -1569,8 +1576,10 @@ function CHorRuler()
         }
     }
 
-    this.CheckMouseType = function(x, y, isMouseDown)
+    this.CheckMouseType = function(x, y, isMouseDown, isNegative)
     {
+		// проверяем где находимся
+
         var _top = 1.8;
         var _bottom = 5.2;
 
@@ -1658,11 +1667,15 @@ function CHorRuler()
             }
         }
 
+        var isColumnsInside = false;
+		var isColumnsInside2 = false;
+        var isTableInside = false;
+
         if (this.CurrentObjectType == RULER_OBJECT_TYPE_PARAGRAPH && this.IsCanMoveMargins)
         {
             if (y >= _top && y <= _bottom)
             {
-                // ������ �������
+				// внутри линейки
                 if (Math.abs(x - this.m_dMarginLeft) < 1)
                 {
                     return 1;
@@ -1671,10 +1684,20 @@ function CHorRuler()
                 {
                     return 2;
                 }
+
+                if (isNegative)
+                {
+                    if (x < this.m_dMarginLeft)
+                        return -1;
+                    if (x > this.m_dMarginRight)
+                        return -2;
+                }
             }
         }
         else if (this.CurrentObjectType == RULER_OBJECT_TYPE_TABLE)
         {
+            var nTI_x = 0;
+            var nTI_r = 0;
             if (y >= _top && y <= _bottom)
             {
                 var markup = this.m_oTableMarkup;
@@ -1688,17 +1711,31 @@ function CHorRuler()
                         return 8;
                     }
                     if (i == _count)
+                    {
+                        nTI_r = pos;
                         break;
+					}
+					if (i == 0)
+                    {
+                        nTI_x = pos;
+                    }
                     
                     pos += markup.Cols[i];
                 }
             }
+
+            if (x > nTI_x && x < nTI_r)
+                isTableInside = true;
         }
         else if (this.CurrentObjectType == RULER_OBJECT_TYPE_COLUMNS)
         {
-            if (y >= _top && y <= _bottom)
+			if (y >= _top && y <= _bottom)
             {
                 var markup = this.m_oColumnMarkup;
+
+				var nCI_x = markup.X;
+				var nCI_r = nCI_x;
+
                 if (markup.EqualWidth)
                 {
                     var _w = ((markup.R - markup.X) - markup.Space * (markup.Num - 1)) / markup.Num;
@@ -1726,6 +1763,7 @@ function CHorRuler()
 
                         ++_index;
                         _x += _w;
+                        nCI_r = _x;
 
                         if (i == markup.Num - 1)
                         {
@@ -1742,6 +1780,9 @@ function CHorRuler()
                                 this.DragTablePos = _index;
                                 return 9;
                             }
+
+							if (x > _x && x < (_x + markup.Space))
+								isColumnsInside = true;
                         }
 
                         ++_index;
@@ -1774,8 +1815,9 @@ function CHorRuler()
 
                         ++_index;
                         _x += markup.Cols[i].W;
+						nCI_r = _x;
 
-                        if (i == markup.Num - 1)
+						if (i == markup.Num - 1)
                         {
                             if (Math.abs(x - _x) < 1)
                             {
@@ -1799,21 +1841,54 @@ function CHorRuler()
                                 this.DragTablePos = i;
                                 return 10;
                             }
+
+							if (x > _x && x < (_x + markup.Cols[i].Space))
+								isColumnsInside = true;
                         }
 
                         ++_index;
                         _x += markup.Cols[i].Space;
                     }
                 }
+
+				if (x > nCI_x && x < nCI_r)
+					isColumnsInside2 = true;
             }
         }
+
+        if (isNegative)
+        {
+            if (isColumnsInside)
+                return -9;
+
+            // если вникуда - то ВСЕГДА margins
+            return -1;
+
+            if (isColumnsInside2)
+                return 0;
+            if ((y >= _top && y <= _bottom) && !isTableInside)
+            {
+				if (x < _margin_left)
+					return -1;
+				if (x > _margin_right)
+					return -2;
+            }
+        }
+
         return 0;
     }
 
     this.OnMouseDown = function(left, top, e)
     {
         var word_control = this.m_oWordControl;
-        AscCommon.check_MouseDownEvent(e);
+
+        if (true === word_control.m_oApi.isStartAddShape)
+        {
+			word_control.m_oApi.sync_EndAddShape();
+			word_control.m_oApi.sync_StartAddShapeCallback(false);
+        }
+
+        AscCommon.check_MouseDownEvent(e, true);
         global_mouseEvent.LockMouse();
 
         this.SimpleChanges.Reinit();
@@ -1821,11 +1896,68 @@ function CHorRuler()
         var dKoefPxToMM = 100 * g_dKoef_pix_to_mm / word_control.m_nZoomValue;
         var dKoef_mm_to_pix = g_dKoef_mm_to_pix * this.m_dZoom;
         
-        var _x = global_mouseEvent.X - 5 * g_dKoef_mm_to_pix - left - word_control.X - word_control.m_oMainContent.AbsolutePosition.L * g_dKoef_mm_to_pix;
+        var _x = global_mouseEvent.X - 5 * g_dKoef_mm_to_pix - left - word_control.X - word_control.GetMainContentBounds().L * g_dKoef_mm_to_pix;
         _x *= dKoefPxToMM;
         var _y = (global_mouseEvent.Y - word_control.Y) * g_dKoef_pix_to_mm;
 
-        this.DragType = this.CheckMouseType(_x, _y, true);
+        this.DragType = this.CheckMouseType(_x, _y, true, true);
+        if (this.DragType < 0)
+        {
+			this.DragTypeMouseDown = -this.DragType;
+			this.DragType = 0;
+		}
+		else
+        {
+            this.DragTypeMouseDown = this.DragType;
+		}
+
+		if (global_mouseEvent.ClickCount > 1)
+        {
+            var eventType = "";
+            switch (this.DragTypeMouseDown)
+            {
+                case 1:
+                case 2:
+                {
+					eventType = "margins";
+                    break;
+                }
+                case 3:
+                case 4:
+                case 5:
+                case 6:
+                {
+					eventType = "indents";
+                    break;
+                }
+                case 7:
+                {
+					eventType = "tabs";
+                    break;
+                }
+                case 8:
+                {
+					eventType = "tables";
+                    break;
+                }
+                case 9:
+                case 10:
+                {
+					eventType = "columns";
+                    break;
+                }
+                default:
+                    break;
+            }
+
+            if (eventType != "")
+            {
+				word_control.m_oApi.sendEvent("asc_onRulerDblClick", eventType);
+                this.DragType = 0;
+                this.OnMouseUp(left, top, e);
+                return;
+            }
+        }
 
         var _margin_left = this.m_dMarginLeft;
         var _margin_right = this.m_dMarginRight;
@@ -2206,33 +2338,33 @@ function CHorRuler()
     }
 
     this.SetTabsProperties = function()
-    {
-        // потом заменить на объекты CTab (когда Илюха реализует не только левые табы)
-        var _arr = new CParaTabs();
-        var _c = this.m_arrTabs.length;
-        for (var i = 0; i < _c; i++)
-        {
-            if (this.m_arrTabs[i].type == AscCommon.g_tabtype_left)
-                _arr.Add( new CParaTab( tab_Left, this.m_arrTabs[i].pos ) );
-            else if (this.m_arrTabs[i].type == AscCommon.g_tabtype_right)
-                _arr.Add( new CParaTab( tab_Right, this.m_arrTabs[i].pos ) );
-            else if (this.m_arrTabs[i].type == AscCommon.g_tabtype_center)
-                _arr.Add( new CParaTab( tab_Center, this.m_arrTabs[i].pos ) );
-        }
-        
-        if ( false === this.m_oWordControl.m_oLogicDocument.Document_Is_SelectionLocked(AscCommon.changestype_Paragraph_Properties) )
-        {
-            this.m_oWordControl.m_oLogicDocument.Create_NewHistoryPoint(AscDFH.historydescription_Document_SetParagraphTabs);
-            this.m_oWordControl.m_oLogicDocument.Set_ParagraphTabs(_arr);
-        }
-    }
+	{
+		// потом заменить на объекты CTab (когда Илюха реализует не только левые табы)
+		var _arr = new CParaTabs();
+		var _c   = this.m_arrTabs.length;
+		for (var i = 0; i < _c; i++)
+		{
+			if (this.m_arrTabs[i].type == AscCommon.g_tabtype_left)
+				_arr.Add(new CParaTab(tab_Left, this.m_arrTabs[i].pos, this.m_arrTabs[i].leader));
+			else if (this.m_arrTabs[i].type == AscCommon.g_tabtype_right)
+				_arr.Add(new CParaTab(tab_Right, this.m_arrTabs[i].pos, this.m_arrTabs[i].leader));
+			else if (this.m_arrTabs[i].type == AscCommon.g_tabtype_center)
+				_arr.Add(new CParaTab(tab_Center, this.m_arrTabs[i].pos, this.m_arrTabs[i].leader));
+		}
+
+		if (false === this.m_oWordControl.m_oLogicDocument.Document_Is_SelectionLocked(AscCommon.changestype_Paragraph_Properties))
+		{
+			this.m_oWordControl.m_oLogicDocument.Create_NewHistoryPoint(AscDFH.historydescription_Document_SetParagraphTabs);
+			this.m_oWordControl.m_oLogicDocument.SetParagraphTabs(_arr);
+		}
+	}
 
     this.SetPrProperties = function()
     {
         if ( false === this.m_oWordControl.m_oLogicDocument.Document_Is_SelectionLocked(AscCommon.changestype_Paragraph_Properties) )
         {
             this.m_oWordControl.m_oLogicDocument.Create_NewHistoryPoint(AscDFH.historydescription_Document_SetParagraphIndentFromRulers);
-            this.m_oWordControl.m_oLogicDocument.Set_ParagraphIndent( { Left : this.m_dIndentLeft, Right : this.m_dIndentRight,
+            this.m_oWordControl.m_oLogicDocument.SetParagraphIndent( { Left : this.m_dIndentLeft, Right : this.m_dIndentRight,
                 FirstLine: (this.m_dIndentLeftFirst - this.m_dIndentLeft) } );
             this.m_oWordControl.m_oLogicDocument.Document_UpdateInterfaceState();
         }
@@ -2244,7 +2376,7 @@ function CHorRuler()
             this.m_oWordControl.m_oLogicDocument.Create_NewHistoryPoint(AscDFH.historydescription_Document_SetDocumentMargin_Hor);
             this.m_oWordControl.m_oLogicDocument.Set_DocumentMargin( { Left : this.m_dMarginLeft, Right : this.m_dMarginRight });
         }
-        //oWordControl.m_oLogicDocument.Set_ParagraphIndent( { Left : this.m_dIndentLeft, Right : this.m_dIndentRight,
+        //oWordControl.m_oLogicDocument.SetParagraphIndent( { Left : this.m_dIndentLeft, Right : this.m_dIndentRight,
         //    FirstLine: (this.m_dIndentLeftFirst - this.m_dIndentLeft) } );
     }
 
@@ -2256,7 +2388,8 @@ function CHorRuler()
 
             this.m_oTableMarkup.CorrectTo();
             this.m_oTableMarkup.Table.Update_TableMarkupFromRuler(this.m_oTableMarkup, true, this.DragTablePos);
-            this.m_oTableMarkup.CorrectFrom();
+			if (this.m_oTableMarkup)
+			    this.m_oTableMarkup.CorrectFrom();
 
             this.m_oWordControl.m_oLogicDocument.Document_UpdateInterfaceState();
             this.m_oWordControl.m_oLogicDocument.Document_UpdateRulersState();
@@ -2644,9 +2777,9 @@ function CVerRuler()
 {
     this.m_oPage        = null;
 
-    this.m_nLeft         = 0;        // �������� � �������� - �������� �� ����� �������
-    this.m_nRight      = 0;          // �������� � �������� - �������� �� ����� �������
-    // (�.�. ������ ������� � �������� = (this.m_nRight - this.m_nLeft))
+    this.m_nLeft         = 0;        // значения в пикселах - смещение до самой линейки
+    this.m_nRight      = 0;          // значения в пикселах - смещение до самой линейки
+                                     // (т.е. ширина линейки в пикселах = (this.m_nRight - this.m_nLeft))
 
     this.m_dMarginTop           = 20;
     this.m_dMarginBottom        = 250;
@@ -2872,7 +3005,7 @@ function CVerRuler()
             context.beginPath();
         }
 
-        // �����
+		// рамка
         context.strokeStyle = GlobalSkin.RulerOutline;
 
         context.lineWidth = 1;
@@ -2891,6 +3024,7 @@ function CVerRuler()
         context.fillStyle = "#585B5E";
 
         var mm_1_4 = 10 * dKoef_mm_to_pix / 4;
+		var isDraw1_4 = (mm_1_4 > 7) ? true : false;
         var inch_1_8 = 25.4 * dKoef_mm_to_pix / 8;
 
         var middleHor = (this.m_nLeft + this.m_nRight) / 2;
@@ -2931,7 +3065,7 @@ function CVerRuler()
                 else
                     context.setTransform(2, 0, 0, 2, 0, 10);
             }
-            else if (1 == index)
+            else if (1 == index && isDraw1_4)
             {
                 // 1/4
                 context.beginPath();
@@ -2947,7 +3081,7 @@ function CVerRuler()
                 context.lineTo(middleHor + part2, lYPos);
                 context.stroke();
             }
-            else
+            else if (isDraw1_4)
             {
                 // 1/4
                 context.beginPath();
@@ -2983,7 +3117,7 @@ function CVerRuler()
                 else
                     context.setTransform(2, 0, 0, 2, 0, 10);
             }
-            else if (1 == index)
+            else if (1 == index && isDraw1_4)
             {
                 // 1/4
                 context.beginPath();
@@ -2999,7 +3133,7 @@ function CVerRuler()
                 context.lineTo(middleHor + part2, lYPos);
                 context.stroke();
             }
-            else
+            else if (isDraw1_4)
             {
                 // 1/4
                 context.beginPath();
@@ -3222,7 +3356,7 @@ function CVerRuler()
         var ver_ruler = word_control.m_oLeftRuler_vertRuler;
         var dKoefPxToMM = 100 * g_dKoef_pix_to_mm / word_control.m_nZoomValue;
 
-        // ������ ���������� ������� ������������ ����� �������. ��� � �����������
+		// теперь определяем позицию относительно самой линейки. Все в миллиметрах
         var _y = global_mouseEvent.Y - 7 * g_dKoef_mm_to_pix - top - word_control.Y;
         _y *= dKoefPxToMM;
         var _x = left * g_dKoef_pix_to_mm;
@@ -3395,11 +3529,14 @@ function CVerRuler()
 
     this.CheckMouseType = function(x, y)
     {
+		// проверяем где находимся
+
         if (this.IsCanMoveMargins === false)
             return 0;
 
         if (x >= 0.8 && x <= 4.2)
         {
+			// внутри линейки
             if (this.CurrentObjectType == RULER_OBJECT_TYPE_PARAGRAPH)
             {
                 if (Math.abs(y - this.m_dMarginTop) < 1)
@@ -3468,7 +3605,14 @@ function CVerRuler()
     this.OnMouseDown = function(left, top, e)
     {
         var word_control = this.m_oWordControl;
-        AscCommon.check_MouseDownEvent(e);
+
+		if (true === word_control.m_oApi.isStartAddShape)
+		{
+			word_control.m_oApi.sync_EndAddShape();
+			word_control.m_oApi.sync_StartAddShapeCallback(false);
+		}
+
+        AscCommon.check_MouseDownEvent(e, true);
 
         this.SimpleChanges.Reinit();
         global_mouseEvent.LockMouse();
@@ -3478,9 +3622,32 @@ function CVerRuler()
 
         var _y = global_mouseEvent.Y - 7 * g_dKoef_mm_to_pix - top - word_control.Y;
         _y *= dKoefPxToMM;
-        var _x = (global_mouseEvent.X - word_control.X) * g_dKoef_pix_to_mm - word_control.m_oMainContent.AbsolutePosition.L;
+        var _x = (global_mouseEvent.X - word_control.X) * g_dKoef_pix_to_mm - word_control.GetMainContentBounds().L;
 
         this.DragType = this.CheckMouseType(_x, _y);
+		this.DragTypeMouseDown = this.DragType;
+
+		if (global_mouseEvent.ClickCount > 1)
+		{
+			var eventType = "";
+			switch (this.DragTypeMouseDown)
+			{
+				case 5:
+				    eventType = "tables";
+				    break;
+				default:
+					eventType = "margins";
+					break;
+			}
+
+			if (eventType != "")
+			{
+				word_control.m_oApi.sendEvent("asc_onRulerDblClick", eventType);
+				this.DragType = 0;
+				this.OnMouseUp(left, top, e);
+				return;
+			}
+		}
 
         switch (this.DragType)
         {
@@ -3654,7 +3821,8 @@ function CVerRuler()
 
             this.m_oTableMarkup.CorrectTo();
             this.m_oTableMarkup.Table.Update_TableMarkupFromRuler(this.m_oTableMarkup, false, this.DragTablePos);
-            this.m_oTableMarkup.CorrectFrom();
+            if (this.m_oTableMarkup)
+                this.m_oTableMarkup.CorrectFrom();
         }
     }
 }

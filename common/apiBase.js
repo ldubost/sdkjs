@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2018
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -34,8 +34,9 @@
 
 (function(window, undefined)
 {
+	var prot;
+
 	// Import
-	var offlineMode = AscCommon.offlineMode;
 	var c_oEditorId = AscCommon.c_oEditorId;
 	var c_oCloseCode = AscCommon.c_oCloseCode;
 
@@ -43,11 +44,12 @@
 	var c_oAscAsyncAction     = Asc.c_oAscAsyncAction;
 	var c_oAscAsyncActionType = Asc.c_oAscAsyncActionType;
 
-	var ASC_DOCS_API_USE_EMBEDDED_FONTS = "@@ASC_DOCS_API_USE_EMBEDDED_FONTS";
-
 	/** @constructor */
 	function baseEditorsApi(config, editorId)
 	{
+		if (window["AscDesktopEditor"])
+			window["AscDesktopEditor"]["CreateEditorApi"]();
+
 		this.editorId      = editorId;
 		this.isLoadFullApi = false;
 		this.openResult    = null;
@@ -59,6 +61,7 @@
 		this.isEmbedVersion = (config['embedded'] === true);
 
 		this.isViewMode = false;
+		this.restrictions = Asc.c_oAscRestrictionType.None;
 
 		this.FontLoader  = null;
 		this.ImageLoader = null;
@@ -108,9 +111,10 @@
 
 		this.isDocumentCanSave = false;			// Флаг, говорит о возможности сохранять документ (активна кнопка save или нет)
 
+		// translate manager
+		this.translateManager = AscCommon.translateManager.init(config['translate']);
+
 		// Chart
-		this.chartTranslate        = null;
-		this.textArtTranslate      = null;
 		this.chartPreviewManager   = null;
 		this.textArtPreviewManager = null;
 		this.shapeElementId        = null;
@@ -136,6 +140,11 @@
 		this.isOnFirstConnectEnd = false;
 		// Получили ли лицензию
 		this.isOnLoadLicense     = false;
+		// Переменная, которая отвечает, послали ли мы окончание открытия документа
+		this.isDocumentLoadComplete = false;
+		// Переменная, которая отвечает, послали ли мы окончание открытия документа
+		this.isPreOpenLocks = true;
+		this.isApplyChangesOnOpenEnabled = true;
 
 		this.canSave    = true;        // Флаг нужен чтобы не происходило сохранение пока не завершится предыдущее сохранение
 		this.IsUserSave = false;    // Флаг, контролирующий сохранение было сделано пользователем или нет (по умолчанию - нет)
@@ -144,6 +153,7 @@
         this.forceSaveButtonContinue = false;
         this.forceSaveTimeoutTimeout = null;
 		this.disconnectOnSave = null;
+		this.forceSaveUndoRequest = false; // Флаг нужен, чтобы мы знали, что данное сохранение пришло по запросу Undo в совместке
 
 		// Version History
 		this.VersionHistory = null;				// Объект, который отвечает за точку в списке версий
@@ -153,12 +163,7 @@
 		this.exucuteHistory    = false;
 		this.exucuteHistoryEnd = false;
 
-		// На этапе сборки значение переменной ASC_DOCS_API_USE_EMBEDDED_FONTS может менятся.
-		// По дефолту встроенные шрифты использоваться не будут, как и при любом значении
-		// ASC_DOCS_API_USE_EMBEDDED_FONTS, кроме "true"(написание от регистра не зависит).
-
-		// Использовать ли обрезанные шрифты
-		this.isUseEmbeddedCutFonts = ("true" == ASC_DOCS_API_USE_EMBEDDED_FONTS.toLowerCase());
+		this.selectSearchingResults = false;
 
 		this.isSendStandartTextures = false;
 
@@ -171,6 +176,20 @@
 		this.isLockTargetUpdate = false;
 
 		this.lastWorkTime = 0;
+
+		this.signatures = [];
+
+		this.currentPassword = "";
+
+		this.macros = null;
+
+        this.openFileCryptBinary = null;
+
+        this.copyOutEnabled = (config['copyoutenabled'] !== false);
+
+		//config['watermark_on_draw'] = window.TEST_WATERMARK_STRING;
+		this.watermarkDraw =
+			config['watermark_on_draw'] ? new AscCommon.CWatermarkOnDraw(config['watermark_on_draw']) : null;
 
 		return this;
 	}
@@ -190,7 +209,7 @@
 			}
 			else
 			{
-				t._addImageUrl(url);
+				t._addImageUrl([url]);
 			}
 
 			t.sync_EndAction(c_oAscAsyncActionType.BlockInteraction, c_oAscAsyncAction.UploadImage);
@@ -200,21 +219,21 @@
 		{
 			t.isLoadFullApi = true;
 
-			if (t.DocInfo && t.DocInfo.get_OfflineApp())
-			{
-				t._OfflineAppDocumentStartLoad();
-			}
-
 			t._onEndLoadSdk();
-			t.onEndLoadFile(null);
+			t.onEndLoadDocInfo();
+		}, function(err) {
+			t.sendEvent("asc_onError", Asc.c_oAscError.ID.LoadingScriptError, c_oAscError.Level.Critical);
 		});
 
 		var oldOnError = window.onerror;
 		window.onerror = function(errorMsg, url, lineNumber, column, errorObj) {
 			var msg = 'Error: ' + errorMsg + ' Script: ' + url + ' Line: ' + lineNumber + ':' + column +
 				' userAgent: ' + (navigator.userAgent || navigator.vendor || window.opera) + ' platform: ' +
-				navigator.platform + ' StackTrace: ' + (errorObj ? errorObj.stack : "");
+				navigator.platform + ' isLoadFullApi: ' + t.isLoadFullApi + ' isDocumentLoadComplete: ' +
+				t.isDocumentLoadComplete + ' StackTrace: ' + (errorObj ? errorObj.stack : "");
 			t.CoAuthoringApi.sendChangesError(msg);
+			//send only first error to reduce number of requests. also following error may be consequences of first
+			window.onerror = oldOnError;
 			if (oldOnError) {
 				return oldOnError.apply(this, arguments);
 			} else {
@@ -253,6 +272,7 @@
 	};
 	baseEditorsApi.prototype.asc_setDocInfo                  = function(oDocInfo)
 	{
+		var oldInfo = this.DocInfo;
 		if (oDocInfo)
 		{
 			this.DocInfo = oDocInfo;
@@ -277,11 +297,37 @@
 
 			//чтобы в versionHistory был один documentId для auth и open
 			this.CoAuthoringApi.setDocId(this.documentId);
+
+			if (this.watermarkDraw)
+			{
+				this.watermarkDraw.CheckParams(this);
+			}
 		}
 
-		if (undefined !== window["AscDesktopEditor"] && offlineMode != this.documentUrl)
+		if (AscCommon.chartMode === this.documentUrl)
+		{
+			this.isChartEditor = true;
+            AscCommon.EncryptionWorker.isChartEditor = true;
+			this.DocInfo.put_OfflineApp(true);
+		}
+		else if (AscCommon.offlineMode === this.documentUrl)
+		{
+			this.DocInfo.put_OfflineApp(true);
+		}
+
+		if (undefined !== window["AscDesktopEditor"] && !(this.DocInfo && this.DocInfo.get_OfflineApp()))
 		{
 			window["AscDesktopEditor"]["SetDocumentName"](this.documentTitle);
+		}
+
+        if (!this.isChartEditor && undefined !== window["AscDesktopEditor"] && undefined !== window["AscDesktopEditor"]["CryptoMode"])
+        {
+            this.DocInfo.put_Encrypted(0 < window["AscDesktopEditor"]["CryptoMode"]);
+        }
+
+		if (!oldInfo)
+		{
+			this.onEndLoadDocInfo();
 		}
 	};
 	baseEditorsApi.prototype.asc_enableKeyEvents             = function(isEnabled, isFromInput)
@@ -296,6 +342,10 @@
 		if (_ret && bIsNaturalFocus && this.WordControl.TextBoxInputFocus)
 			_ret = false;
 		return _ret;
+	};
+	baseEditorsApi.prototype.isCopyOutEnabled                = function()
+	{
+		return this.copyOutEnabled;
 	};
 	// target pos
 	baseEditorsApi.prototype.asc_LockTargetUpdate		     = function(isLock)
@@ -348,8 +398,33 @@
 	baseEditorsApi.prototype.asc_setViewMode                 = function()
 	{
 	};
+	baseEditorsApi.prototype.asc_setRestriction              = function(val)
+	{
+		this.restrictions = val;
+	};
 	baseEditorsApi.prototype.getViewMode                     = function()
 	{
+		return this.isViewMode;
+	};
+	baseEditorsApi.prototype.canEdit                         = function()
+	{
+		return !this.isViewMode && this.restrictions === Asc.c_oAscRestrictionType.None;
+	};
+	baseEditorsApi.prototype.isRestrictionForms              = function()
+	{
+		return (this.restrictions === Asc.c_oAscRestrictionType.OnlyForms);
+	};
+	baseEditorsApi.prototype.isRestrictionComments           = function()
+	{
+		return (this.restrictions === Asc.c_oAscRestrictionType.OnlyComments);
+	};
+	baseEditorsApi.prototype.isRestrictionSignatures         = function()
+	{
+		return (this.restrictions === Asc.c_oAscRestrictionType.OnlySignatures);
+	};
+	baseEditorsApi.prototype.isRestrictionView               = function()
+	{
+		return (this.restrictions === Asc.c_oAscRestrictionType.View);
 	};
 	baseEditorsApi.prototype.isLongAction                    = function()
 	{
@@ -419,7 +494,7 @@
 		// Меняем тип состояния (на открытие)
 		this.advancedOptionsAction = AscCommon.c_oAscAdvancedOptionsAction.Open;
 		var rData                  = null;
-		if (offlineMode !== this.documentUrl)
+		if (!(this.DocInfo && this.DocInfo.get_OfflineApp()))
 		{
 			rData = {
 				"c"             : 'open',
@@ -428,10 +503,11 @@
 				"format"        : this.documentFormat,
 				"url"           : this.documentUrl,
 				"title"         : this.documentTitle,
-				"embeddedfonts" : this.isUseEmbeddedCutFonts
+				"nobase64"      : true
 			};
 			if (versionHistory)
 			{
+				rData["serverVersion"] = versionHistory.serverVersion;
                 rData["closeonerror"] = versionHistory.isRequested;
 				rData["jwt"] = versionHistory.token;
 				//чтобы результат пришел только этому соединению, а не всем кто в документе
@@ -448,24 +524,17 @@
 			this.sync_StartAction(c_oAscAsyncActionType.BlockInteraction, c_oAscAsyncAction.Open);
 		}
 
-		if (offlineMode === this.documentUrl)
-		{
-			this.documentUrl = '/sdkjs/' + this._editorNameById() + '/document/';
-			this.DocInfo.asc_putOfflineApp(true);
-		}
+        if (this.DocInfo.get_Encrypted() && window["AscDesktopEditor"] && !window["AscDesktopEditor"]["IsLocalFile"](true))
+        {
+            window["AscDesktopEditor"]["OpenFileCrypt"](this.DocInfo.get_Title(), this.DocInfo.get_Url(), window.openFileCryptCallback);
+        }
 	};
 	baseEditorsApi.prototype._OfflineAppDocumentStartLoad        = function()
 	{
-		var t             = this;
-		var scriptElem    = document.createElement('script');
-		scriptElem.onload = scriptElem.onerror = function()
-		{
-			t._OfflineAppDocumentEndLoad();
-		};
-
-		scriptElem.setAttribute('src', this.documentUrl + 'editor.js');
-		scriptElem.setAttribute('type', 'text/javascript');
-		document.getElementsByTagName('head')[0].appendChild(scriptElem);
+		this._OfflineAppDocumentEndLoad();
+	};
+	baseEditorsApi.prototype._OfflineAppDocumentEndLoad        = function()
+	{
 	};
 	baseEditorsApi.prototype._onOpenCommand                      = function(data)
 	{
@@ -490,6 +559,19 @@
 		// евент о заморозке не нужен... оно и так заморожено
 		// просто нужно вывести информацию в статус бар (что началась загрузка картинок)
 	};
+	baseEditorsApi.prototype.onDocumentContentReady              = function()
+	{
+		var t = this;
+		this.isDocumentLoadComplete = true;
+		if (!window['IS_NATIVE_EDITOR']) {
+			setInterval(function() {t._autoSave();}, 40);
+		}
+		this.sync_EndAction(c_oAscAsyncActionType.BlockInteraction, c_oAscAsyncAction.Open);
+		this.sendEvent('asc_onDocumentContentReady');
+
+        if (this.editorId == c_oEditorId.Spreadsheet)
+			this.onUpdateDocumentModified(this.asc_isDocumentModified());
+	};
 	// Save
 	baseEditorsApi.prototype.processSavedFile                    = function(url, downloadType)
 	{
@@ -512,8 +594,115 @@
 	{
 		this.isForceSaveOnUserSave = val;
 	};
-	// Функция автосохранения. Переопределяется во всех редакторах
+	baseEditorsApi.prototype._onUpdateDocumentCanSave = function () {
+	};
+	baseEditorsApi.prototype._onUpdateDocumentCanUndoRedo = function () {
+	};
+	baseEditorsApi.prototype._saveCheck = function () {
+		return false;
+	};
+	// Переопределяется во всех редакторах
+	baseEditorsApi.prototype._haveOtherChanges = function () {
+		return false;
+	};
+	baseEditorsApi.prototype._onSaveCallback = function (e) {
+		var t = this;
+		var nState;
+		if (false == e["saveLock"]) {
+			if (this.isLongAction()) {
+				// Мы не можем в этот момент сохранять, т.к. попали в ситуацию, когда мы залочили сохранение и успели нажать вставку до ответа
+				// Нужно снять lock с сохранения
+				this.CoAuthoringApi.onUnSaveLock = function () {
+					t.canSave = true;
+					t.IsUserSave = false;
+					t.lastSaveTime = null;
+
+					if (t.canUnlockDocument) {
+						t._unlockDocument();
+					}
+				};
+				this.CoAuthoringApi.unSaveLock();
+				return;
+			}
+
+			this.sync_StartAction(c_oAscAsyncActionType.Information, c_oAscAsyncAction.Save);
+
+			this.canUnlockDocument2 = this.canUnlockDocument;
+			if (this.canUnlockDocument && this.canStartCoAuthoring) {
+				this.CoAuthoringApi.onStartCoAuthoring(true);
+			}
+			this.canStartCoAuthoring = false;
+			this.canUnlockDocument = false;
+
+			this._onSaveCallbackInner();
+		} else {
+			nState = this.CoAuthoringApi.get_state();
+			if (AscCommon.ConnectionState.ClosedCoAuth === nState || AscCommon.ConnectionState.ClosedAll === nState) {
+				// Отключаемся от сохранения, соединение потеряно
+				this.IsUserSave = false;
+				this.canSave = true;
+			} else {
+				// Если автосохранение, то не будем ждать ответа, а просто перезапустим таймер на немного
+				if (!this.IsUserSave) {
+					this.canSave = true;
+					if (this.canUnlockDocument) {
+						this._unlockDocument();
+					}
+					return;
+				}
+
+				setTimeout(function() {
+					t.CoAuthoringApi.askSaveChanges(function(event) {
+						t._onSaveCallback(event);
+					});
+				}, 1000);
+			}
+		}
+	};
+	// Функция сохранения. Переопределяется во всех редакторах
+	baseEditorsApi.prototype._onSaveCallbackInner = function () {
+	};
 	baseEditorsApi.prototype._autoSave = function () {
+		if (this.canSave && !this.isViewMode && (this.canUnlockDocument || 0 !== this.autoSaveGap)) {
+			if (this.canUnlockDocument) {
+				this.lastSaveTime = new Date();
+				// Check edit mode after unlock document http://bugzilla.onlyoffice.com/show_bug.cgi?id=35971
+				// Close cell edit without errors (isIdle = true)
+				this.asc_Save(true, true);
+			} else {
+				this._autoSaveInner();
+			}
+		}
+	};
+	// Функция автосохранения. Переопределяется во всех редакторах
+	baseEditorsApi.prototype._autoSaveInner = function () {
+	};
+	baseEditorsApi.prototype._prepareSave = function (isIdle) {
+		return true;
+	};
+	// Unlock document when start co-authoring
+	baseEditorsApi.prototype._unlockDocument = function () {
+		if (this.isDocumentLoadComplete) {
+			// Document is load
+			this.canUnlockDocument = true;
+			this.canStartCoAuthoring = true;
+			if (this.canSave) {
+				// We can only unlock with delete index
+				this.CoAuthoringApi.unLockDocument(false, true, AscCommon.History.GetDeleteIndex());
+				this.startCollaborationEditing();
+				AscCommon.History.RemovePointsByDeleteIndex();
+				this._onUpdateDocumentCanSave();
+				this._onUpdateDocumentCanUndoRedo();
+				this.canStartCoAuthoring = false;
+				this.canUnlockDocument = false;
+			} else {
+				// ToDo !!!!
+			}
+		} else {
+			// Когда документ еще не загружен, нужно отпустить lock (при быстром открытии 2-мя пользователями)
+			this.startCollaborationEditing();
+			this.CoAuthoringApi.unLockDocument(false, true);
+		}
 	};
 	// Выставление интервала автосохранения (0 - означает, что автосохранения нет)
 	baseEditorsApi.prototype.asc_setAutoSaveGap                  = function(autoSaveGap)
@@ -563,7 +752,7 @@
 		}
 		//в обычном серверном режиме портим ссылку, потому что CoAuthoring теперь имеет встроенный адрес
 		//todo надо использовать проверку get_OfflineApp
-		if (!(window['NATIVE_EDITOR_ENJINE'] || offlineMode === this.documentUrl) || window['IS_NATIVE_EDITOR'])
+		if (!(window['NATIVE_EDITOR_ENJINE'] || (this.DocInfo && this.DocInfo.get_OfflineApp())) || window['IS_NATIVE_EDITOR'])
 		{
 			this.CoAuthoringApi.set_url(null);
 		}
@@ -575,13 +764,13 @@
 		this.CoAuthoringApi.onServerVersion = function (buildVersion, buildNumber) {
 			t.sendEvent('asc_onServerVersion', buildVersion, buildNumber);
 		};
-		this.CoAuthoringApi.onAuthParticipantsChanged = function(e, count)
+		this.CoAuthoringApi.onAuthParticipantsChanged = function(users, userId)
 		{
-			t.sendEvent("asc_onAuthParticipantsChanged", e, count);
+			t.sendEvent("asc_onAuthParticipantsChanged", users, userId);
 		};
-		this.CoAuthoringApi.onParticipantsChanged     = function(e, CountEditUsers)
+		this.CoAuthoringApi.onParticipantsChanged     = function(users)
 		{
-			t.sendEvent("asc_onParticipantsChanged", e, CountEditUsers);
+			t.sendEvent("asc_onParticipantsChanged", users);
 		};
 		this.CoAuthoringApi.onSpellCheckInit          = function(e)
 		{
@@ -619,6 +808,14 @@
 			t.isOnLoadLicense = true;
 			t._onEndPermissions();
 		};
+		this.CoAuthoringApi.onLicenseChanged          = function(res)
+		{
+			t.licenseResult   = res;
+			t.isOnLoadLicense = true;
+			var oResult = new AscCommon.asc_CAscEditorPermissions();
+			oResult.setLicenseType(res);
+			t.sendEvent('asc_onLicenseChanged', oResult);
+		};
 		this.CoAuthoringApi.onWarning                 = function(code)
 		{
 			t.sendEvent('asc_onError', code || c_oAscError.ID.Warning, c_oAscError.Level.NoCritical);
@@ -650,7 +847,7 @@
 				extendSession = false;
 			}
 			if (!extendSession) {
-				if (t.asc_Save(false, false, true)) {
+				if (t.asc_Save(false, true)) {
 					//enter view mode because save async
 					t.setViewModeDisconnect();
 					t.disconnectOnSave = {code: code, reason: reason};
@@ -667,7 +864,7 @@
                     } else {
                         clearInterval(t.forceSaveButtonTimeout);
                     }
-                    t.forceSaveButtonTimeout = setInterval(function() {
+                    t.forceSaveButtonTimeout = setTimeout(function() {
                         t.forceSaveButtonTimeout = null;
                         if (t.forceSaveButtonContinue) {
                             t.sync_EndAction(c_oAscAsyncActionType.Information, c_oAscAsyncAction.Save);
@@ -675,6 +872,7 @@
                             t.sync_EndAction(c_oAscAsyncActionType.Information, c_oAscAsyncAction.ForceSaveButton);
                         }
                         t.forceSaveButtonContinue = false;
+                        t.sendEvent('asc_onError', Asc.c_oAscError.ID.ForceSaveButton, c_oAscError.Level.NoCritical);
                     }, Asc.c_nMaxConversionTime);
                 } else if (data.refuse) {
                     if (t.forceSaveButtonContinue) {
@@ -691,6 +889,9 @@
                             t.sync_EndAction(c_oAscAsyncActionType.Information, c_oAscAsyncAction.ForceSaveButton);
                         }
                         t.forceSaveButtonContinue = false;
+                        if (!data.success) {
+                            t.sendEvent('asc_onError', Asc.c_oAscError.ID.ForceSaveButton, c_oAscError.Level.NoCritical);
+                        }
                     }
                 }
             } else {
@@ -701,15 +902,19 @@
                         } else {
                             clearInterval(t.forceSaveTimeoutTimeout);
                         }
-                        t.forceSaveTimeoutTimeout = setInterval(function() {
+                        t.forceSaveTimeoutTimeout = setTimeout(function() {
                             t.forceSaveTimeoutTimeout = null;
                             t.sync_EndAction(c_oAscAsyncActionType.Information, c_oAscAsyncAction.ForceSaveTimeout);
+                            t.sendEvent('asc_onError', Asc.c_oAscError.ID.ForceSaveTimeout, c_oAscError.Level.NoCritical);
                         }, Asc.c_nMaxConversionTime);
                     } else {
                         if (null !== t.forceSaveTimeoutTimeout) {
                             clearInterval(t.forceSaveTimeoutTimeout);
                             t.forceSaveTimeoutTimeout = null;
                             t.sync_EndAction(c_oAscAsyncActionType.Information, c_oAscAsyncAction.ForceSaveTimeout);
+                            if (!data.success) {
+                                t.sendEvent('asc_onError', Asc.c_oAscError.ID.ForceSaveTimeout, c_oAscError.Level.NoCritical);
+                            }
                         }
                     }
                 }
@@ -720,25 +925,44 @@
 			t.VersionHistory = null;
 			t.sendEvent('asc_onExpiredToken');
 		};
+		this.CoAuthoringApi.onHasForgotten = function() {
+			//todo very bad way, need rewrite
+			var isDocumentCanSaveOld = t.isDocumentCanSave;
+			var canSaveOld = t.canSave;
+			t.isDocumentCanSave = true;
+			t.canSave = false;
+			t.sendEvent("asc_onDocumentModifiedChanged");
+			t.isDocumentCanSave = isDocumentCanSaveOld;
+			t.canSave = canSaveOld;
+			t.sendEvent("asc_onDocumentModifiedChanged");
+		};
 		/**
 		 * Event об отсоединении от сервера
 		 * @param {jQuery} e  event об отсоединении с причиной
 		 * @param {Bool} isDisconnectAtAll  окончательно ли отсоединяемся(true) или будем пробовать сделать reconnect(false) + сами отключились
 		 * @param {Bool} isCloseCoAuthoring
 		 */
-		this.CoAuthoringApi.onDisconnect = function(e, errorCode)
+		this.CoAuthoringApi.onDisconnect = function(e, error)
 		{
 			if (AscCommon.ConnectionState.None === t.CoAuthoringApi.get_state())
 			{
 				t.asyncServerIdEndLoaded();
 			}
-			if (null != errorCode)
+			if (null != error)
 			{
 				t.setViewModeDisconnect();
-				t.sendEvent('asc_onError', errorCode, c_oAscError.Level.NoCritical);
+				t.sendEvent('asc_onError', error.code, error.level);
 			}
 		};
 		this.CoAuthoringApi.onDocumentOpen = function (inputWrap) {
+			if (AscCommon.EncryptionWorker.isNeedCrypt())
+			{
+                if (t.fCurCallback) {
+                	t.fCurCallback(inputWrap ? inputWrap["data"] : undefined);
+                	t.fCurCallback = null;
+                }
+				return;
+			}
 			if (inputWrap["data"]) {
 				var input = inputWrap["data"];
 				switch (input["type"]) {
@@ -789,12 +1013,62 @@
 				}
 			}
 		};
+		this.CoAuthoringApi.onStartCoAuthoring = function (isStartEvent) {
+			if (t.isViewMode) {
+				return;
+			}
+			// На старте не нужно ничего делать
+			if (isStartEvent) {
+				t.startCollaborationEditing();
+			} else {
+				t._unlockDocument();
+			}
+		};
+		this.CoAuthoringApi.onEndCoAuthoring = function (isStartEvent) {
+			if (t.canUnlockDocument) {
+				t.canStartCoAuthoring = false;
+			} else {
+				t.endCollaborationEditing();
+			}
+		};
 
 		this._coAuthoringInitEnd();
 		this.CoAuthoringApi.init(this.User, this.documentId, this.documentCallbackUrl, 'fghhfgsjdgfjs', this.editorId, this.documentFormatSave, this.DocInfo);
 	};
 	baseEditorsApi.prototype._coAuthoringInitEnd                 = function()
 	{
+	};
+	baseEditorsApi.prototype.startCollaborationEditing           = function()
+	{
+	};
+	baseEditorsApi.prototype.endCollaborationEditing             = function()
+	{
+	};
+	baseEditorsApi.prototype._coAuthoringCheckEndOpenDocument    = function(f)
+	{
+		if (this.isPreOpenLocks)
+		{
+			var context = this.CoAuthoringApi;
+			var args = Array.prototype.slice.call(arguments, 1);
+
+			// Пока документ еще не загружен, будем сохранять функцию и аргументы
+			this.arrPreOpenLocksObjects.push(function()
+			{
+				f.apply(context, args);
+			});
+			return true;
+		}
+		return false;
+	};
+	baseEditorsApi.prototype._applyPreOpenLocks                  = function()
+	{
+		this.isPreOpenLocks = false;
+		// Применяем все lock-и (ToDo возможно стоит пересмотреть вообще Lock-и)
+		for (var i = 0; i < this.arrPreOpenLocksObjects.length; ++i)
+		{
+			this.arrPreOpenLocksObjects[i]();
+		}
+		this.arrPreOpenLocksObjects = [];
 	};
 	// server disconnect
 	baseEditorsApi.prototype.asc_coAuthoringDisconnect           = function()
@@ -818,14 +1092,6 @@
 	{
 	};
 	// Images & Charts & TextArts
-	baseEditorsApi.prototype.asc_setChartTranslate               = function(translate)
-	{
-		this.chartTranslate = translate;
-	};
-	baseEditorsApi.prototype.asc_setTextArtTranslate             = function(translate)
-	{
-		this.textArtTranslate = translate;
-	};
 	baseEditorsApi.prototype.asc_getChartPreviews                = function(chartType)
 	{
 		return this.chartPreviewManager.getChartPreviews(chartType);
@@ -836,6 +1102,9 @@
 	};
 	baseEditorsApi.prototype.asc_onOpenChartFrame                = function()
 	{
+		if(this.isMobileVersion){
+			return;
+		}
 		this.isOpenedChartFrame = true;
 	};
 	baseEditorsApi.prototype.asc_onCloseChartFrame               = function()
@@ -883,7 +1152,7 @@
 		else
 		{
 			this.sync_StartAction(c_oAscAsyncActionType.BlockInteraction, c_oAscAsyncAction.UploadImage);
-			AscCommon.UploadImageFiles(files, this.documentId, this.documentUserId, this.CoAuthoringApi.get_jwt(), function(error, url)
+			AscCommon.UploadImageFiles(files, this.documentId, this.documentUserId, this.CoAuthoringApi.get_jwt(), function(error, urls)
 			{
 				if (c_oAscError.ID.No !== error)
 				{
@@ -891,7 +1160,7 @@
 				}
 				else
 				{
-					t._addImageUrl(url);
+					t._addImageUrl(urls);
 				}
 				t.sync_EndAction(c_oAscAsyncActionType.BlockInteraction, c_oAscAsyncAction.UploadImage);
 			});
@@ -994,6 +1263,16 @@
 	{
 	};
 
+	baseEditorsApi.prototype.asc_selectSearchingResults = function(value)
+	{
+		if (this.selectSearchingResults === value)
+		{
+			return;
+		}
+		this.selectSearchingResults = value;
+		this._selectSearchingResults(value);
+	};
+
 
 	baseEditorsApi.prototype.asc_startEditCurrentOleObject = function(){
 
@@ -1005,12 +1284,42 @@
 	baseEditorsApi.prototype.asc_undoAllChanges = function()
 	{
 	};
+	baseEditorsApi.prototype.asc_Save = function (isAutoSave, isIdle) {
+		var t = this;
+		var res = false;
+		if (this.canSave && this._saveCheck()) {
+			this.IsUserSave = !isAutoSave;
+
+			if (this.asc_isDocumentCanSave() || AscCommon.History.Have_Changes() || this._haveOtherChanges() ||
+				this.canUnlockDocument || this.forceSaveUndoRequest) {
+				if (this._prepareSave(isIdle)) {
+					// Не даем пользователю сохранять, пока не закончится сохранение (если оно началось)
+					this.canSave = false;
+					this.CoAuthoringApi.askSaveChanges(function (e) {
+						t._onSaveCallback(e);
+					});
+					res = true;
+				}
+			} else if (this.isForceSaveOnUserSave && this.IsUserSave) {
+				this.forceSave();
+			}
+		}
+		return res;
+	};
 	/**
 	 * Эта функция возвращает true, если есть изменения или есть lock-и в документе
 	 */
 	baseEditorsApi.prototype.asc_isDocumentCanSave = function()
 	{
 		return this.isDocumentCanSave;
+	};
+	baseEditorsApi.prototype.asc_getCanUndo = function()
+	{
+		return AscCommon.History.Can_Undo();
+	};
+	baseEditorsApi.prototype.asc_getCanRedo = function()
+	{
+		return AscCommon.History.Can_Redo();
 	};
 	// Offline mode
 	baseEditorsApi.prototype.asc_isOffline  = function()
@@ -1025,20 +1334,44 @@
 	baseEditorsApi.prototype.openDocument  = function()
 	{
 	};
+	baseEditorsApi.prototype.openDocumentFromZip  = function()
+	{
+	};
+	baseEditorsApi.prototype.onEndLoadDocInfo = function()
+	{
+		if (this.isLoadFullApi && this.DocInfo)
+		{
+			if (this.DocInfo.get_OfflineApp())
+			{
+				if (this.editorId === c_oEditorId.Spreadsheet && this.isChartEditor)
+				{
+					this.onEndLoadFile(AscCommonExcel.getEmptyWorkbook());
+				}
+				else
+				{
+					this._OfflineAppDocumentStartLoad();
+				}
+			}
+			this.onEndLoadFile(null);
+		}
+	};
 	baseEditorsApi.prototype.onEndLoadFile = function(result)
 	{
 		if (result)
 		{
 			this.openResult = result;
 		}
-		if (this.isLoadFullApi && this.openResult)
+		if (this.isLoadFullApi && this.DocInfo && this.openResult)
 		{
 			this.openDocument(this.openResult);
+			this.openResult = null;
 		}
 
 	};
 	baseEditorsApi.prototype._onEndLoadSdk = function()
 	{
+		AscCommon.g_oTableId.init();
+
 		// init drag&drop
 		var t = this;
 		AscCommon.InitDragAndDrop(this.HtmlElement, function(error, files)
@@ -1054,8 +1387,6 @@
 		this.ImageLoader.put_Api(this);
 		this.FontLoader.SetStandartFonts();
 
-		this.chartTranslate        = this.chartTranslate ? this.chartTranslate : new Asc.asc_CChartTranslate();
-		this.textArtTranslate      = this.textArtTranslate ? this.textArtTranslate : new Asc.asc_TextArtTranslate();
 		this.chartPreviewManager   = new AscCommon.ChartPreviewManager();
 		this.textArtPreviewManager = new AscCommon.TextArtPreviewManager();
 
@@ -1068,9 +1399,7 @@
 
 		this.pluginsManager     = Asc.createPluginsManager(this);
 
-		if (!window['IS_NATIVE_EDITOR']) {
-			setInterval(function() {t._autoSave();}, 40);
-		}
+		this.macros = new AscCommon.CDocumentMacros();
 	};
 
 	baseEditorsApi.prototype.sendStandartTextures = function()
@@ -1187,6 +1516,11 @@
 	};
 
 	// plugins
+	baseEditorsApi.prototype._checkLicenseApiFunctions   = function()
+	{
+		return this.licenseResult && true === this.licenseResult['plugins'];
+	};
+
 	baseEditorsApi.prototype.asc_pluginsRegister   = function(basePath, plugins)
 	{
 		if (null != this.pluginsManager)
@@ -1213,12 +1547,177 @@
 		if (!this.pluginsManager)
 			return;
 
-		var _pluginData = new Asc.CPluginData();
-		_pluginData.setAttribute("type", "enableMouseEvent");
-		_pluginData.setAttribute("isEnabled", isEnable);
-
-		this.pluginsManager.sendMessage(_pluginData);
+		this.pluginsManager.onEnableMouseEvents(isEnable);
 	};
+
+    baseEditorsApi.prototype.isEnabledDropTarget = function()
+    {
+    	return true;
+    };
+    baseEditorsApi.prototype.beginInlineDropTarget = function(e)
+    {
+    };
+    baseEditorsApi.prototype.endInlineDropTarget = function(e)
+    {
+    };
+
+    baseEditorsApi.prototype["pluginMethod_GetFontList"] = function()
+    {
+    	return AscFonts.g_fontApplication.g_fontSelections.SerializeList();
+    };
+
+	baseEditorsApi.prototype["pluginMethod_PasteHtml"] = function(htmlText)
+	{
+		if (!AscCommon.g_clipboardBase)
+			return null;
+
+		var _elem = document.createElement("div");
+
+		if (this.editorId == c_oEditorId.Word || this.editorId == c_oEditorId.Presentation)
+		{
+			var textPr = this.get_TextProps();
+			if (textPr)
+			{
+				if (undefined !== textPr.TextPr.FontSize)
+					_elem.style.fontSize = textPr.TextPr.FontSize + "pt";
+
+				_elem.style.fontWeight = (true === textPr.TextPr.Bold) ? "bold" : "normal";
+				_elem.style.fontStyle = (true === textPr.TextPr.Italic) ? "italic" : "normal";
+
+				var _color = textPr.TextPr.Color;
+				if (_color)
+                    _elem.style.color = "rgb(" + _color.r + "," + _color.g + "," + _color.b + ")";
+				else
+                    _elem.style.color = "rgb(0,0,0)";
+			}
+		}
+		else if (this.editorId == c_oEditorId.Spreadsheet)
+		{
+			var props = this.asc_getCellInfo();
+
+			if (props && props.font)
+			{
+				if (undefined != props.font.size)
+					_elem.style.fontSize = props.font.size + "pt";
+
+				_elem.style.fontWeight = (true === props.font.bold) ? "bold" : "normal";
+				_elem.style.fontStyle = (true === props.font.italic) ? "italic" : "normal";
+			}
+		}
+
+		_elem.innerHTML = htmlText;
+		document.body.appendChild(_elem);
+		this.incrementCounterLongAction();
+		var b_old_save_format = AscCommon.g_clipboardBase.bSaveFormat;
+        AscCommon.g_clipboardBase.bSaveFormat = true;
+		this.asc_PasteData(AscCommon.c_oAscClipboardDataFormat.HtmlElement, _elem, null, null, null, true);
+		this.decrementCounterLongAction();
+
+		if (true)
+		{
+			var fCallback = function ()
+            {
+                document.body.removeChild(_elem);
+                _elem = null;
+                AscCommon.g_clipboardBase.bSaveFormat = b_old_save_format;
+            };
+			if(this.checkLongActionCallback(fCallback, null)){
+                fCallback();
+			}
+		}
+		else
+		{
+			document.body.removeChild(_elem);
+			_elem = null;
+            AscCommon.g_clipboardBase.bSaveFormat = b_old_save_format;
+		}
+	};
+
+	baseEditorsApi.prototype["pluginMethod_PasteText"] = function(text)
+	{
+		if (!AscCommon.g_clipboardBase)
+			return null;
+
+		this.asc_PasteData(AscCommon.c_oAscClipboardDataFormat.Text, text);
+	};
+
+	baseEditorsApi.prototype["pluginMethod_GetMacros"] = function()
+	{
+		return this.asc_getMacros();
+	};
+
+	baseEditorsApi.prototype["pluginMethod_SetMacros"] = function(data)
+	{
+		return this.asc_setMacros(data);
+	};
+
+	baseEditorsApi.prototype["pluginMethod_StartAction"] = function(type, description)
+	{
+		this.sync_StartAction((type == "Block") ? c_oAscAsyncActionType.BlockInteraction : c_oAscAsyncActionType.Information, description);
+	};
+
+	baseEditorsApi.prototype["pluginMethod_EndAction"] = function(type, description)
+	{
+		this.sync_EndAction((type == "Block") ? c_oAscAsyncActionType.BlockInteraction : c_oAscAsyncActionType.Information, description);
+
+        if (this._callbackPluginEndAction)
+		{
+			this._callbackPluginEndAction.call(this);
+		}
+	};
+
+    baseEditorsApi.prototype["pluginMethod_OnEncryption"] = function(obj)
+    {
+        var _editor = window["Asc"]["editor"] ? window["Asc"]["editor"] : window.editor;
+        switch (obj.type)
+        {
+            case "generatePassword":
+            {
+                if ("" == obj["password"])
+                {
+                    _editor.sendEvent("asc_onError", "There is no connection with the blockchain", c_oAscError.Level.Critical);
+                    return;
+                }
+
+                var _ret = _editor.asc_nativeGetFile3();
+                AscCommon.EncryptionWorker.isPasswordCryptoPresent = true;
+                window["AscDesktopEditor"]["buildCryptedStart"](_ret.data, _ret.header, obj["password"], obj["docinfo"] ? obj["docinfo"] : "");
+                break;
+            }
+            case "getPasswordByFile":
+            {
+                if ("" != obj["password"])
+                {
+                    var _param = ("<m_sPassword>" + AscCommon.CopyPasteCorrectString(obj["password"]) + "</m_sPassword>");
+                    _editor.currentPassword = obj["password"];
+                    _editor.currentDocumentHash = obj["hash"];
+                    _editor.currentDocumentInfo = obj["docinfo"];
+
+                    AscCommon.EncryptionWorker.isPasswordCryptoPresent = true;
+
+                    if (window.isNativeOpenPassword)
+                    {
+                        window["AscDesktopEditor"]["NativeViewerOpen"](obj["password"]);
+                    }
+                    else
+					{
+						window["AscDesktopEditor"]["SetAdvancedOptions"](_param);
+                    }
+                }
+                else
+                {
+                    this._onNeedParams(undefined, true);
+                }
+                break;
+            }
+            case "encryptData":
+            case "decryptData":
+            {
+                AscCommon.EncryptionWorker.receiveChanges(obj);
+                break;
+            }
+        }
+    };
 
 	// Builder
 	baseEditorsApi.prototype.asc_nativeInitBuilder = function()
@@ -1234,6 +1733,36 @@
 	};
 	baseEditorsApi.prototype.asc_Recalculate       = function()
 	{
+	};
+
+	// Native
+	baseEditorsApi.prototype['asc_nativeCheckPdfRenderer'] = function (_memory1, _memory2) {
+		if (true) {
+			// pos не должен минимизироваться!!!
+
+			_memory1.Copy = _memory1["Copy"];
+			_memory1.ClearNoAttack = _memory1["ClearNoAttack"];
+			_memory1.WriteByte = _memory1["WriteByte"];
+			_memory1.WriteBool = _memory1["WriteBool"];
+			_memory1.WriteLong = _memory1["WriteLong"];
+			_memory1.WriteDouble = _memory1["WriteDouble"];
+			_memory1.WriteString = _memory1["WriteString"];
+			_memory1.WriteString2 = _memory1["WriteString2"];
+
+			_memory2.Copy = _memory1["Copy"];
+			_memory2.ClearNoAttack = _memory1["ClearNoAttack"];
+			_memory2.WriteByte = _memory1["WriteByte"];
+			_memory2.WriteBool = _memory1["WriteBool"];
+			_memory2.WriteLong = _memory1["WriteLong"];
+			_memory2.WriteDouble = _memory1["WriteDouble"];
+			_memory2.WriteString = _memory1["WriteString"];
+			_memory2.WriteString2 = _memory1["WriteString2"];
+		}
+
+		var _printer = new AscCommon.CDocumentRenderer();
+		_printer.Memory = _memory1;
+		_printer.VectorMemoryForPrint = _memory2;
+		return _printer;
 	};
 
 	// input
@@ -1264,6 +1793,226 @@
 	baseEditorsApi.prototype.Input_UpdatePos = function()
 	{
 	};
+	baseEditorsApi.prototype["setInputParams"] = function(_obj)
+	{
+		window["AscInputMethod"] = window["AscInputMethod"] || {};
+
+		for (var _prop in _obj)
+		{
+			window["AscInputMethod"][_prop] = _obj[_prop];
+		}
+	};
+
+	baseEditorsApi.prototype.asc_addSignatureLine = function (sGuid, sSigner, sSigner2, sEmail, Width, Height, sImgUrl) {
+
+    };
+	baseEditorsApi.prototype.asc_getAllSignatures = function () {
+		return [];
+	};
+
+	baseEditorsApi.prototype.asc_CallSignatureDblClickEvent = function(sGuid){
+
+	};
+
+	// signatures
+	baseEditorsApi.prototype.asc_AddSignatureLine2 = function(_obj)
+	{
+		var _w = 50;
+		var _h = 50;
+		var _w_pix = (_w * AscCommon.g_dKoef_mm_to_pix) >> 0;
+		var _h_pix = (_h * AscCommon.g_dKoef_mm_to_pix) >> 0;
+		var _canvas = document.createElement("canvas");
+		_canvas.width = _w_pix;
+		_canvas.height = _h_pix;
+		var _ctx = _canvas.getContext("2d");
+		_ctx.fillStyle = "#000000";
+		_ctx.strokeStyle = "#000000";
+		_ctx.font = "10pt 'Courier New'";
+		_ctx.lineWidth = 3;
+
+		_ctx.beginPath();
+		var _y_line = (_h_pix >> 1) + 0.5;
+		_ctx.moveTo(0, _y_line);
+		_ctx.lineTo(_w_pix, _y_line);
+		_ctx.stroke();
+		_ctx.beginPath();
+
+		_ctx.lineWidth = 2;
+		_y_line -= 10;
+		_ctx.moveTo(10, _y_line);
+		_ctx.lineTo(25, _y_line - 10);
+		_ctx.lineTo(10, _y_line - 20);
+		_ctx.stroke();
+		_ctx.beginPath();
+
+		_ctx.fillText(_obj.asc_getSigner1(), 10, _y_line + 25);
+		_ctx.fillText(_obj.asc_getSigner2(), 10, _y_line + 40);
+		_ctx.fillText(_obj.asc_getEmail(), 10, _y_line + 55);
+
+		var _url = _canvas.toDataURL("image/png");
+		_canvas = null;
+
+		var _args = [AscCommon.CreateGUID(), _obj.asc_getSigner1(), _obj.asc_getSigner2(), _obj.asc_getEmail(), _w, _h, _url];
+
+		this.ImageLoader.LoadImagesWithCallback([_url], function(_args) {
+			this.asc_addSignatureLine(_args[0], _args[1], _args[2], _args[3], _args[4], _args[5], _args[6]);
+		}, _args);
+	};
+
+	baseEditorsApi.prototype.asc_getRequestSignatures = function()
+	{
+		var _sigs = this.asc_getAllSignatures();
+		var _sigs_ret = [];
+
+		var _found;
+		for (var i = _sigs.length - 1; i >= 0; i--)
+		{
+			var _sig = _sigs[i];
+			_found = false;
+
+			for (var j = this.signatures.length - 1; j >= 0; j--)
+			{
+				if (this.signatures[j].guid == _sig.id)
+				{
+					_found = true;
+					break;
+				}
+			}
+
+			if (!_found)
+			{
+				var _add_sig = new AscCommon.asc_CSignatureLine();
+				_add_sig.guid = _sig.id;
+				_add_sig.signer1 = _sig.signer;
+				_add_sig.signer2 = _sig.signer2;
+				_add_sig.email = _sig.email;
+
+				_sigs_ret.push(_add_sig);
+			}
+		}
+
+		return _sigs_ret;
+	};
+
+	baseEditorsApi.prototype.asc_Sign = function(id, guid, url1, url2)
+	{
+		if (window["AscDesktopEditor"])
+			window["AscDesktopEditor"]["Sign"](id, guid, url1, url2);
+	};
+	baseEditorsApi.prototype.asc_RequestSign = function(guid)
+	{
+		var signGuid = (guid == "unvisibleAdd") ? AscCommon.CreateGUID() : guid;
+
+		if (window["asc_LocalRequestSign"])
+			window["asc_LocalRequestSign"](signGuid);
+	};
+
+	baseEditorsApi.prototype.asc_ViewCertificate = function(id)
+	{
+		if (window["AscDesktopEditor"])
+			window["AscDesktopEditor"]["ViewCertificate"](parseInt("" + id)); // integer or string!
+	};
+
+	baseEditorsApi.prototype.asc_SelectCertificate = function()
+	{
+		if (window["AscDesktopEditor"])
+			window["AscDesktopEditor"]["SelectCertificate"]();
+	};
+
+	baseEditorsApi.prototype.asc_GetDefaultCertificate = function()
+	{
+		if (window["AscDesktopEditor"])
+			window["AscDesktopEditor"]["GetDefaultCertificate"]();
+	};
+
+	baseEditorsApi.prototype.asc_getSignatures = function()
+	{
+		return this.signatures;
+	};
+
+	baseEditorsApi.prototype.asc_RemoveSignature = function(guid)
+	{
+		if (window["AscDesktopEditor"])
+			window["AscDesktopEditor"]["RemoveSignature"](guid);
+	};
+
+	baseEditorsApi.prototype.asc_RemoveAllSignatures = function()
+	{
+		if (window["AscDesktopEditor"])
+			window["AscDesktopEditor"]["RemoveAllSignatures"]();
+	};
+
+	baseEditorsApi.prototype.asc_isSignaturesSupport = function()
+	{
+		if (window["AscDesktopEditor"] && window["AscDesktopEditor"]["IsSignaturesSupport"])
+			return window["AscDesktopEditor"]["IsSignaturesSupport"]();
+		return false;
+	};
+    baseEditorsApi.prototype.asc_isProtectionSupport = function()
+    {
+        if (window["AscDesktopEditor"] && window["AscDesktopEditor"]["IsProtectionSupport"])
+            return window["AscDesktopEditor"]["IsProtectionSupport"]();
+        return false;
+    };
+
+	baseEditorsApi.prototype.asc_gotoSignature = function(guid)
+	{
+		if (window["AscDesktopEditor"] && window["asc_IsVisibleSign"] && window["asc_IsVisibleSign"](guid))
+		{
+			if (this.asc_MoveCursorToSignature)
+				this.asc_MoveCursorToSignature(guid);
+		}
+	};
+
+	baseEditorsApi.prototype.asc_getSignatureSetup = function(guid)
+	{
+		var _sigs = this.asc_getAllSignatures();
+
+		for (var i = _sigs.length - 1; i >= 0; i--)
+		{
+			var _sig = _sigs[i];
+			if (_sig.id == guid)
+			{
+				var _add_sig = new AscCommon.asc_CSignatureLine();
+				_add_sig.guid = _sig.id;
+				_add_sig.signer1 = _sig.signer;
+				_add_sig.signer2 = _sig.signer2;
+				_add_sig.email = _sig.email;
+
+				_add_sig.isrequested = true;
+				for (var j = 0; j < this.signatures.length; j++)
+				{
+					var signDoc = this.signatures[j];
+					if (signDoc.guid == _add_sig.guid)
+					{
+						_add_sig.valid = signDoc.valid;
+						_add_sig.isrequested = false;
+						break;
+					}
+				}
+
+				return _add_sig;
+			}
+		}
+
+		return null;
+	};
+
+	baseEditorsApi.prototype.asc_getSignatureImage = function (sGuid) {
+
+		var count = this.signatures.length;
+		for (var i = 0; i < count; i++)
+		{
+			if (this.signatures[i].guid == sGuid)
+				return this.signatures[i].image;
+		}
+		return "";
+    };
+
+	baseEditorsApi.prototype.asc_getSessionToken = function () {
+		return this.CoAuthoringApi.get_jwt()
+	};
+
 	baseEditorsApi.prototype.asc_InputClearKeyboardElement = function()
 	{
 		if (AscCommon.g_inputContext)
@@ -1278,6 +2027,15 @@
 	};
 	baseEditorsApi.prototype.onKeyUp = function(e)
 	{
+	};
+	/**
+	 * Получаем текст (в виде массива юникодных значений), который будет добавлен на ивенте KeyDown
+	 * @param e
+	 * @returns {Number[]}
+	 */
+	baseEditorsApi.prototype.getAddedTextOnKeyDown = function(e)
+	{
+		return [];
 	};
 	baseEditorsApi.prototype.pre_Paste = function(_fonts, _images, callback)
 	{
@@ -1315,13 +2073,13 @@
 			return 0;
 
 		// если плагин работает - то и мы тоже
-		if (this.pluginsManager && this.pluginsManager.current != null)
+		if (this.pluginsManager && this.pluginsManager.isWorked())
 			return 0;
 
 		if (this.isEmbedVersion)
 			return 0;
 
-		if (!this.saveCheck())
+		if (!this.canSave || !this._saveCheck())
 			return 0;
 
 		return new Date().getTime() - this.lastWorkTime;
@@ -1340,12 +2098,111 @@
 		this.asc_setViewMode(true);
 	};
 
-	baseEditorsApi.prototype.saveCheck = function()
+	baseEditorsApi.prototype.asc_setCurrentPassword = function(password)
 	{
-		return false;
+		this.currentPassword = password;
+		this.asc_Save(false, undefined, true);
+	};
+	baseEditorsApi.prototype.asc_resetPassword = function()
+	{
+		this.currentPassword = "";
+		this.asc_Save(false, undefined, true);
+	};
+
+	baseEditorsApi.prototype.asc_setMacros = function(sData)
+	{
+		if (!this.macros)
+			return true;
+
+		if (true === AscCommon.CollaborativeEditing.Get_GlobalLock())
+			return true;
+
+		AscCommon.CollaborativeEditing.OnStart_CheckLock();
+		this.macros.CheckLock();
+
+		if (this.editorId == AscCommon.c_oEditorId.Spreadsheet)
+		{
+			var locker = Asc.editor.wb.getWorksheet().objectRender.objectLocker;
+			locker.addObjectId(this.macros.Get_Id());
+
+			var _this = this;
+			locker.checkObjects(function(bNoLock) {
+				if (bNoLock)
+				{
+					AscCommon.History.Create_NewPoint(AscDFH.historydescription_DocumentMacros_Data);
+					_this.macros.SetData(sData);
+				}
+			});
+		}
+		else
+		{
+			if (false === AscCommon.CollaborativeEditing.OnEnd_CheckLock(false))
+			{
+				AscCommon.History.Create_NewPoint(AscDFH.historydescription_DocumentMacros_Data);
+				this.macros.SetData(sData);
+			}
+		}
+	};
+	baseEditorsApi.prototype.asc_getMacros = function()
+	{
+		return this.macros.GetData();
+	};
+
+	function parseCSV(text, options) {
+		var delimiterChar;
+		if (options.asc_getDelimiterChar()) {
+			delimiterChar = options.asc_getDelimiterChar();
+		} else {
+			switch (options.asc_getDelimiter()) {
+				case AscCommon.c_oAscCsvDelimiter.None:
+					delimiterChar = undefined;
+					break;
+				case AscCommon.c_oAscCsvDelimiter.Tab:
+					delimiterChar = "\t";
+					break;
+				case AscCommon.c_oAscCsvDelimiter.Semicolon:
+					delimiterChar = ";";
+					break;
+				case AscCommon.c_oAscCsvDelimiter.Colon:
+					delimiterChar = ":";
+					break;
+				case AscCommon.c_oAscCsvDelimiter.Comma:
+					delimiterChar = ",";
+					break;
+				case AscCommon.c_oAscCsvDelimiter.Space:
+					delimiterChar = " ";
+					break;
+			}
+		}
+		var matrix = [];
+		var rows = text.match(/[^\r\n]+/g);
+		for (var i = 0; i < rows.length; ++i) {
+			var row = rows[i];
+			//todo quotes
+			matrix.push(row.split(delimiterChar));
+		}
+		return matrix;
+	}
+
+	baseEditorsApi.prototype.asc_decodeBuffer = function(buffer, options, callback) {
+		var reader = new FileReader();
+		//todo onerror
+		reader.onload = reader.onerror = function(e) {
+			var text = e.target.result ? e.target.result : "";
+			if (options instanceof Asc.asc_CCSVAdvancedOptions) {
+				callback(parseCSV(text, options));
+			} else {
+				callback(text.match(/[^\r\n]+/g));
+			}
+		};
+
+		reader.readAsText(new Blob([buffer]), AscCommon.c_oAscEncodings[options.asc_getCodePage()][2]);
 	};
 
 	//----------------------------------------------------------export----------------------------------------------------
 	window['AscCommon']                = window['AscCommon'] || {};
 	window['AscCommon'].baseEditorsApi = baseEditorsApi;
+
+	prot = baseEditorsApi.prototype;
+	prot['asc_selectSearchingResults'] = prot.asc_selectSearchingResults;
 })(window);

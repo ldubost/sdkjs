@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2018
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -757,8 +757,7 @@ function FT_Get_CMap_Format(cmap)
         return -1;
 
     var cmap_info = new TT_CMapInfo();
-    service.get_cmap_info(cmap, cmap_info);
-    if (FT_Error != 0)
+    if (0 != service.get_cmap_info(cmap, cmap_info))
         return -1;
     
     return cmap_info.format;

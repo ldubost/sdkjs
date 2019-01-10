@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2018
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -233,11 +233,11 @@ function CCollaborativeEditingBase()
     this.m_aCursorsToUpdate        = {}; // Курсоры, которые нужно обновить после принятия изменений
     this.m_aCursorsToUpdateShortId = {};
 
-    //// CollaborativeEditing LOG
-    //this.m_nErrorLog_PointChangesCount = 0;
-    //this.m_nErrorLog_SavedPCC          = 0;
-    //this.m_nErrorLog_CurPointIndex     = -1;
-    //this.m_nErrorLog_SumIndex          = 0;
+    // // CollaborativeEditing LOG
+    // this.m_nErrorLog_PointChangesCount = 0;
+    // this.m_nErrorLog_SavedPCC          = 0;
+    // this.m_nErrorLog_CurPointIndex     = -1;
+    // this.m_nErrorLog_SumIndex          = 0;
 
     this.m_bFast  = false;
 
@@ -276,7 +276,10 @@ CCollaborativeEditingBase.prototype.Set_Fast = function(bFast)
     this.m_bFast = bFast;
 
     if (false === bFast)
-        this.Remove_AllForeignCursors();
+	{
+		this.Remove_AllForeignCursors();
+		this.RemoveMyCursorFromOthers();
+	}
 };
 CCollaborativeEditingBase.prototype.Is_Fast = function()
 {
@@ -284,10 +287,11 @@ CCollaborativeEditingBase.prototype.Is_Fast = function()
 };
 CCollaborativeEditingBase.prototype.Is_SingleUser = function()
 {
-    if (1 === this.m_nUseType)
-        return true;
-
-    return false;
+	return (1 === this.m_nUseType);
+};
+CCollaborativeEditingBase.prototype.getCollaborativeEditing = function()
+{
+	return !this.Is_SingleUser();
 };
 CCollaborativeEditingBase.prototype.Start_CollaborationEditing = function()
 {
@@ -344,6 +348,7 @@ CCollaborativeEditingBase.prototype.Apply_Changes = function()
     // Если нет чужих изменений, тогда и делать ничего не надо
     if (true === OtherChanges)
     {
+        AscFonts.IsCheckSymbols = true;
         editor.WordControl.m_oLogicDocument.Stop_Recalculate();
         editor.WordControl.m_oLogicDocument.EndPreview_MailMergeResult();
 
@@ -358,6 +363,7 @@ CCollaborativeEditingBase.prototype.Apply_Changes = function()
         this.Lock_NeedLock();
         this.private_RestoreDocumentState(DocState);
         this.OnStart_Load_Objects();
+        AscFonts.IsCheckSymbols = false;
     }
 };
 CCollaborativeEditingBase.prototype.Apply_OtherChanges = function()
@@ -380,8 +386,8 @@ CCollaborativeEditingBase.prototype.Apply_OtherChanges = function()
 
         var Changes = this.m_aChanges[i];
         Changes.Apply_Data();
-        //// CollaborativeEditing LOG
-        //this.m_nErrorLog_PointChangesCount++;
+        // // CollaborativeEditing LOG
+        // this.m_nErrorLog_PointChangesCount++;
     }
 
     this.private_ClearChanges();
@@ -406,12 +412,103 @@ CCollaborativeEditingBase.prototype.Send_Changes = function()
 CCollaborativeEditingBase.prototype.Release_Locks = function()
 {
 };
+
+
+CCollaborativeEditingBase.prototype.CheckWaitingImages = function (aImages) {
+
+};
+
+CCollaborativeEditingBase.prototype.SendImagesUrlsFromChanges = function (aImages) {
+    var rData = {}, oApi = editor || Asc['editor'], i;
+    if(!oApi){
+        return;
+    }
+    rData['id'] = oApi.documentId;
+    rData['c'] = 'pathurls';
+    rData['data'] = [];
+    for(i = 0; i < aImages.length; ++i)
+    {
+        rData['data'].push(aImages[i]);
+    }
+    var aImagesToLoad = [].concat(AscCommon.CollaborativeEditing.m_aNewImages);
+    this.CheckWaitingImages(aImagesToLoad);
+    AscCommon.CollaborativeEditing.m_aNewImages.length = 0;
+    if(false === oApi.isSaveFonts_Images){
+        oApi.isSaveFonts_Images = true;
+    }
+    oApi.fCurCallback = function (oRes) {
+        var aData, i, oUrls;
+        if(oRes['status'] === 'ok')
+        {
+            aData = oRes['data'];
+            oUrls= {};
+            for(i = 0; i < aData.length; ++i)
+            {
+                oUrls[aImages[i]] = aData[i];
+            }
+            AscCommon.g_oDocumentUrls.addUrls(oUrls);
+        }
+        AscCommon.CollaborativeEditing.SendImagesCallback(aImagesToLoad);
+    };
+    AscCommon.sendCommand(oApi, null, rData);
+};
+
+CCollaborativeEditingBase.prototype.SendImagesCallback = function (aImages) {
+    var oApi = editor || Asc['editor'];
+    oApi.pre_Save(aImages);
+};
+
+
+CCollaborativeEditingBase.prototype.CollectImagesFromChanges = function () {
+    var oApi = editor || Asc['editor'];
+    var aImages = [], sImagePath, i, sImageFromChanges, oThemeUrls = {};
+    var aNewImages = this.m_aNewImages;
+    var oMap = {};
+    for(i = 0; i < aNewImages.length; ++i)
+    {
+        sImageFromChanges = aNewImages[i];
+        if(oMap[sImageFromChanges])
+        {
+            continue;
+        }
+        oMap[sImageFromChanges] = 1;
+        if(sImageFromChanges.indexOf('theme') === 0 && oApi.ThemeLoader)
+        {
+            oThemeUrls[sImageFromChanges] = oApi.ThemeLoader.ThemesUrlAbs + sImageFromChanges;
+        }
+        else if (0 === sImageFromChanges.indexOf('http:') || 0 === sImageFromChanges.indexOf('data:') || 0 === sImageFromChanges.indexOf('https:') ||
+            0 === sImageFromChanges.indexOf('file:') || 0 === sImageFromChanges.indexOf('ftp:'))
+        {
+        }
+        else
+        {
+            sImagePath = AscCommon.g_oDocumentUrls.mediaPrefix + sImageFromChanges;
+            if(!AscCommon.g_oDocumentUrls.getUrl(sImagePath))
+            {
+                aImages.push(sImagePath);
+            }
+        }
+    }
+    AscCommon.g_oDocumentUrls.addUrls(oThemeUrls);
+    return aImages;
+};
+
+
 CCollaborativeEditingBase.prototype.OnStart_Load_Objects = function()
 {
-    AscCommon.CollaborativeEditing.Set_GlobalLock(true);
-    AscCommon.CollaborativeEditing.Set_GlobalLockSelection(true);
+    this.Set_GlobalLock(true);
+    this.Set_GlobalLockSelection(true);
     // Вызываем функцию для загрузки необходимых элементов (новые картинки и шрифты)
-    editor.pre_Save(AscCommon.CollaborativeEditing.m_aNewImages);
+    var aImages = this.CollectImagesFromChanges();
+    if(aImages.length > 0)
+    {
+        this.SendImagesUrlsFromChanges(aImages);
+    }
+    else
+    {
+        this.SendImagesCallback([].concat(this.m_aNewImages));
+        this.m_aNewImages.length = 0;
+    }
 };
 CCollaborativeEditingBase.prototype.OnEnd_Load_Objects = function()
 {
@@ -684,6 +781,7 @@ CCollaborativeEditingBase.prototype.Remove_ForeignCursor = function(UserId){
     delete this.m_aForeignCursors[UserId];
 };
 CCollaborativeEditingBase.prototype.Remove_AllForeignCursors = function(){};
+CCollaborativeEditingBase.prototype.RemoveMyCursorFromOthers = function(){};
 CCollaborativeEditingBase.prototype.Update_DocumentPositionsOnAdd = function(Class, Pos){
     this.m_aDocumentPositions.Update_DocumentPositionsOnAdd(Class, Pos);
     this.m_aForeignCursorsPos.Update_DocumentPositionsOnAdd(Class, Pos);
@@ -806,7 +904,8 @@ CCollaborativeEditingBase.prototype.private_RestoreDocumentState = function(DocS
 //----------------------------------------------------------------------------------------------------------------------
     CCollaborativeEditingBase.prototype.private_ClearChanges = function()
     {
-        this.m_aChanges = [];
+        this.m_aChanges    = [];
+        this.m_oOwnChanges = [];
     };
     CCollaborativeEditingBase.prototype.private_CollectOwnChanges = function()
     {
@@ -829,7 +928,7 @@ CCollaborativeEditingBase.prototype.private_RestoreDocumentState = function(DocS
             }
         }
     };
-    CCollaborativeEditingBase.prototype.private_AddOverallChange = function(oChange)
+    CCollaborativeEditingBase.prototype.private_AddOverallChange = function(oChange, isSave)
     {
         // Здесь мы должны смержить пришедшее изменение с одним из наших изменений
         for (var nIndex = 0, nCount = this.m_oOwnChanges.length; nIndex < nCount; ++nIndex)
@@ -838,7 +937,9 @@ CCollaborativeEditingBase.prototype.private_RestoreDocumentState = function(DocS
                 return false;
         }
 
-        this.m_aAllChanges.push(oChange);
+        if (false !== isSave)
+        	this.m_aAllChanges.push(oChange);
+        
         return true;
     };
     CCollaborativeEditingBase.prototype.private_OnSendOwnChanges = function(arrChanges, nDeleteIndex)
@@ -964,9 +1065,9 @@ CCollaborativeEditingBase.prototype.private_RestoreDocumentState = function(DocS
 				mapDocumentContents[oClass.Get_Id()] = oClass;
 			else if (oClass instanceof AscCommonWord.Paragraph)
 				mapParagraphs[oClass.Get_Id()] = oClass;
-			else if (oClass.IsParagraphContentElement && true === oClass.IsParagraphContentElement() && true === oChange.IsContentChange() && oClass.Get_Paragraph())
+			else if (oClass.IsParagraphContentElement && true === oClass.IsParagraphContentElement() && true === oChange.IsContentChange() && oClass.GetParagraph())
             {
-                mapParagraphs[oClass.Get_Paragraph().Get_Id()] = oClass.Get_Paragraph();
+                mapParagraphs[oClass.GetParagraph().Get_Id()] = oClass.GetParagraph();
                 if (oClass instanceof AscCommonWord.ParaRun)
                     mapRuns[oClass.Get_Id()] = oClass;
             }
@@ -1158,7 +1259,7 @@ CCollaborativeEditingBase.prototype.private_RestoreDocumentState = function(DocS
         oHistory.Remove_LastPoint();
         this.Clear_DCChanges();
 
-        editor.CoAuthoringApi.saveChanges(aSendingChanges, null, null);
+        editor.CoAuthoringApi.saveChanges(aSendingChanges, null, null, false, this.getCollaborativeEditing());
 
         this.private_RestoreDocumentState(DocState);
 
@@ -1339,7 +1440,10 @@ CDocumentPositionsManager.prototype.Update_DocumentPositionsOnAdd = function(Cla
         for (var ClassPos = 0, ClassLen = DocPos.length; ClassPos < ClassLen; ++ClassPos)
         {
             var _Pos = DocPos[ClassPos];
-            if (Class === _Pos.Class && _Pos.Position && _Pos.Position >= Pos)
+            if (Class === _Pos.Class
+				&& undefined !== _Pos.Position
+				&& (_Pos.Position > Pos
+				|| (_Pos.Position === Pos && !(Class instanceof AscCommonWord.ParaRun))))
             {
                 _Pos.Position++;
                 break;
@@ -1355,7 +1459,7 @@ CDocumentPositionsManager.prototype.Update_DocumentPositionsOnRemove = function(
         for (var ClassPos = 0, ClassLen = DocPos.length; ClassPos < ClassLen; ++ClassPos)
         {
             var _Pos = DocPos[ClassPos];
-            if (Class === _Pos.Class && _Pos.Position)
+            if (Class === _Pos.Class && undefined !== _Pos.Position)
             {
                 if (_Pos.Position > Pos + Count)
                 {
@@ -1363,9 +1467,23 @@ CDocumentPositionsManager.prototype.Update_DocumentPositionsOnRemove = function(
                 }
                 else if (_Pos.Position >= Pos)
                 {
-                    // Элемент, в котором находится наша позиция, удаляется. Ставим специальную отметку об этом.
-                    _Pos.Position = Pos;
-                    _Pos.Deleted = true;
+                	if (Class instanceof AscCommonWord.CTable)
+					{
+						_Pos.Position = Pos;
+						if (DocPos[ClassPos + 1]
+							&& DocPos[ClassPos + 1].Class instanceof AscCommonWord.CTableRow
+							&& undefined !== DocPos[ClassPos + 1].Position
+							&& Class.Content[Pos])
+						{
+							DocPos[ClassPos + 1].Position = Math.max(0, Math.min(DocPos[ClassPos + 1].Position, Class.Content.length - 1));
+						}
+					}
+					else
+					{
+						// Элемент, в котором находится наша позиция, удаляется. Ставим специальную отметку об этом.
+						_Pos.Position = Pos;
+						_Pos.Deleted  = true;
+					}
                 }
 
                 break;
@@ -1417,12 +1535,12 @@ CDocumentPositionsManager.prototype.Update_DocumentPosition = function(DocPos)
     if (NewDocPos !== DocPos && NewDocPos.length === 1 && NewDocPos[0].Class instanceof AscCommonWord.ParaRun)
     {
         var Run = NewDocPos[0].Class;
-        var Para = Run.Get_Paragraph();
+        var Para = Run.GetParagraph();
         if (AscCommonWord.CanUpdatePosition(Para, Run))
         {
             DocPos.length = 0;
             DocPos.push({Class : Run, Position : NewDocPos[0].Position});
-            Run.Get_DocumentPositionFromObject(DocPos);
+            Run.GetDocumentPositionFromObject(DocPos);
         }
     }
     // Возможно ран с позицией переместился в другой класс
@@ -1430,12 +1548,12 @@ CDocumentPositionsManager.prototype.Update_DocumentPosition = function(DocPos)
     {
         var Run = DocPos[DocPos.length - 1].Class;
         var RunPos = DocPos[DocPos.length - 1].Position;
-        var Para = Run.Get_Paragraph();
+        var Para = Run.GetParagraph();
         if (AscCommonWord.CanUpdatePosition(Para, Run))
         {
             DocPos.length = 0;
             DocPos.push({Class : Run, Position : RunPos});
-            Run.Get_DocumentPositionFromObject(DocPos);
+            Run.GetDocumentPositionFromObject(DocPos);
         }
     }
 };

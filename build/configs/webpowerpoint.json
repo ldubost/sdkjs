@@ -6,6 +6,7 @@
         "../common/commonDefines.js",
 		"../common/docscoapicommon.js",
         "../common/docscoapi.js",
+		"../common/spellcheckapi.js",
 		"../common/apiCommon.js",
 		"../common/SerializeCommonWordExcel.js",
         "../common/editorscommon.js",
@@ -16,6 +17,7 @@
 		"../slide/apiDefines.js",
 		"../common/CollaborativeEditingBase.js",
 		"../slide/Editor/CollaborativeEditing.js",
+		"../common/macros.js",
 		"../common/apiBase.js",
 		"../common/Private/license.js",
 		"../word/apiCommon.js",
@@ -27,10 +29,13 @@
 		"../common/SerializeChart.js",
 		
 		"../common/FontsFreeType/font_engine.js",
-        "../common/FontsFreeType/FontFile.js",
-		"../common/FontsFreeType/font_map.js",
-        "../common/FontsFreeType/FontManager.js",
-		"../word/Editor/FontClassification.js",
+        "../common/FontsFreeType/font_map.js",
+	    "../common/FontsFreeType/RasterHeapManager.js",
+		"../common/FontsFreeType/GlyphString.js",
+		"../common/FontsFreeType/character.js",
+		"../common/FontsFreeType/FontFile.js",
+		"../common/FontsFreeType/FontManager.js",
+		"../common/FontsFreeType/FontClassification.js",
 		
 		"../common/Drawings/Metafile.js",
 		"../common/FontsFreeType/TextMeasurer.js",
@@ -54,6 +59,7 @@
 		"../common/Drawings/Format/Format.js",
 		"../common/Drawings/Format/GraphicObjectBase.js",
 		"../common/Drawings/Format/Shape.js",
+		"../common/Drawings/Format/CnxShape.js",
 		"../slide/Editor/Format/ShapePrototype.js",
 		"../common/Drawings/Format/Path.js",
 		"../common/Drawings/Format/Image.js",
@@ -75,6 +81,7 @@
 		"../common/Drawings/TrackObjects/ResizeTracks.js",
 		"../common/Drawings/TrackObjects/RotateTracks.js",
         "../common/Drawings/TrackObjects/Spline.js",
+		"../common/Drawings/TrackObjects/ConnectorTrack.js",
 		"../common/Drawings/DrawingObjectsHandlers.js",
 		"../common/Drawings/TextDrawer.js",
 		
@@ -104,7 +111,14 @@
         "../word/Editor/Serialize2.js",
         "../word/Editor/Styles.js",
 		"../slide/Editor/Format/StylesPrototype.js",
-        "../word/Editor/Numbering.js",
+		"../word/Editor/Numbering/NumberingCommon.js",
+		"../word/Editor/Numbering/NumberingLvl.js",
+		"../word/Editor/Numbering/AbstractNum.js",
+		"../word/Editor/Numbering/AbstractNumChanges.js",
+		"../word/Editor/Numbering/Num.js",
+		"../word/Editor/Numbering/NumChanges.js",
+		"../word/Editor/Numbering/PresentationNumbering.js",
+		"../word/Editor/Numbering/Numbering.js",
         "../word/Drawing/GraphicsEvents.js",
         "../word/Drawing/Rulers.js",
         "../word/Editor/Table.js",
@@ -131,16 +145,20 @@
         "../slide/Editor/Format/SlideMaster.js",
         "../slide/Editor/Format/Layout.js",
         "../slide/Editor/Format/Comments.js",
+		"../slide/Editor/Format/NotesMaster.js",
+		"../slide/Editor/Format/Notes.js",
+		"../word/Editor/DocumentContentElementBase.js",
         "../word/Editor/Styles.js",
         "../word/Editor/StylesChanges.js",
-        "../word/Editor/Numbering.js",
-        "../word/Editor/NumberingChanges.js",
+		"../word/Editor/RevisionsChange.js",
         "../word/Editor/ParagraphContent.js",
         "../word/Editor/ParagraphContentBase.js",
         "../word/Editor/Paragraph/ParaTextPr.js",
         "../word/Editor/Paragraph/ParaTextPrChanges.js",
         "../word/Editor/Paragraph/ParaDrawing.js",
         "../word/Editor/Paragraph/ParaDrawingChanges.js",
+		"../word/Editor/Paragraph/ComplexFieldInstruction.js",
+		"../word/Editor/Paragraph/ComplexField.js",
         "../word/Editor/Hyperlink.js",
         "../word/Editor/HyperlinkChanges.js",
         "../word/Editor/Field.js",
@@ -166,6 +184,7 @@
         "../word/Editor/Paragraph_Recalculate.js",
 		"../word/Editor/DocumentContentBase.js",
         "../word/Editor/Document.js",
+		"../word/Editor/DocumentOutline.js",
         "../word/Editor/DocumentChanges.js",
         "../word/Editor/DocumentContent.js",
         "../word/Editor/DocumentContentChanges.js",
@@ -180,8 +199,12 @@
 		"../word/Editor/Footnotes.js",
         "../word/Editor/FootnotesChanges.js",
 		"../word/Editor/FootEndNote.js",								
-        "../word/Editor/Search.js",        
-        
+        "../word/Editor/Search.js",
+        "../word/Editor/StructuredDocumentTags/BlockLevel.js",
+        "../word/Editor/StructuredDocumentTags/InlineLevel.js",
+        "../word/Editor/StructuredDocumentTags/SdtPr.js",
+        "../word/Editor/StructuredDocumentTags/SdtPrChanges.js",
+
         "../slide/Editor/Format/ImagePrototype.js",
         "../slide/Editor/Format/GroupPrototype.js",
         "../slide/Editor/Format/ChartSpacePrototype.js",
@@ -211,24 +234,20 @@
 		]
       },
 	  "mobile_banners": {
-		  "min": [
-		    "../common/Native/native.js",
-		    "../common/Native/jquery_native.js",
-		    "../../web-apps/vendor/xregexp/xregexp-all-min.js"
+		  "min": [		 
+			"../common/Native/Wrappers/memory.js"
 	    ],
 		"common": []
 	  },
       "mobile": [        
-        "../common/Native/Wrappers/memory.js",
         "../common/Native/Wrappers/TextMeasurerWrapper.js",
         "../common/Native/Wrappers/DrawingStream.js",
         "../common/Native/Wrappers/ShapeDrawer.js",
         "../common/Native/Wrappers/Overlay.js",
-        "../slide/Native/native.js",
         "../slide/Native/Wrappers/api.js",
         "../slide/Native/Wrappers/HtmlPage.js",
         "../slide/Native/Wrappers/DrawingDocument.js",
-		"../cell/native/TextDrawer.js"
+        "../slide/Native/Wrappers/native.js"
       ],
       "exclude_mobile": [
         "../word/Drawing/ShapeDrawer.js",
@@ -237,19 +256,16 @@
         "../slide/Drawing/DrawingDocument.js",
         "../common/FontsFreeType/FontFile.js",
         "../common/FontsFreeType/FontManager.js",
-        "../common/FontsFreeType/TextMeasurer.js",
-		"../common/Drawings/TextDrawer.js"
+        "../common/FontsFreeType/TextMeasurer.js"
       ],
       "dst": "../slide",
       "externs": [
-        "../common/Build/Externs.js",
-        "../../web-apps/vendor/jquery/jquery.min.js",
-        "../../web-apps/vendor/underscore/underscore-min.js",
-        "../../web-apps/vendor/sockjs/sockjs.min.js",
-        "../../web-apps/vendor/xregexp/xregexp-all-min.js",
-        "../../web-apps/vendor/jszip/jszip.min.js",
-        "../../web-apps/vendor/jszip-utils/jszip-utils.min.js",
-        "../../web-apps/vendor/jsrsasign/jsrsasign-latest-all-min.js"
+        "../common/externs/global.js",
+        "../common/externs/jquery-3.2.js",
+        "../common/externs/xregexp-3.0.0.js",
+        "../common/externs/sockjs.js",
+        "../common/externs/jszip.min.js",
+        "../common/externs/jszip-utils.js"
       ],
       "map": "sdk-all.js.map",
       "log": "../slide/Build/Log"
@@ -257,10 +273,5 @@
     "source_map": {
       "url": "http://localhost:8080/sdkjs/slide"
     }
-  },
-  "tasks": {
-    "build": [
-      "compile_sdk"
-    ]
   }
 }

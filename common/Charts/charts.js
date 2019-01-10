@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2018
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -297,7 +297,7 @@ ChartPreviewManager.prototype.getChartByType = function(type)
 {
 	return AscFormat.ExecuteNoHistory(function()
 	{
-		var settings = new AscCommon.asc_ChartSettings();
+		var settings = new Asc.asc_ChartSettings();
 		settings.type = type;
 		var chartSeries = {series: this.getAscChartSeriesDefault(type), parsedHeaders: {bLeft: true, bTop: true}};
 		var chart_space = AscFormat.DrawingObjectsController.prototype._getChartSpace(chartSeries, settings, true);
@@ -713,128 +713,67 @@ TextArtPreviewManager.prototype.getShapeByPrst = function(prst)
     }
 	var oContent = oShape.getDocContent();
 
-	var textStr = "abcde";
 	var TextSpacing = undefined;
 	switch(prst)
 	{
 		case "textButton":
 		{
 			TextSpacing = 4;
-			textStr = "abcde";
-			for(var i = 0; i < textStr.length; ++i)
-			{
-				oContent.Paragraph_Add(new ParaText(textStr[i]), false);
-			}
-
-			textStr = "Fghi";
-			oContent.Add_NewParagraph();
-			for(var i = 0; i < textStr.length; ++i)
-			{
-				oContent.Paragraph_Add(new ParaText(textStr[i]), false);
-			}
-
-			textStr = "Jklmn";
-			oContent.Add_NewParagraph();
-			for(var i = 0; i < textStr.length; ++i)
-			{
-				oContent.Paragraph_Add(new ParaText(textStr[i]), false);
-			}
+			oContent.AddText("abcde");
+			oContent.AddNewParagraph();
+			oContent.AddText("Fghi");
+			oContent.AddNewParagraph();
+			oContent.AddText("Jklmn");
 			break;
 		}
 		case "textArchUp":
 		case "textArchDown":
 		{
 			TextSpacing = 4;
-			textStr = "abcdefg";
-			for(var i = 0; i < textStr.length; ++i)
-			{
-				oContent.Paragraph_Add(new ParaText(textStr[i]), false);
-			}
+			oContent.AddText("abcdefg");
 			break;
 		}
 
 		case "textCircle":
 		{
 			TextSpacing = 4;
-			textStr = "abcdefghijklmnop";
-			for(var i = 0; i < textStr.length; ++i)
-			{
-				oContent.Paragraph_Add(new ParaText(textStr[i]), false);
-			}
+			oContent.AddText("abcdefghijklmnop");
 			break;
 		}
         case "textButtonPour":
         {
-            textStr = "abcde";
-            for(var i = 0; i < textStr.length; ++i)
-            {
-                oContent.Paragraph_Add(new ParaText(textStr[i]), false);
-            }
-
-            oContent.Add_NewParagraph();
-            textStr = "abc";
-            for(var i = 0; i < textStr.length; ++i)
-            {
-                oContent.Paragraph_Add(new ParaText(textStr[i]), false);
-            }
-
-
-            oContent.Add_NewParagraph();
-            textStr = "abcde";
-            for(var i = 0; i < textStr.length; ++i)
-            {
-                oContent.Paragraph_Add(new ParaText(textStr[i]), false);
-            }
+			oContent.AddText("abcde");
+            oContent.AddNewParagraph();
+			oContent.AddText("abc");
+            oContent.AddNewParagraph();
+			oContent.AddText("abcde");
             break;
         }
         case "textDeflateInflate":
         {
-            textStr = "abcde";
-            for(var i = 0; i < textStr.length; ++i)
-            {
-                oContent.Paragraph_Add(new ParaText(textStr[i]), false);
-            }
-            oContent.Add_NewParagraph();
-            textStr = "abcde";
-            for(var i = 0; i < textStr.length; ++i)
-            {
-                oContent.Paragraph_Add(new ParaText(textStr[i]), false);
-            }
+			oContent.AddText("abcde");
+            oContent.AddNewParagraph();
+			oContent.AddText("abcde");
             break;
         }
         case "textDeflateInflateDeflate":
         {
-            textStr = "abcde";
-            for(var i = 0; i < textStr.length; ++i)
-            {
-                oContent.Paragraph_Add(new ParaText(textStr[i]), false);
-            }
-            oContent.Add_NewParagraph();
-            textStr = "abcde";
-            for(var i = 0; i < textStr.length; ++i)
-            {
-                oContent.Paragraph_Add(new ParaText(textStr[i]), false);
-            }
-            oContent.Add_NewParagraph();
-            textStr = "abcde";
-            for(var i = 0; i < textStr.length; ++i)
-            {
-                oContent.Paragraph_Add(new ParaText(textStr[i]), false);
-            }
+			oContent.AddText("abcde");
+            oContent.AddNewParagraph();
+			oContent.AddText("abcde");
+            oContent.AddNewParagraph();
+			oContent.AddText("abcde");
             break;
         }
 		default:
 		{
-			textStr = "abcde";
-			for(var i = 0; i < textStr.length; ++i)
-			{
-				oContent.Paragraph_Add(new ParaText(textStr[i]), false);
-			}
+			oContent.AddText("abcde");
+			break;
 		}
 	}
 	oContent.Set_ApplyToAll(true);
-	oContent.Set_ParagraphAlign(AscCommon.align_Center);
-	oContent.Paragraph_Add(new ParaTextPr({FontSize: 36, Spacing: TextSpacing}));
+	oContent.SetParagraphAlign(AscCommon.align_Center);
+	oContent.AddToParagraph(new ParaTextPr({FontSize: 36, Spacing: TextSpacing}));
 	oContent.Set_ApplyToAll(false);
 
 	var oBodypr = oShape.getBodyPr().createDuplicate();
@@ -922,16 +861,11 @@ TextArtPreviewManager.prototype.getTAShape = function()
             return null;
         }
 		var oContent = oShape.getDocContent();
-		var sText = "Ta";
-		var oParagraph = oContent.Content[0];
-		for(var i = 0; i < sText.length; ++i)
-		{
-			oContent.Paragraph_Add(new ParaText(sText[i]), false);
-		}
+		oContent.AddText("Ta");
 		oContent.Set_ApplyToAll(true);
-		oContent.Paragraph_Add(new ParaTextPr({FontSize: 109, RFonts: {Ascii : {Name: "Arial", Index: -1}}}));
-		oContent.Set_ParagraphAlign(AscCommon.align_Center);
-		oContent.Set_ParagraphIndent({FirstLine: 0, Left: 0, Right: 0});
+		oContent.AddToParagraph(new ParaTextPr({FontSize: 109, RFonts: {Ascii : {Name: "Arial", Index: -1}}}));
+		oContent.SetParagraphAlign(AscCommon.align_Center);
+		oContent.SetParagraphIndent({FirstLine: 0, Left: 0, Right: 0});
 		oContent.Set_ApplyToAll(false);
 		this.TAShape = oShape;
 	}
@@ -998,7 +932,7 @@ TextArtPreviewManager.prototype.generateTextArtStyles = function()
         oContent.Set_ApplyToAll(true);
         for(var i = 0; i < this.aStylesByIndex.length; ++i)
         {
-            oContent.Paragraph_Add(new ParaTextPr(this.aStylesByIndex[i]));
+            oContent.AddToParagraph(new ParaTextPr(this.aStylesByIndex[i]));
             graphics.init(ctx, _canvas.width, _canvas.height, oShape.extX, oShape.extY);
             graphics.transform(1,0,0,1,0,0);
             oShape.recalcText();
@@ -1037,7 +971,7 @@ function GenerateWordArtPrewiewCode()
 		{
 			oRetString += "\n\t\t{Type: \"" + aByTypes[j]['Type'] + "\", Image: \"" + oWordArtPreview.getWordArtPreview(aByTypes[j]['Image']) + "\"}" + ((j === aByTypes.length - 1) ? "" : ",");
 		}
-		oRetString += "\n\t]" + (i < (g_PresetTxWarpTypes.length - 1) ? "," : "");
+		oRetString += "\n\t]" + (i < (AscCommon.g_PresetTxWarpTypes.length - 1) ? "," : "");
 	}
 	oRetString += "\n];";
 	return oRetString;

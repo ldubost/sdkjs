@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2018
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -46,7 +46,7 @@
 	CDrawingDocContent.prototype = Object.create(CDocumentContent.prototype);
 	CDrawingDocContent.prototype.constructor = CDrawingDocContent;
 
-    CDrawingDocContent.prototype.Get_SummaryHeight = function(){
+    CDrawingDocContent.prototype.GetSummaryHeight = function(){
         var fSummHeight = 0;
         var nColumnsCount = this.Get_ColumnsCount();
         for(var i = 0; i < this.Pages.length; ++i){
@@ -73,6 +73,21 @@
         }
         return fSummHeight;
     };
+
+    CDrawingDocContent.prototype.GetSummaryHeight_ =function () {
+        var dHeight = 0.0;
+        for(var i = 0; i < this.Content.length; ++i){
+            var oElement = this.Content[i];
+            if(oElement.GetType() === type_Paragraph){
+                for(var j = 0; j < oElement.Lines.length; ++j){
+                    var oLine = oElement.Lines[j];
+                    dHeight += (oLine.Bottom - oLine.Top - oLine.Metrics.Descent);
+                }
+            }
+        }
+        return dHeight;
+    };
+
     CDrawingDocContent.prototype.Get_ColumnsCount = function(){
         var nColumnCount = 1;
         if(this.Parent.getBodyPr){
@@ -102,6 +117,7 @@
         if(nNumCol > 1 && oBodyPr)
         {
             var fSpace = AscFormat.isRealNumber(oBodyPr.spcCol) ? oBodyPr.spcCol : 0;
+            fSpace = Math.min(fSpace, this.XLimit/(nNumCol - 1));
             var fColumnWidth = Math.max((this.XLimit - this.X - (nNumCol - 1)*fSpace)/nNumCol, 0);
             X += nColumnIndex*(fColumnWidth + fSpace);
             XLimit = X + fColumnWidth;
@@ -132,10 +148,18 @@
         else{
             this.Start_Recalculate(fWidth, fHeight);
             if(this.Pages.length > 1){
-                var fSummaryHeight = this.Get_SummaryHeight();
-                var fNeedHeight = fSummaryHeight;
+                var fSummaryHeight = this.GetSummaryHeight();
+
+                var fLow = fHeight, fHigh = fSummaryHeight;
+                this.Start_Recalculate(fWidth, fHigh);
+                var nItCount = 0;
+                while(this.Pages.length > 1 && nItCount < 5){
+                    fHigh += fSummaryHeight;
+                    this.Start_Recalculate(fWidth, fHigh);
+                    ++nItCount;
+                }
+                var fNeedHeight = fHigh;
                 if(this.Get_ColumnsCount() > 1){
-                    var fLow = fHeight, fHigh = fSummaryHeight;
                     while((fHigh - fLow) > 0.1){
                         var fCheckHeight = fLow +  (fHigh - fLow)/2;
                         this.Start_Recalculate(fWidth, fCheckHeight);
@@ -277,10 +301,10 @@
                     {
                         var Element          = this.Content[oColumn.Pos];
                         var ElementPageIndex = this.private_GetElementPageIndex(i, nPageIndex, nColumnIndex, nColumnsCount);
-                        if (true === Element.Is_EmptyPage(ElementPageIndex))
+                        if (true === Element.IsEmptyPage(ElementPageIndex))
                             oColumn.Empty = true;
                     }
-                    for (var TempColumnIndex = ColumnIndex + 1; TempColumnIndex < ColumnsCount; ++TempColumnIndex)
+                    for (var TempColumnIndex = nColumnIndex + 1; TempColumnIndex < nColumnsCount; ++TempColumnIndex)
                     {
                         oSection.Columns[TempColumnIndex].Empty  = true;
                         oSection.Columns[TempColumnIndex].Pos    = i;
@@ -306,13 +330,13 @@
                     {
                         var Element          = this.Content[oColumn.Pos];
                         var ElementPageIndex = this.private_GetElementPageIndex(i, nPageIndex, nColumnIndex, nColumnsCount);
-                        if (true === Element.Is_EmptyPage(nElementPageIndex))
+                        if (true === Element.IsEmptyPage(nElementPageIndex))
                             oColumn.Empty = true;
                     }
                     for (var TempColumnIndex = nColumnIndex + 1; TempColumnIndex < nColumnsCount; ++TempColumnIndex)
                     {
                         var ElementPageIndex = this.private_GetElementPageIndex(i, nPageIndex, TempColumnIndex, nColumnsCount);
-                        this.Content[Index].Recalculate_SkipPage(ElementPageIndex);
+                        this.Content[i].Recalculate_SkipPage(ElementPageIndex);
                         oSection.Columns[TempColumnIndex].Empty  = true;
                         oSection.Columns[TempColumnIndex].Pos    = i;
                         oSection.Columns[TempColumnIndex].EndPos = i - 1;
@@ -342,7 +366,7 @@
                     {
                         var Element          = this.Content[oColumn.Pos];
                         var ElementPageIndex = this.private_GetElementPageIndex(i, nPageIndex, nColumnIndex, nColumnsCount);
-                        if (true === Element.Is_EmptyPage(ElementPageIndex))
+                        if (true === Element.IsEmptyPage(ElementPageIndex))
                             oColumn.Empty = true;
                     }
 
@@ -423,7 +447,11 @@
         oReader.GetLong();//type of DocumentContent
         CDocumentContent.prototype.Read_FromBinary2.call(this, oReader);
     };
-    CDrawingDocContent.prototype.Is_TableCellContent = function(){
+    CDrawingDocContent.prototype.IsTableCellContent = function(isReturnCell){
+
+    	if (true === isReturnCell)
+    		return null;
+
         return false;
     };
 
@@ -435,7 +463,7 @@
         return false;
     };
 
-    CDrawingDocContent.prototype.Selection_Draw_Page = function(PageIndex){
+    CDrawingDocContent.prototype.DrawSelectionOnPage = function(PageIndex){
         var CurPage = PageIndex;
         if (CurPage < 0 || CurPage >= this.Pages.length)
             return;
@@ -463,7 +491,7 @@
                     for (var Index = Start; Index <= End; Index++)
                     {
                         var ElementPageIndex = this.private_GetElementPageIndex(Index, CurPage, 0, 1);
-                        this.Content[Index].Selection_Draw_Page(ElementPageIndex);
+                        this.Content[Index].DrawSelectionOnPage(ElementPageIndex);
                     }
                 }
                 else{
@@ -488,7 +516,7 @@
                         for (var Index = Start; Index <= End; ++Index)
                         {
                             var ElementPage = this.private_GetElementPageIndex(Index, 0, ColumnIndex, ColumnsCount);
-                            this.Content[Index].Selection_Draw_Page(ElementPage);
+                            this.Content[Index].DrawSelectionOnPage(ElementPage);
                         }
 
                     }
@@ -587,7 +615,7 @@
         var Count = this.Content.length;
         for (var Index = 0; Index < Count; Index++)
         {
-            DC.Internal_Content_Add(Index, this.Content[Index].Copy(DC, DrawingDocument), false);
+            DC.Internal_Content_Add(Index, this.Content[Index].Copy(DC, DrawingDocument, {}), false);
         }
 
         return DC;
@@ -635,6 +663,55 @@
         }
     };
 
+
+    CDrawingDocContent.prototype.ClearParagraphFormatting = function(isClearParaPr, isClearTextPr)
+    {
+        if (true === this.ApplyToAll)
+        {
+            for (var Index = 0; Index < this.Content.length; Index++)
+            {
+                var Item = this.Content[Index];
+                Item.Set_ApplyToAll(true);
+                Item.ClearParagraphFormatting(isClearParaPr, isClearTextPr);
+                Item.Set_ApplyToAll(false);
+            }
+
+            return;
+        }
+
+        if (docpostype_DrawingObjects == this.CurPos.Type)
+        {
+            return this.LogicDocument.DrawingObjects.paragraphClearFormatting(isClearParaPr, isClearTextPr);
+        }
+        else //if ( docpostype_Content === this.CurPos.Type )
+        {
+            if (true === this.Selection.Use)
+            {
+                if (selectionflag_Common === this.Selection.Flag)
+                {
+                    var StartPos = this.Selection.StartPos;
+                    var EndPos   = this.Selection.EndPos;
+                    if (StartPos > EndPos)
+                    {
+                        var Temp = StartPos;
+                        StartPos = EndPos;
+                        EndPos   = Temp;
+                    }
+
+                    for (var Index = StartPos; Index <= EndPos; Index++)
+                    {
+                        var Item = this.Content[Index];
+                        Item.ClearParagraphFormatting(isClearParaPr, isClearTextPr);
+                    }
+                }
+            }
+            else
+            {
+                var Item = this.Content[this.CurPos.ContentPos];
+                Item.ClearParagraphFormatting(isClearParaPr, isClearTextPr);
+            }
+        }
+    };
     // TODO: сделать по-нормальному!!!
     function CDocument_prototype_private_GetElementPageIndexByXY(ElementPos, X, Y, PageIndex)
     {

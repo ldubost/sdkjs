@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2018
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -864,6 +864,16 @@ function AFM_StreamRec()
     this.limit = 0;
 
     this.status = 0;
+}
+
+function AFM_ParserRec()
+{
+	this.memory = null;
+	this.stream = null;
+
+	this.FontInfo = null;
+	this.get_index = null;
+	this.user_data = null;
 }
 
 function AFM_IS_NEWLINE(ch)
@@ -2426,7 +2436,7 @@ function ps_tocoordarray(cur, limit, max_coords, coords)
 
         var old_cur = cur.pos;
 
-        if ( coords != NULL && count >= max_coords )
+        if ( coords != null && count >= max_coords )
             break;
 
         /* call PS_Conv_ToFixed() even if coords == NULL */

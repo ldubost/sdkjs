@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2018
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -40,7 +40,7 @@ AscCommon.baseEditorsApi.prototype._onEndPermissions = function () {
 			oResult.setLicenseType(type);
 			oResult.setCanBranding(this.licenseResult['branding']);
 			oResult.setIsLight(this.licenseResult['light']);
-			oResult.setTrial(this.licenseResult['trial']);
+			oResult.setLicenseMode(this.licenseResult['mode']);
 			oResult.setRights(this.licenseResult['rights']);
 			oResult.setBuildVersion(this.licenseResult['buildVersion']);
 			oResult.setBuildNumber(this.licenseResult['buildNumber']);

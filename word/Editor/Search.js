@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2018
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -154,7 +154,7 @@ CDocumentSearch.prototype =
                 if (true === bRestorePos)
                 {
                     // Сохраняем позицию состояние параграфа, чтобы курсор остался в том же месте и после замены.
-                    bSelection = Para.Is_SelectionUse();
+                    bSelection = Para.IsSelectionUse();
                     ContentPos = Para.Get_ParaContentPos(false, false);
                     StartPos   = Para.Get_ParaContentPos(true, true);
                     EndPos     = Para.Get_ParaContentPos(true, false);
@@ -169,12 +169,7 @@ CDocumentSearch.prototype =
                 var StartRun = SearchElement.ClassesS[SearchElement.ClassesS.length - 1];
 
                 var RunPos = StartContentPos.Get( SearchElement.ClassesS.length - 1 );
-
-                var Len = NewStr.length;
-                for ( var Pos = 0; Pos < Len; Pos++ )
-                {
-                    StartRun.Add_ToContent(RunPos + Pos, ' ' === NewStr[Pos] ? new ParaSpace() : new ParaText(NewStr[Pos]));
-                }
+                StartRun.AddText(NewStr, RunPos);
 
                 // Выделяем старый объект поиска и удаляем его
                 Para.Selection.Use = true;
@@ -182,7 +177,7 @@ CDocumentSearch.prototype =
                 Para.Remove();
 
                 // Перемещаем курсор в конец поиска
-                Para.Selection_Remove();
+                Para.RemoveSelection();
                 Para.Set_ParaContentPos( SearchElement.StartPos, true, -1, -1 );
 
                 // Удаляем запись о данном элементе
@@ -278,7 +273,7 @@ CDocument.prototype.Search = function(Str, Props, bDraw)
 };
 CDocument.prototype.Search_Select = function(Id)
 {
-    this.Selection_Remove();
+    this.RemoveSelection();
     this.SearchEngine.Select(Id, true);
     this.RecalculateCurPos();
 
@@ -286,11 +281,11 @@ CDocument.prototype.Search_Select = function(Id)
     this.Document_UpdateSelectionState();
     this.Document_UpdateRulersState();
 };
-CDocument.prototype.Search_Replace = function(NewStr, bAll, Id)
+CDocument.prototype.Search_Replace = function(NewStr, bAll, Id, bInterfaceEvent)
 {
     var bResult = false;
 
-    this.Selection_Remove();
+    this.RemoveSelection();
 
     var CheckParagraphs = [];
     if ( true === bAll )
@@ -340,13 +335,13 @@ CDocument.prototype.Search_Replace = function(NewStr, bAll, Id)
 
         bResult = true;
 
-        if ( true === bAll )
-            editor.sync_ReplaceAllCallback(AllCount, AllCount);
+		if (true === bAll && false !== bInterfaceEvent)
+			editor.sync_ReplaceAllCallback(AllCount, AllCount);
     }
     else
     {
-        if ( true === bAll )
-            editor.sync_ReplaceAllCallback(0, AllCount);
+		if (true === bAll && false !== bInterfaceEvent)
+			editor.sync_ReplaceAllCallback(0, AllCount);
     }
 
     this.Document_UpdateInterfaceState();
@@ -947,11 +942,11 @@ Paragraph.prototype.Search = function(Str, Props, SearchEngine, Type)
             ResultStr = "\<b\>" + _Str + "\</b\>";
 
             var LeaveCount = MaxShowValue - _Str.length;
-            var RunElementsAfter  = new CParagraphRunElements(EndPos, LeaveCount);
-            var RunElementsBefore = new CParagraphRunElements(StartPos, LeaveCount);
+            var RunElementsAfter  = new CParagraphRunElements(EndPos, LeaveCount, [para_Text, para_Space, para_Tab]);
+            var RunElementsBefore = new CParagraphRunElements(StartPos, LeaveCount, [para_Text, para_Space, para_Tab]);
 
-            this.Get_NextRunElements(RunElementsAfter);
-            this.Get_PrevRunElements(RunElementsBefore);
+            this.GetNextRunElements(RunElementsAfter);
+            this.GetPrevRunElements(RunElementsBefore);
 
             var LeaveCount_2 = LeaveCount / 2;
 
@@ -1243,7 +1238,7 @@ ParaRun.prototype.Search_GetId = function(bNext, bUseContentPos, ContentPos, Dep
             var Mark = this.SearchMarks[SPos];
             var MarkPos = Mark.SearchResult.StartPos.Get(Mark.Depth);
 
-            if ( MarkPos >= StartPos && MarkPos < NearPos )
+            if (Mark.SearchResult.ClassesS.length > 0 && this === Mark.SearchResult.ClassesS[Mark.SearchResult.ClassesS.length - 1] && MarkPos >= StartPos && MarkPos < NearPos)
             {
                 NearElementId = Mark.SearchResult.Id;
                 NearPos       = MarkPos;
@@ -1271,7 +1266,7 @@ ParaRun.prototype.Search_GetId = function(bNext, bUseContentPos, ContentPos, Dep
             var Mark = this.SearchMarks[SPos];
             var MarkPos = Mark.SearchResult.StartPos.Get(Mark.Depth);
 
-            if ( MarkPos < StartPos && MarkPos > NearPos )
+            if (Mark.SearchResult.ClassesS.length > 0 && this === Mark.SearchResult.ClassesS[Mark.SearchResult.ClassesS.length - 1] && MarkPos < StartPos && MarkPos > NearPos)
             {
                 NearElementId = Mark.SearchResult.Id;
                 NearPos       = MarkPos;
@@ -1293,30 +1288,6 @@ ParaRun.prototype.Search_GetId = function(bNext, bUseContentPos, ContentPos, Dep
     }
 
     return NearElementId;
-};
-
-//----------------------------------------------------------------------------------------------------------------------
-// ParaComment
-//----------------------------------------------------------------------------------------------------------------------
-ParaComment.prototype.Search = function(ParaSearch, Depth)
-{
-};
-
-ParaComment.prototype.Add_SearchResult = function(SearchResult, Start, ContentPos, Depth)
-{
-};
-
-ParaComment.prototype.Clear_SearchResults = function()
-{
-};
-
-ParaComment.prototype.Remove_SearchResult = function(SearchResult)
-{
-};
-
-ParaComment.prototype.Search_GetId = function(bNext, bUseContentPos, ContentPos, Depth)
-{
-    return null;
 };
 //----------------------------------------------------------------------------------------------------------------------
 // ParaMath
@@ -1351,6 +1322,17 @@ ParaMath.prototype.Search_GetId = function(bNext, bUseContentPos, ContentPos, De
 {
     return this.Root.Search_GetId(bNext, bUseContentPos, ContentPos, Depth);
     //return null;
+};
+//----------------------------------------------------------------------------------------------------------------------
+// CBLockLevelSdt
+//----------------------------------------------------------------------------------------------------------------------
+CBlockLevelSdt.prototype.Search = function(Str, Props, SearchEngine, Type)
+{
+	this.Content.Search(Str, Props, SearchEngine, Type);
+};
+CBlockLevelSdt.prototype.Search_GetId = function(bNext, bCurrent)
+{
+	return this.Content.Search_GetId(bNext, bCurrent);
 };
 
 //----------------------------------------------------------------------------------------------------------------------

@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2018
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -1175,7 +1175,7 @@ function Ins_SxVTL(exc, aIdx1, aIdx2, aOpc, Vec)
     if ((aIdx1 >= exc.zp2.n_points) || (aIdx2 >= exc.zp1.n_points))
     {
         if (exc.pedantic_hinting)
-            exc.error = FT_Err_Invalid_Reference;
+            exc.error = FT_Common.FT_Err_Invalid_Reference;
         return 1;
     }
 

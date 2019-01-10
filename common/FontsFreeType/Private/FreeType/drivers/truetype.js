@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2018
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -210,7 +210,7 @@ function TT_Face()
     this.max_components = 0;
     //#endif
 
-    this.vertical_info = false;
+    this.vertical_info = 0;
     this.vertical = new TT_VertHeader();
 
     this.num_names = 0;
@@ -1094,7 +1094,7 @@ function TT_Vary_Get_Glyph_Deltas(face, glyph_index, n_points)
         stream.cur = here;
     }
 
-    for ( i = 0; i < ( tupleCount & GX_TC_TUPLE_COUNT_MASK ); ++i )
+    for ( i = 0; i < ( tupleCount & FT_Common.GX_TC_TUPLE_COUNT_MASK ); ++i )
     {
         var tupleDataSize = stream.GetUShort();
         var tupleIndex    = stream.GetUShort();
@@ -1248,7 +1248,7 @@ function TT_Get_HMetrics(face, idx)
 }
 function TT_Get_VMetrics(face, idx, yMax)
 {
-    if (face.vertical_info === true)
+    if (face.vertical_info === 1)
         return face.sfnt.get_metrics(face, 1, idx);
     else if (face.os2.version != 0xFFFF)
         return {bearing : (face.os2.sTypoAscender - yMax), advance : (face.os2.sTypoAscender - face.os2.sTypoDescender)};
@@ -2443,7 +2443,7 @@ function compute_glyph_metrics(loader, glyph_index)
     var top;
     var advance;
 
-    if (face.vertical_info === true && face.vertical.number_Of_VMetrics > 0)
+    if (face.vertical_info === 1 && face.vertical.number_Of_VMetrics > 0)
     {
         top = FT_DivFix(loader.pp3.y - bbox.yMax, y_scale);
 

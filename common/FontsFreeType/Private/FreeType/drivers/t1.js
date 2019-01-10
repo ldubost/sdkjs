@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2018
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -967,7 +967,7 @@ function T1_Get_Private_Dict(parser, psaux)
             parser.private_len = ret.num_bytes;
 
             /* put a safeguard */
-            parser.private_dict[len] = FT_Common.SYMBOL_CONST_S0;
+            parser.private_dict[ret.num_bytes] = FT_Common.SYMBOL_CONST_S0;
         }
         else
         {
@@ -1554,7 +1554,7 @@ function T1_Get_MM_Var(face)
     if (error != 0)
         return { err: error, mm : null };
 
-    var _num_axis = master.num_axis;
+    var _num_axis = mmaster.num_axis;
     mmvar.axis = new Array(_num_axis);
     for (var i = 0; i < _num_axis; i++)
         mmvar.axis[i] = new FT_Var_Axis();
@@ -2430,7 +2430,7 @@ function t1_parse_subrs(face, loader)
         if (_strncmp_data(parser.root.cursor, "put", 3) == 0)
         {
             parser.root.funcs.skip_PS_token(parser.root);
-            parser.root.funcs.skip_spaces(parser);
+            parser.root.funcs.skip_spaces(parser.root);
         }
 
         /* with synthetic fonts it is possible we get here twice */

@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2018
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -388,7 +388,14 @@ CShapeDrawer.prototype =
                 }
                 case Asc.c_oAscFill.FILL_TYPE_SOLID:
                 {
-                    this.FillUniColor = _fill.color.RGBA;
+                    if(_fill.color)
+                    {
+                        this.FillUniColor = _fill.color.RGBA;
+                    }
+                    else
+                    {
+                        this.FillUniColor = new AscFormat.CUniColor().RGBA;
+                    }
                     break;
                 }
                 case Asc.c_oAscFill.FILL_TYPE_GRAD:
@@ -429,7 +436,14 @@ CShapeDrawer.prototype =
                 }
                 case Asc.c_oAscFill.FILL_TYPE_SOLID:
                 {
-                    this.StrokeUniColor = _fill.color.RGBA;
+                    if(_fill.color)
+                    {
+                        this.StrokeUniColor = _fill.color.RGBA;
+                    }
+                    else
+                    {
+                        this.StrokeUniColor = new AscFormat.CUniColor().RGBA;
+                    }
                     break;
                 }
                 case Asc.c_oAscFill.FILL_TYPE_GRAD:
@@ -438,7 +452,16 @@ CShapeDrawer.prototype =
                     if (_c == 0)
                         this.StrokeUniColor = new AscFormat.CUniColor().RGBA;
                     else
-                        this.StrokeUniColor = _fill.colors[0].color.RGBA;
+                    {
+                        if(_fill.colors[0].color)
+                        {
+                            this.StrokeUniColor = _fill.colors[0].color.RGBA;
+                        }
+                        else
+                        {
+                            this.StrokeUniColor = new AscFormat.CUniColor().RGBA;
+                        }
+                    }
 
                     break;
                 }
@@ -730,7 +753,7 @@ CShapeDrawer.prototype =
                 else
                 {
                     //gradObj = _ctx.createLinearGradient(this.min_x, this.min_y, this.max_x, this.min_y);
-                    points = this.getGradientPoints(this.min_x, this.min_y, this.max_x, this.max_y, 90 * 60000, false);
+                    points = this.getGradientPoints(this.min_x, this.min_y, this.max_x, this.max_y, 0, false);
                     this.NativeGraphics["PD_put_BrushGradientLinear"](points.x0, points.y0, points.x1, points.y1);
                 }
 
@@ -1070,7 +1093,7 @@ CShapeDrawer.prototype =
                     }
                     else
                     {
-                        points = this.getGradientPoints(this.min_x, this.min_y, this.max_x, this.max_y, 90 * 60000, false);
+                        points = this.getGradientPoints(this.min_x, this.min_y, this.max_x, this.max_y, 0, false);
                     }
 
                     this.Graphics.put_BrushGradient(_fill, points, this.UniFill.transparent);

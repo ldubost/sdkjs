@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2018
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -108,7 +108,7 @@ Asc['asc_docs_api'].prototype.asc_AddMailMergeField = function(Name)
 };
 Asc['asc_docs_api'].prototype.asc_SetHighlightMailMergeFields = function(Value)
 {
-    this.WordControl.m_oLogicDocument.Set_HightlightMailMergeFields(Value);
+    this.WordControl.m_oLogicDocument.Set_HightlighMailMergeFields(Value);
 };
 Asc['asc_docs_api'].prototype.asc_PreviewMailMergeResult = function(Index)
 {
@@ -244,22 +244,15 @@ CDocument.prototype.Add_MailMergeField = function(Name)
 
         var oField = new ParaField(fieldtype_MERGEFIELD, [Name], []);
         var oRun = new ParaRun();
-
-        var Index = 0;
-        oRun.Add_ToContent(Index++, new ParaText("«"));
-        for (var Len = Name.length; Index <= Len; Index++)
-        {
-            oRun.Add_ToContent(Index, new ParaText(Name.charAt(Index - 1)));
-        }
-        oRun.Add_ToContent(Index, new ParaText("»"));
+        oRun.AddText("«" + Name + "»");
         oField.Add_ToContent(0, oRun);
 
         this.Register_Field(oField);
-        this.Paragraph_Add(oField);
+        this.AddToParagraph(oField);
         this.Document_UpdateInterfaceState();
     }
 };
-CDocument.prototype.Set_HightlightMailMergeFields = function(Value)
+CDocument.prototype.Set_HightlighMailMergeFields = function(Value)
 {
     if (Value !== this.MailMergeFieldsHighlight)
     {
@@ -278,7 +271,7 @@ CDocument.prototype.Preview_MailMergeResult = function(Index)
     if (true !== this.MailMergePreview)
     {
         this.MailMergePreview = true;
-        this.Selection_Remove();
+        this.RemoveSelection();
         AscCommon.CollaborativeEditing.Set_GlobalLock(true);
     }
 
@@ -357,6 +350,7 @@ CDocument.prototype.Get_MailMergedDocument = function(_nStartIndex, _nEndIndex)
     // Нумерацию придется повторить для каждого отдельного файла
     LogicDocument.Numbering.Clear();
 
+    LogicDocument.DrawingDocument = this.DrawingDocument;
 
     LogicDocument.theme = this.theme.createDuplicate();
     LogicDocument.clrSchemeMap   = this.clrSchemeMap.createDuplicate();
@@ -371,10 +365,12 @@ CDocument.prototype.Get_MailMergedDocument = function(_nStartIndex, _nEndIndex)
     {
         // Подменяем ссылку на менеджер полей, чтобы скопированные поля регистрировались в новом классе
         this.FieldsManager = LogicDocument.FieldsManager;
-        var NewNumbering = this.Numbering.Copy_All_AbstractNums();
-        LogicDocument.Numbering.Append_AbstractNums(NewNumbering.AbstractNums);
+        var NewNumbering = this.Numbering.CopyAllNums(LogicDocument.Numbering);
 
-        this.CopyNumberingMap = NewNumbering.Map;
+        LogicDocument.Numbering.AppendAbstractNums(NewNumbering.AbstractNum);
+        LogicDocument.Numbering.AppendNums(NewNumbering.Num);
+
+        this.CopyNumberingMap = NewNumbering.NumMap;
 
         for (var ContentIndex = 0; ContentIndex < ContentCount; ContentIndex++)
         {
@@ -393,7 +389,7 @@ CDocument.prototype.Get_MailMergedDocument = function(_nStartIndex, _nEndIndex)
         }
 
         // Добавляем дополнительный параграф с окончанием секции
-        var SectionPara = new Paragraph(this.DrawingDocument, this, 0, 0, 0, 0, 0);
+        var SectionPara = new Paragraph(this.DrawingDocument, this);
         var SectPr = new CSectionPr();
         SectPr.Copy(this.SectPr, true);
         SectPr.Set_Type(c_oAscSectionBreakType.NextPage);
@@ -407,7 +403,7 @@ CDocument.prototype.Get_MailMergedDocument = function(_nStartIndex, _nEndIndex)
     this.ForceCopySectPr  = false;
 
     // Добавляем дополнительный параграф в самом конце для последней секции документа
-    var SectPara = new Paragraph(this.DrawingDocument, this, 0, 0, 0, 0, 0);
+    var SectPara = new Paragraph(this.DrawingDocument, this);
     LogicDocument.Content[OverallIndex++] = SectPara;
     LogicDocument.SectPr.Copy(this.SectPr);
     LogicDocument.SectPr.Set_Type(c_oAscSectionBreakType.Continuous);

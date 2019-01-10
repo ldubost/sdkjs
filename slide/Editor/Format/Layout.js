@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2018
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -66,7 +66,7 @@ AscDFH.drawingsChangesMap[AscDFH.historyitem_SlideLayoutSetBg]                = 
         {
             if(Fill && Fill.fill && Fill.fill.type === Asc.c_oAscFill.FILL_TYPE_BLIP && typeof Fill.fill.RasterImageId === "string" && Fill.fill.RasterImageId.length > 0)
             {
-                AscCommon.CollaborativeEditing.Add_NewImage(AscCommon.getFullImageSrc2(Fill.fill.RasterImageId));
+                AscCommon.CollaborativeEditing.Add_NewImage(Fill.fill.RasterImageId);
             }
         }
     }
@@ -108,10 +108,14 @@ function SlideLayout()
 
     this.Master = null;
     this.maxId = 1000;
+
+    this.m_oContentChanges = new AscCommon.CContentChanges(); // список изменений(добавление/удаление элементов)
+    this.bounds = new AscFormat.CGraphicBounds(0.0, 0.0, 0.0, 0.0);
     this.recalcInfo =
     {
         recalculateBackground: true,
-        recalculateSpTree: true
+        recalculateSpTree: true,
+        recalculateBounds: true
     };
 
 
@@ -136,6 +140,50 @@ SlideLayout.prototype =
     Read_FromBinary2: function(r)
     {
         this.Id = r.GetString2();
+    },
+
+    createDuplicate: function(IdMap)
+    {
+        var oIdMap = IdMap || {};
+        var copy = new SlideLayout();
+        if(typeof this.cSld.name === "string" && this.cSld.name.length > 0)
+        {
+            copy.setCSldName(this.cSld.name);
+        }
+        if(this.cSld.Bg)
+        {
+            copy.changeBackground(this.cSld.Bg.createFullCopy());
+        }
+        for(var i = 0; i < this.cSld.spTree.length; ++i)
+        {
+            var _copy;
+            if(this.cSld.spTree[i].getObjectType() === AscDFH.historyitem_type_GroupShape){
+                _copy = this.cSld.spTree[i].copy(oIdMap);
+            }
+            else{
+                _copy = this.cSld.spTree[i].copy();
+            }
+            if(AscCommon.isRealObject(oIdMap)){
+                oIdMap[this.cSld.spTree[i].Id] = _copy.Id;
+            }
+            copy.shapeAdd(copy.cSld.spTree.length, _copy);
+            copy.cSld.spTree[copy.cSld.spTree.length - 1].setParent2(copy);
+        }
+
+        if(this.clrMap){
+            copy.setClMapOverride(this.clrMap.createDuplicate());
+        }
+        if(copy.matchingName !== this.matchingName){
+            copy.setMatchingName(this.matchingName);
+        }
+
+        if(copy.showMasterPhAnim !== this.showMasterPhAnim){
+            copy.setShowPhAnim(this.showMasterPhAnim);
+        }
+        if(this.type !== copy.type){
+            copy.setType(this.type);
+        }
+        return copy;
     },
 
 
@@ -294,11 +342,35 @@ SlideLayout.prototype =
         var _shapes = this.cSld.spTree;
         var _shape_index;
         var _shape_count = _shapes.length;
+        var bRecalculateBounds = this.recalcInfo.recalculateBounds;
+        if(bRecalculateBounds){
+            this.bounds.reset(this.Width + 100.0, this.Height + 100.0, -100.0, -100.0);
+        }
+        var bChecked = false;
         for(_shape_index = 0; _shape_index < _shape_count; ++_shape_index)
         {
-            if(!_shapes[_shape_index].isPlaceholder())
+            if(!_shapes[_shape_index].isPlaceholder()){
                 _shapes[_shape_index].recalculate();
+                if(bRecalculateBounds){
+                    this.bounds.checkByOther(_shapes[_shape_index].bounds);
+                }
+                bChecked = true;
+            }
         }
+        if(bRecalculateBounds){
+            if(bChecked){
+                this.bounds.checkWH();
+                if(this.bounds.w < 0 || this.bounds.h < 0){
+                    this.bounds.reset(0.0, 0.0, 0.0, 0.0);
+                }
+            }
+            else{
+                this.bounds.reset(0.0, 0.0, 0.0, 0.0);
+            }
+            this.recalcInfo.recalculateBounds = false;
+        }
+
+
     },
 
     recalculate2: function()
@@ -497,6 +569,22 @@ SlideLayout.prototype =
     Refresh_RecalcData: function()
     {},
 
+    Clear_ContentChanges: function () {
+    },
+
+    Add_ContentChanges: function (Changes) {
+    },
+
+    Refresh_ContentChanges: function () {
+    },
+
+    scale: function (kw, kh) {
+        for(var i = 0; i < this.cSld.spTree.length; ++i)
+        {
+            this.cSld.spTree[i].changeSize(kw, kh);
+        }
+    },
+
     Load_Comments : function(authors)
     {
         var _comments_count = this.writecomments.length;
@@ -689,6 +777,7 @@ function CLayoutThumbnailDrawer()
         for (var i = 0; i < _layout.cSld.spTree.length; i++)
         {
             var _sp_elem = _layout.cSld.spTree[i];
+            _sp_elem.recalculate();
             if(_sp_elem.isPlaceholder && _sp_elem.isPlaceholder())
             {
                 var _ph_type = _sp_elem.getPlaceholderType();
@@ -709,110 +798,119 @@ function CLayoutThumbnailDrawer()
                 if (!_usePH)
                     continue;
 
-                _ctx.globalAlpha = 1;
-                var _matrix = _sp_elem.transform;
-                var _x = 1;
-                var _y = 1;
-                var _r = Math.max(_sp_elem.extX - 1, 1);
-                var _b = Math.max(_sp_elem.extY - 1, 1);
 
-                var _isIntegerGrid = g.GetIntegerGrid();
-                if (!_isIntegerGrid)
-                    g.SetIntegerGrid(true);
-
-                if (_matrix)
+                _sp_elem.draw(g);
+                if(!_sp_elem.pen || !_sp_elem.pen.Fill)
                 {
-                    var _x1 = _sx * _matrix.TransformPointX(_x, _y);
-                    var _y1 = _sy * _matrix.TransformPointY(_x, _y);
+                    _ctx.globalAlpha = 1;
+                    var _matrix = _sp_elem.transform;
+                    var _x = 1;
+                    var _y = 1;
+                    var _r = Math.max(_sp_elem.extX - 1, 1);
+                    var _b = Math.max(_sp_elem.extY - 1, 1);
 
-                    var _x2 = _sx * _matrix.TransformPointX(_r, _y);
-                    var _y2 = _sy * _matrix.TransformPointY(_r, _y);
+                    var _isIntegerGrid = g.GetIntegerGrid();
+                    if (!_isIntegerGrid)
+                        g.SetIntegerGrid(true);
 
-                    var _x3 = _sx * _matrix.TransformPointX(_x, _b);
-                    var _y3 = _sy * _matrix.TransformPointY(_x, _b);
-
-                    var _x4 = _sx * _matrix.TransformPointX(_r, _b);
-                    var _y4 = _sy * _matrix.TransformPointY(_r, _b);
-
-                    if (Math.abs(_matrix.shx) < 0.001 && Math.abs(_matrix.shy) < 0.001)
+                    if (_matrix)
                     {
-                        _x = _x1;
-                        if (_x > _x2)
-                            _x = _x2;
-                        if (_x > _x3)
-                            _x = _x3;
+                        var _x1 = _sx * _matrix.TransformPointX(_x, _y);
+                        var _y1 = _sy * _matrix.TransformPointY(_x, _y);
 
-                        _r = _x1;
-                        if (_r < _x2)
-                            _r = _x2;
-                        if (_r < _x3)
-                            _r = _x3;
+                        var _x2 = _sx * _matrix.TransformPointX(_r, _y);
+                        var _y2 = _sy * _matrix.TransformPointY(_r, _y);
 
-                        _y = _y1;
-                        if (_y > _y2)
-                            _y = _y2;
-                        if (_y > _y3)
-                            _y = _y3;
+                        var _x3 = _sx * _matrix.TransformPointX(_x, _b);
+                        var _y3 = _sy * _matrix.TransformPointY(_x, _b);
 
-                        _b = _y1;
-                        if (_b < _y2)
-                            _b = _y2;
-                        if (_b < _y3)
-                            _b = _y3;
+                        var _x4 = _sx * _matrix.TransformPointX(_r, _b);
+                        var _y4 = _sy * _matrix.TransformPointY(_r, _b);
 
-                        _x >>= 0;
-                        _y >>= 0;
-                        _r >>= 0;
-                        _b >>= 0;
+                        if (Math.abs(_matrix.shx) < 0.001 && Math.abs(_matrix.shy) < 0.001)
+                        {
+                            _x = _x1;
+                            if (_x > _x2)
+                                _x = _x2;
+                            if (_x > _x3)
+                                _x = _x3;
+
+                            _r = _x1;
+                            if (_r < _x2)
+                                _r = _x2;
+                            if (_r < _x3)
+                                _r = _x3;
+
+                            _y = _y1;
+                            if (_y > _y2)
+                                _y = _y2;
+                            if (_y > _y3)
+                                _y = _y3;
+
+                            _b = _y1;
+                            if (_b < _y2)
+                                _b = _y2;
+                            if (_b < _y3)
+                                _b = _y3;
+
+                            _x >>= 0;
+                            _y >>= 0;
+                            _r >>= 0;
+                            _b >>= 0;
+
+                            _ctx.lineWidth = 1;
+
+                            _ctx.strokeStyle = "#FFFFFF";
+                            _ctx.beginPath();
+                            _ctx.strokeRect(_x + 0.5, _y + 0.5, _r - _x, _b - _y);
+                            _ctx.strokeStyle = "#000000";
+                            _ctx.beginPath();
+                            this.DrawingDocument.AutoShapesTrack.AddRectDashClever(_ctx, _x, _y, _r, _b, 2, 2, true);
+                            _ctx.beginPath();
+                        }
+                        else
+                        {
+                            _ctx.lineWidth = 1;
+
+                            _ctx.strokeStyle = "#000000";
+                            _ctx.beginPath();
+                            _ctx.moveTo(_x1, _y1);
+                            _ctx.lineTo(_x2, _y2);
+                            _ctx.lineTo(_x4, _y4);
+                            _ctx.lineTo(_x3, _y3);
+                            _ctx.closePath();
+                            _ctx.stroke();
+                            _ctx.strokeStyle = "#FFFFFF";
+                            _ctx.beginPath();
+                            this.DrawingDocument.AutoShapesTrack.AddRectDash(_ctx, _x1, _y1, _x2, _y2, _x3, _y3, _x4, _y4, 2, 2, true);
+                            _ctx.beginPath();
+                        }
+                    }
+                    else
+                    {
+                        _x = (_sx * _x) >> 0;
+                        _y = (_sy * _y) >> 0;
+                        _r = (_sx * _r) >> 0;
+                        _b = (_sy * _b) >> 0;
 
                         _ctx.lineWidth = 1;
 
-                        _ctx.strokeStyle = "#FFFFFF";
+                        _ctx.strokeStyle = "#000000";
                         _ctx.beginPath();
                         _ctx.strokeRect(_x + 0.5, _y + 0.5, _r - _x, _b - _y);
-                        _ctx.strokeStyle = "#000000";
+                        _ctx.strokeStyle = "#FFFFFF";
                         _ctx.beginPath();
                         this.DrawingDocument.AutoShapesTrack.AddRectDashClever(_ctx, _x, _y, _r, _b, 2, 2, true);
                         _ctx.beginPath();
                     }
-                    else
-                    {
-                        _ctx.lineWidth = 1;
 
-                        _ctx.strokeStyle = "#000000";
-                        _ctx.beginPath();
-                        _ctx.moveTo(_x1, _y1);
-                        _ctx.lineTo(_x2, _y2);
-                        _ctx.lineTo(_x4, _y4);
-                        _ctx.lineTo(_x3, _y3);
-                        _ctx.closePath();
-                        _ctx.stroke();
-                        _ctx.strokeStyle = "#FFFFFF";
-                        _ctx.beginPath();
-                        this.DrawingDocument.AutoShapesTrack.AddRectDash(_ctx, _x1, _y1, _x2, _y2, _x3, _y3, _x4, _y4, 2, 2, true);
-                        _ctx.beginPath();
-                    }
+                    if (!_isIntegerGrid)
+                        g.SetIntegerGrid(true);
                 }
-                else
-                {
-                    _x = (_sx * _x) >> 0;
-                    _y = (_sy * _y) >> 0;
-                    _r = (_sx * _r) >> 0;
-                    _b = (_sy * _b) >> 0;
-
-                    _ctx.lineWidth = 1;
-
-                    _ctx.strokeStyle = "#000000";
-                    _ctx.beginPath();
-                    _ctx.strokeRect(_x + 0.5, _y + 0.5, _r - _x, _b - _y);
-                    _ctx.strokeStyle = "#FFFFFF";
-                    _ctx.beginPath();
-                    this.DrawingDocument.AutoShapesTrack.AddRectDashClever(_ctx, _x, _y, _r, _b, 2, 2, true);
-                    _ctx.beginPath();
-                }
-
-                if (!_isIntegerGrid)
-                    g.SetIntegerGrid(true);
+            }
+            else 
+            {
+                _sp_elem.draw(g);
             }
         }
 

@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2018
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -395,7 +395,14 @@ CShapeDrawer.prototype =
                 }
                 case c_oAscFill.FILL_TYPE_SOLID:
                 {
-                    this.FillUniColor = _fill.color.RGBA;
+                    if(_fill.color)
+                    {
+                        this.FillUniColor = _fill.color.RGBA;
+                    }
+                    else
+                    {
+                        this.FillUniColor = new AscFormat.CUniColor().RGBA;
+                    }
                     break;
                 }
                 case c_oAscFill.FILL_TYPE_GRAD:
@@ -404,7 +411,16 @@ CShapeDrawer.prototype =
                     if (_c.length == 0)
                         this.FillUniColor = new AscFormat.CUniColor().RGBA;
                     else
-                        this.FillUniColor = _fill.colors[0].color.RGBA;
+                    {
+                        if(_fill.colors[0].color)
+                        {
+                            this.FillUniColor = _fill.colors[0].color.RGBA;
+                        }
+                        else
+                        {
+                            this.FillUniColor = new AscFormat.CUniColor().RGBA;
+                        }
+                    }
 
                     bIsCheckBounds = true;
 
@@ -442,7 +458,14 @@ CShapeDrawer.prototype =
                 }
                 case c_oAscFill.FILL_TYPE_SOLID:
                 {
-                    this.StrokeUniColor = _fill.color.RGBA;
+                    if(_fill.color)
+                    {
+                        this.StrokeUniColor = _fill.color.RGBA;
+                    }
+                    else
+                    {
+                        this.StrokeUniColor = new AscFormat.CUniColor().RGBA;
+                    }
                     break;
                 }
                 case c_oAscFill.FILL_TYPE_GRAD:
@@ -451,13 +474,29 @@ CShapeDrawer.prototype =
                     if (_c == 0)
                         this.StrokeUniColor = new AscFormat.CUniColor().RGBA;
                     else
-                        this.StrokeUniColor = _fill.colors[0].color.RGBA;
+                    {
+                        if(_fill.colors[0].color)
+                        {
+                            this.StrokeUniColor = _fill.colors[0].color.RGBA;
+                        }
+                        else
+                        {
+                            this.StrokeUniColor = new AscFormat.CUniColor().RGBA;
+                        }
+                    }
 
                     break;
                 }
                 case c_oAscFill.FILL_TYPE_PATT:
                 {
-                    this.StrokeUniColor = _fill.fgClr.RGBA;
+                    if(_fill.fgClr)
+                    {
+                        this.StrokeUniColor = _fill.fgClr.RGBA;
+                    }
+                    else
+                    {
+                        this.StrokeUniColor = new AscFormat.CUniColor().RGBA;
+                    }
                     break;
                 }
                 case c_oAscFill.FILL_TYPE_NOFILL:
@@ -933,7 +972,7 @@ CShapeDrawer.prototype =
                 else
                 {
                     //gradObj = _ctx.createLinearGradient(this.min_x, this.min_y, this.max_x, this.min_y);
-                    var points = this.getGradientPoints(this.min_x, this.min_y, this.max_x, this.max_y, 90 * 60000, false);
+                    var points = this.getGradientPoints(this.min_x, this.min_y, this.max_x, this.max_y, 0, false);
                     gradObj = _ctx.createLinearGradient(points.x0, points.y0, points.x1, points.y1);
                 }
 
@@ -1063,7 +1102,9 @@ CShapeDrawer.prototype =
             // трансформируем точки в окончательные.
             // и отправляем на отрисовку (с матрицей)
 
-            var trans = (this.Graphics.IsTrack === true) ? this.Graphics.Graphics.m_oFullTransform : this.Graphics.m_oFullTransform;
+			var _graphicsCtx = (this.Graphics.IsTrack === true) ? this.Graphics.Graphics : this.Graphics;
+
+			var trans = _graphicsCtx.m_oFullTransform;
             var trans1 = AscCommon.global_MatrixTransformer.Invert(trans);
 
             var x1 = trans.TransformPointX(0, 0);
@@ -1072,6 +1113,9 @@ CShapeDrawer.prototype =
             var y2 = trans.TransformPointY(1, 1);
             var dKoef = Math.sqrt(((x2-x1)*(x2-x1)+(y2-y1)*(y2-y1))/2);
             var _pen_w = (this.Graphics.IsTrack === true) ? (this.Graphics.Graphics.m_oContext.lineWidth * dKoef) : (this.Graphics.m_oContext.lineWidth * dKoef);
+			var _max_w = undefined;
+			if (_graphicsCtx.IsThumbnail === true)
+			    _max_w = 2;
 
             var _max_delta_eps2 = 0.001;
 
@@ -1096,20 +1140,11 @@ CShapeDrawer.prototype =
 
                 if (_max_delta > _max_delta_eps2)
                 {
-                    if (this.Graphics.IsTrack)
-                    {
-                        this.Graphics.Graphics.ArrayPoints = null;
-                        DrawLineEnd(_x1, _y1, _x2, _y2, this.Ln.headEnd.type, this.Ln.headEnd.GetWidth(_pen_w), this.Ln.headEnd.GetLen(_pen_w), this, trans1);
-                        this.Graphics.Graphics.ArrayPoints = arr;
+					_graphicsCtx.ArrayPoints = null;
+					DrawLineEnd(_x1, _y1, _x2, _y2, this.Ln.headEnd.type, this.Ln.headEnd.GetWidth(_pen_w, _max_w), this.Ln.headEnd.GetLen(_pen_w, _max_w), this, trans1);
+					_graphicsCtx.ArrayPoints = arr;
                     }
-                    else
-                    {
-                        this.Graphics.ArrayPoints = null;
-                        DrawLineEnd(_x1, _y1, _x2, _y2, this.Ln.headEnd.type, this.Ln.headEnd.GetWidth(_pen_w), this.Ln.headEnd.GetLen(_pen_w), this, trans1);
-                        this.Graphics.ArrayPoints = arr;
                     }
-                }
-            }
             if (this.Ln.tailEnd != null)
             {
                 var _1 = arr.length-1;
@@ -1133,20 +1168,11 @@ CShapeDrawer.prototype =
 
                 if (_max_delta > _max_delta_eps2)
                 {
-                    if (this.Graphics.IsTrack)
-                    {
-                        this.Graphics.Graphics.ArrayPoints = null;
-                        DrawLineEnd(_x1, _y1, _x2, _y2, this.Ln.tailEnd.type, this.Ln.tailEnd.GetWidth(_pen_w), this.Ln.tailEnd.GetLen(_pen_w), this, trans1);
-                        this.Graphics.Graphics.ArrayPoints = arr;
+					_graphicsCtx.ArrayPoints = null;
+					DrawLineEnd(_x1, _y1, _x2, _y2, this.Ln.tailEnd.type, this.Ln.tailEnd.GetWidth(_pen_w, _max_w), this.Ln.tailEnd.GetLen(_pen_w, _max_w), this, trans1);
+					_graphicsCtx.ArrayPoints = arr;
                     }
-                    else
-                    {
-                        this.Graphics.ArrayPoints = null;
-                        DrawLineEnd(_x1, _y1, _x2, _y2, this.Ln.tailEnd.type, this.Ln.tailEnd.GetWidth(_pen_w), this.Ln.tailEnd.GetLen(_pen_w), this, trans1);
-                        this.Graphics.ArrayPoints = arr;
                     }
-                }
-            }
             this.IsArrowsDrawing = false;
             this.CheckDash();
         }
@@ -1250,7 +1276,7 @@ CShapeDrawer.prototype =
                         var _url64 = "";
                         try
                         {
-                            _url64 = _pattern.Canvas.toDataURL("image/png");
+                            _url64 = _pattern.toDataURL();
                         }
                         catch (err)
                         {
@@ -1290,7 +1316,7 @@ CShapeDrawer.prototype =
                         }
                         else
                         {
-                            points = this.getGradientPoints(this.min_x, this.min_y, this.max_x, this.max_y, 90 * 60000, false);
+                            points = this.getGradientPoints(this.min_x, this.min_y, this.max_x, this.max_y, 0, false);
                         }
 
                         this.Graphics.put_BrushGradient(_fill, points, this.UniFill.transparent);

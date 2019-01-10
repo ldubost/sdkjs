@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2018
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -38,13 +38,6 @@
 var CShape = AscFormat.CShape;
 var CChartSpace = AscFormat.CChartSpace;
 
-    // ToDo перенести в один файл!
-function getChartTranslateManager()
-{
-    return window["Asc"]["editor"].chartTranslate;
-}
-
-
 CChartSpace.prototype.addToDrawingObjects =  CShape.prototype.addToDrawingObjects;
 CChartSpace.prototype.setDrawingObjects = CShape.prototype.setDrawingObjects;
 CChartSpace.prototype.setDrawingBase = CShape.prototype.setDrawingBase;
@@ -76,12 +69,7 @@ CChartSpace.prototype.getInvertTransform = CShape.prototype.getInvertTransform;
 CChartSpace.prototype.hit = CShape.prototype.hit;
 CChartSpace.prototype.hitInInnerArea = CShape.prototype.hitInInnerArea;
 CChartSpace.prototype.hitInPath = CShape.prototype.hitInPath;
-CChartSpace.prototype.getNumByCardDirection = CShape.prototype.getNumByCardDirection;
-CChartSpace.prototype.getCardDirectionByNum = CShape.prototype.getCardDirectionByNum;
-CChartSpace.prototype.getResizeCoefficients = CShape.prototype.getResizeCoefficients;
 CChartSpace.prototype.check_bounds = CShape.prototype.check_bounds;
-CChartSpace.prototype.getFullFlipH = CShape.prototype.getFullFlipH;
-CChartSpace.prototype.getFullFlipV = CShape.prototype.getFullFlipV;
 CChartSpace.prototype.setWorksheet = CShape.prototype.setWorksheet;
 CChartSpace.prototype.handleUpdateLn = function()
 {
@@ -97,7 +85,6 @@ CChartSpace.prototype.setRecalculateInfo = function()
         recalculateTransform: true,
         recalculateBounds:    true,
         recalculateChart:     true,
-        recalculateBaseColors: true,
         recalculateSeriesColors: true,
         recalculateMarkers: true,
         recalculateGridLines: true,
@@ -121,11 +108,15 @@ CChartSpace.prototype.setRecalculateInfo = function()
         recalculateTextPr : true,
         recalculateBBoxRange: true
     };
-    this.baseColors = [];
     this.chartObj = null;
     this.rectGeometry = AscFormat.ExecuteNoHistory(function(){return  AscFormat.CreateGeometry("rect");},  this, []);
     this.lockType = AscCommon.c_oAscLockTypes.kLockTypeNone;
 };
+
+CChartSpace.prototype.checkNeedRecalculate = function(){
+    return this.recalcInfo.recalculateChart === true;
+};
+
 CChartSpace.prototype.recalcTransform = function()
 {
     this.recalcInfo.recalculateTransform = true;
@@ -137,10 +128,6 @@ CChartSpace.prototype.recalcBounds = function()
 CChartSpace.prototype.recalcChart = function()
 {
     this.recalcInfo.recalculateChart = true;
-};
-CChartSpace.prototype.recalcBaseColors = function()
-{
-    this.recalcInfo.recalculateBaseColors = true;
 };
 CChartSpace.prototype.recalcSeriesColors = function()
 {
@@ -240,7 +227,6 @@ CChartSpace.prototype.canRotate = function()
 
 CChartSpace.prototype.createResizeTrack = CShape.prototype.createResizeTrack;
 CChartSpace.prototype.createMoveTrack = CShape.prototype.createMoveTrack;
-CChartSpace.prototype.getAspect = CShape.prototype.getAspect;
 CChartSpace.prototype.getRectBounds = CShape.prototype.getRectBounds;
 
 CChartSpace.prototype.recalculateBounds = function()
@@ -308,11 +294,6 @@ CChartSpace.prototype.recalculate = function()
             this.recalculateBBox();
             this.recalcInfo.recalculateBBox = false;
         }
-        if(this.recalcInfo.recalculateBaseColors)
-        {
-            this.recalculateBaseColors();
-            this.recalcInfo.recalculateBaseColors = false;
-        }
         if(this.recalcInfo.recalculateMarkers)
         {
             this.recalculateMarkers();
@@ -373,6 +354,14 @@ CChartSpace.prototype.recalculate = function()
             this.recalcInfo.recalculateUpDownBars = false;
         }
 
+        var b_recalc_labels = false;
+        if(this.recalcInfo.recalculateAxisLabels)
+        {
+            this.recalculateAxisLabels();
+            this.recalcInfo.recalculateAxisLabels = false;
+            b_recalc_labels = true;
+        }
+
 
         var b_recalc_legend = false;
         if(this.recalcInfo.recalculateLegend)
@@ -382,17 +371,15 @@ CChartSpace.prototype.recalculate = function()
             b_recalc_legend = true;
         }
 
-        var b_recalc_labels = false;
-        if(this.recalcInfo.recalculateAxisLabels)
-        {
-            this.recalculateAxisLabels();
-            this.recalcInfo.recalculateAxisLabels = false;
-            b_recalc_labels = true;
-        }
-
         if(this.recalcInfo.recalculateAxisVal)
         {
-            this.recalculateAxis();
+            if(AscFormat.CChartsDrawer.prototype._isSwitchCurrent3DChart(this)){
+                //old variant
+                this.recalculateAxis();
+            }
+            else{
+                this.recalculateAxes();
+            }
             this.recalcInfo.recalculateAxisVal = false;
             bCheckLabels = true;
         }
@@ -449,7 +436,21 @@ CChartSpace.prototype.recalculateLocalTransform = CShape.prototype.recalculateLo
 CChartSpace.prototype.Get_Theme = CShape.prototype.Get_Theme;
 CChartSpace.prototype.Get_ColorMap = CShape.prototype.Get_ColorMap;
 
-    //----------------------------------------------------------export----------------------------------------------------
-    window['AscFormat'] = window['AscFormat'] || {};
-    window['AscFormat'].getChartTranslateManager = getChartTranslateManager;
+    CChartSpace.prototype.Clear_ContentChanges = function(){
+        if(this.worksheet && this.worksheet.contentChanges){
+            this.worksheet.contentChanges.Clear();
+        }
+    };
+
+    CChartSpace.prototype.Add_ContentChanges = function(Changes){
+        if(this.worksheet && this.worksheet.contentChanges){
+            this.worksheet.contentChanges.Add( Changes );
+        }
+    };
+
+    CChartSpace.prototype.Refresh_ContentChanges = function(){
+        if(this.worksheet && this.worksheet.contentChanges){
+            this.worksheet.contentChanges.Refresh();
+        }
+    };
 })(window);

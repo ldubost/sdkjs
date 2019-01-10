@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2018
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -316,7 +316,9 @@ function FD_FontDictionary()
         ["OpenSymbol"],
         ["Arial", "Liberation Sans", "Helvetica", "Nimbus Sans L"],
         ["Times New Roman", "Liberation Serif"],
-        ["Courier New", "Liberation Mono"]
+        ["Courier New", "Liberation Mono"],
+        ["Segoe", "Segoe UI"],
+        ["Cambria", "Caladea"]
     ];
     this.FD_Ascii_Font_Like_Main = {
         "Cambria Math"  : 0,
@@ -336,7 +338,13 @@ function FD_FontDictionary()
         "Liberation Serif"  : 3,
 
         "Courier New"       : 4,
-        "Liberation Mono"   : 4
+        "Liberation Mono"   : 4,
+
+        "Segoe"             : 5,
+        "Segoe UI"          : 5,
+
+        "Cambria"           : 6,
+        "Caladea"           : 6
     };
 
     this.ChangeGlyphsMap = {
@@ -1165,7 +1173,11 @@ CFontSelect.prototype =
             return 0;
 
         if (-1 != sReqName.indexOf(this.m_wsFontName) || -1 != this.m_wsFontName.indexOf(sReqName))
-            return 1000;
+        {
+			if (g_fontApplication.g_fontDictionary.CheckLikeFonts(this.m_wsFontName, sReqName))
+				return 700;
+			return 1000;
+		}
 
         if (g_fontApplication.g_fontDictionary.CheckLikeFonts(this.m_wsFontName, sReqName))
             return 1000;
@@ -1364,10 +1376,53 @@ CFontSelect.prototype =
         if (_res1 == _res2)
             return 1500;
 
-        if (_res1.replace(/\s+/g, '') == _res2.replace(/\s+/g, ''))
+        if (_res1.replace(/[\s-]/g, '') == _res2.replace(/[\s-]/g, ''))
             return 3000;
 
         return 10000;
+    },
+
+    Serialize : function()
+    {
+        var _obj = {};
+
+		_obj["m_wsFontName"] = this.m_wsFontName;
+
+		_obj["m_wsFontPath"] = this.m_wsFontPath;
+		_obj["m_lIndex"] = this.m_lIndex;
+
+		_obj["m_bBold"] = this.m_bBold;
+		_obj["m_bItalic"] = this.m_bItalic;
+		_obj["m_bIsFixed"] = this.m_bIsFixed;
+
+		_obj["m_aPanose"] = new Array(10);
+		for (var i = 0; i < 10; i++)
+        {
+			_obj["m_aPanose"][i] = this.m_aPanose[i];
+        }
+
+		_obj["m_ulUnicodeRange1"] = this.m_ulUnicodeRange1;
+		_obj["m_ulUnicodeRange2"] = this.m_ulUnicodeRange2;
+		_obj["m_ulUnicodeRange3"] = this.m_ulUnicodeRange3;
+		_obj["m_ulUnicodeRange4"] = this.m_ulUnicodeRange4;
+
+		_obj["m_ulCodePageRange1"] = this.m_ulCodePageRange1;
+		_obj["m_ulCodePageRange2"] = this.m_ulCodePageRange2;
+
+		_obj["m_usWeigth"] = this.m_usWeigth;
+		_obj["m_usWidth"] = this.m_usWidth;
+
+		_obj["m_sFamilyClass"] = this.m_sFamilyClass;
+		_obj["m_eFontFormat"] = this.m_eFontFormat;
+
+		_obj["m_shAvgCharWidth"] = this.m_shAvgCharWidth;
+		_obj["m_shAscent"] = this.m_shAscent;
+		_obj["m_shDescent"] = this.m_shDescent;
+		_obj["m_shLineGap"] = this.m_shLineGap;
+		_obj["m_shXHeight"] = this.m_shXHeight;
+		_obj["m_shCapHeight"] = this.m_shCapHeight;
+
+		return _obj;
     }
 };
 
@@ -1431,6 +1486,15 @@ function memset(p, start, val, count)
 
 CFontSelectList.prototype =
 {
+    SerializeList : function()
+    {
+        var _list = [];
+        var _len = this.List.length;
+        for (var k = 0; k < _len; k++)
+            _list.push(this.List[k].Serialize());
+        return _list;
+    },
+
     Init : function()
     {
         if (true == this.IsInit)
