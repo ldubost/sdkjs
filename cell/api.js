@@ -126,7 +126,7 @@ var editor;
     this.formulasList = null;	// Список всех формул
 
     if (window.editor == undefined) {
-       windows.editor = this;
+       window.editor = this;
     }
 
     this._init();
