@@ -1,5 +1,5 @@
 GRUNT = grunt
-GRUNT_FLAGS = --no-color -v --noclosure --desktop=true
+GRUNT_FLAGS = --no-color -v --noclosure --desktop=false
 
 OUTPUT_DIR = deploy
 OUTPUT = $(OUTPUT_DIR)
