@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2019
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -12,8 +12,8 @@
  * warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR  PURPOSE. For
  * details, see the GNU AGPL at: http://www.gnu.org/licenses/agpl-3.0.html
  *
- * You can contact Ascensio System SIA at Lubanas st. 125a-25, Riga, Latvia,
- * EU, LV-1021.
+ * You can contact Ascensio System SIA at 20A-12 Ernesta Birznieka-Upisha
+ * street, Riga, Latvia, EU, LV-1050.
  *
  * The  interactive user interfaces in modified source and object code versions
  * of the Program must display Appropriate Legal Notices, as required under
@@ -241,6 +241,7 @@
 		this.m_oFactoryClass[AscDFH.historyitem_type_SerAx]                  = AscFormat.CSerAx;
 		this.m_oFactoryClass[AscDFH.historyitem_type_Title]                  = AscFormat.CTitle;
 		this.m_oFactoryClass[AscDFH.historyitem_type_OleObject]              = AscFormat.COleObject;
+        this.m_oFactoryClass[AscDFH.historyitem_type_Cnx]                    = AscFormat.CConnectionShape;
 		this.m_oFactoryClass[AscDFH.historyitem_type_DrawingContent]         = AscFormat.CDrawingDocContent;
 		this.m_oFactoryClass[AscDFH.historyitem_type_Math]                   = AscCommonWord.ParaMath;
 		this.m_oFactoryClass[AscDFH.historyitem_type_MathContent]            = AscCommonWord.CMathContent;
@@ -260,14 +261,27 @@
 		this.m_oFactoryClass[AscDFH.historyitem_type_rad]                    = AscCommonWord.CRadical;
 		this.m_oFactoryClass[AscDFH.historyitem_type_deg_subsup]             = AscCommonWord.CDegreeSubSup;
 		this.m_oFactoryClass[AscDFH.historyitem_type_deg]                    = AscCommonWord.CDegree;
+		this.m_oFactoryClass[AscDFH.historyitem_type_BlockLevelSdt]          = AscCommonWord.CBlockLevelSdt;
+		this.m_oFactoryClass[AscDFH.historyitem_type_InlineLevelSdt]         = AscCommonWord.CInlineLevelSdt;
+		this.m_oFactoryClass[AscDFH.historyitem_type_ParaBookmark]           = AscCommonWord.CParagraphBookmark;
+		this.m_oFactoryClass[AscDFH.historyitem_type_Num]                    = AscCommonWord.CNum;
+		this.m_oFactoryClass[AscDFH.historyitem_type_PresentationField]      = AscCommonWord.CPresentationField;
+		this.m_oFactoryClass[AscDFH.historyitem_type_RelSizeAnchor]      	 = AscFormat.CRelSizeAnchor;
+		this.m_oFactoryClass[AscDFH.historyitem_type_AbsSizeAnchor]      	 = AscFormat.CAbsSizeAnchor;
+		this.m_oFactoryClass[AscDFH.historyitem_type_ParaRevisionMove]       = AscCommon.CParaRevisionMove;
+		this.m_oFactoryClass[AscDFH.historyitem_type_RunRevisionMove]        = AscCommon.CRunRevisionMove;
+
 
 		if (window['AscCommonSlide'])
 		{
-			this.m_oFactoryClass[AscDFH.historyitem_type_Slide]         = AscCommonSlide.Slide;
-			this.m_oFactoryClass[AscDFH.historyitem_type_SlideLayout]   = AscCommonSlide.SlideLayout;
-			this.m_oFactoryClass[AscDFH.historyitem_type_SlideMaster]   = AscCommonSlide.MasterSlide;
-			this.m_oFactoryClass[AscDFH.historyitem_type_SlideComments] = AscCommonSlide.SlideComments;
-			this.m_oFactoryClass[AscDFH.historyitem_type_PropLocker]    = AscCommonSlide.PropLocker;
+			this.m_oFactoryClass[AscDFH.historyitem_type_Slide]               = AscCommonSlide.Slide;
+			this.m_oFactoryClass[AscDFH.historyitem_type_SlideLayout]         = AscCommonSlide.SlideLayout;
+			this.m_oFactoryClass[AscDFH.historyitem_type_SlideMaster]         = AscCommonSlide.MasterSlide;
+			this.m_oFactoryClass[AscDFH.historyitem_type_SlideComments]       = AscCommonSlide.SlideComments;
+			this.m_oFactoryClass[AscDFH.historyitem_type_PropLocker]          = AscCommonSlide.PropLocker;
+			this.m_oFactoryClass[AscDFH.historyitem_type_NotesMaster]         = AscCommonSlide.CNotesMaster;
+			this.m_oFactoryClass[AscDFH.historyitem_type_Notes]               = AscCommonSlide.CNotes;
+			this.m_oFactoryClass[AscDFH.historyitem_type_PresentationSection] = AscCommonSlide.CPrSection;
 		}
 
 		this.m_oFactoryClass[AscDFH.historyitem_type_Theme]                  = AscFormat.CTheme;
@@ -276,7 +290,10 @@
 		if (window['AscCommonExcel'])
 		{
 			this.m_oFactoryClass[AscDFH.historyitem_type_Sparkline] = AscCommonExcel.sparklineGroup;
+			this.m_oFactoryClass[AscDFH.historyitem_type_PivotTableDefinition] = Asc.CT_pivotTableDefinition;
 		}
+
+		this.m_oFactoryClass[AscDFH.historyitem_type_DocumentMacros] = AscCommon.CDocumentMacros;
 	};
 	CTableId.prototype.GetClassFromFactory = function(nType)
 	{
@@ -297,4 +314,5 @@
 	};
 
 	window["AscCommon"].g_oTableId = new CTableId();
+	window["AscCommon"].CTableId = CTableId;
 })(window);

@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2019
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -12,8 +12,8 @@
  * warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR  PURPOSE. For
  * details, see the GNU AGPL at: http://www.gnu.org/licenses/agpl-3.0.html
  *
- * You can contact Ascensio System SIA at Lubanas st. 125a-25, Riga, Latvia,
- * EU, LV-1021.
+ * You can contact Ascensio System SIA at 20A-12 Ernesta Birznieka-Upisha
+ * street, Riga, Latvia, EU, LV-1050.
  *
  * The  interactive user interfaces in modified source and object code versions
  * of the Program must display Appropriate Legal Notices, as required under
@@ -51,7 +51,6 @@
 	var c_oAscCellEditorState = asc.c_oAscCellEditorState;
 	var Fragment = AscCommonExcel.Fragment;
 
-	var asc_calcnpt = asc.calcNearestPt;
 	var asc_getcvt = asc.getCvtRatio;
 	var asc_round = asc.round;
 	var asc_search = asc.search;
@@ -97,11 +96,11 @@
 	 * @param {Element} elem
 	 * @param {Element} input
 	 * @param {Array} fmgrGraphics
-	 * @param {FontProperties} oFont
+	 * @param {AscCommonExcel.Font} oFont
 	 * @param {HandlersList} handlers
-	 * @param {Object} settings
+	 * @param {Number} padding
 	 */
-	function CellEditor( elem, input, fmgrGraphics, oFont, handlers, settings ) {
+	function CellEditor( elem, input, fmgrGraphics, oFont, handlers, padding, settings ) {
 		this.element = elem;
 		this.input = input;
 		this.handlers = new asc_HL( handlers );
@@ -143,6 +142,7 @@
 		this.enableKeyEvents = true;
 		this.isTopLineActive = false;
 		this.skipTLUpdate = true;
+		this.loadFonts = false;
 		this.isOpened = false;
 		this.callTopLineMouseup = false;
 		this.lastKeyCode = undefined;
@@ -157,29 +157,26 @@
 		this.sAutoComplete = null;
 
 		/** @type RegExp */
-		this.reReplaceNL = /\r?\n|\r/g;
-		/** @type RegExp */
-		this.reReplaceTab = /[\t\v\f]/g;
-		// RegExp с поддержкой рэнджей вида $E1:$F2
-		this.reRangeStr = "[^a-z0-9_$!](\\$?[a-z]+\\$?\\d+:\\$?[a-z]+\\$?\\d+|\\$?[a-z]+:\\$?[a-z]+|\\$?\\d+:\\$?\\d+|\\$?[a-z]+\\$?\\d+)(?=[^a-z0-9_]|$)";
 		this.rangeChars = ["=", "-", "+", "*", "/", "(", "{", ",", "<", ">", "^", "!", "&", ":", ";", " "];
-		this.reNotFormula = new XRegExp( "[^\\p{L}0-9_]", "i" );
-		this.reFormula = new XRegExp( "^([\\p{L}][\\p{L}0-9_]*)", "i" );
+		this.reNotFormula = new XRegExp( "[^\\p{L}\\\\_\\]\\[\\p{N}\\.]", "i" );
+		this.reFormula = new XRegExp( "^([\\p{L}\\\\_\\]\\[][\\p{L}\\\\_\\]\\[\\p{N}\\.]*)", "i" );
 
 		this.defaults = {
-			padding: -1, selectColor: new AscCommon.CColor( 190, 190, 255, 0.5 ),
-
-			canvasZIndex: 500, blinkInterval: 500, cursorShape: "text"
+			padding: padding,
+			selectColor: new AscCommon.CColor(190, 190, 255, 0.5),
+			canvasZIndex: 500,
+			blinkInterval: 500,
+			cursorShape: "text"
 		};
 
-		this.dontUpdateText = false;
-
 		this._formula = null;
+		this._parseResult = null;
 
 		// Обработчик кликов
 		this.clickCounter = new AscFormat.ClickCounter();
 
-		this._init( settings );
+		//TODO сейчас setting нужен только для того, чтобы передать в init флаг menuEditor. пересмотреть!
+		this._init(settings);
 
 		return this;
 	}
@@ -187,38 +184,41 @@
 	CellEditor.prototype._init = function (settings) {
 		var t = this;
 		var z = t.defaults.canvasZIndex;
-		this.defaults.padding = settings.padding;
 		this.sAutoComplete = null;
 
 		if (null != this.element) {
+			var ceCanvasOuterId = settings && settings.menuEditor ? "ce-canvas-outer-menu" : "ce-canvas-outer";
+			var ceCanvasId = settings && settings.menuEditor ? "ce-canvas-menu" : "ce-canvas";
+			var ceCanvasOverlay = settings && settings.menuEditor ? "ce-canvas-overlay-menu" : "ce-canvas-overlay";
+			var ceCursor = settings && settings.menuEditor ? "ce-cursor-menu" : "ce-cursor";
+
 			t.canvasOuter = document.createElement('div');
-			t.canvasOuter.id = "ce-canvas-outer";
+			t.canvasOuter.id = ceCanvasOuterId;
 			t.canvasOuter.style.position = "absolute";
 			t.canvasOuter.style.display = "none";
 			t.canvasOuter.style.zIndex = z;
-			var innerHTML = '<canvas id="ce-canvas" style="z-index: ' + (z + 1) + '"></canvas>';
-			innerHTML += '<canvas id="ce-canvas-overlay" style="z-index: ' + (z + 2) + '; cursor: ' + t.defaults.cursorShape +
+			var innerHTML = '<canvas id='+ ceCanvasId +' style="z-index: ' + (z + 1) + '"></canvas>';
+			innerHTML += '<canvas id='+ ceCanvasOverlay +' style="z-index: ' + (z + 2) + '; cursor: ' + t.defaults.cursorShape +
 				'"></canvas>';
-			innerHTML += '<div id="ce-cursor" style="display: none; z-index: ' + (z + 3) + '"></div>';
+			innerHTML += '<div id='+ ceCursor +' style="display: none; z-index: ' + (z + 3) + '"></div>';
 			t.canvasOuter.innerHTML = innerHTML;
 			this.element.appendChild(t.canvasOuter);
 
 			t.canvasOuterStyle = t.canvasOuter.style;
-			t.canvas = document.getElementById("ce-canvas");
-			t.canvasOverlay = document.getElementById("ce-canvas-overlay");
-			t.cursor = document.getElementById("ce-cursor");
+			t.canvas = document.getElementById(ceCanvasId);
+			t.canvasOverlay = document.getElementById(ceCanvasOverlay);
+			t.cursor = document.getElementById(ceCursor);
 			t.cursorStyle = t.cursor.style;
 		}
 
 		// create text render
 		t.drawingCtx = new asc.DrawingContext({
-			canvas: t.canvas, units: 1/*pt*/, fmgrGraphics: this.fmgrGraphics, font: this.m_oFont
+			canvas: t.canvas, units: 0/*px*/, fmgrGraphics: this.fmgrGraphics, font: this.m_oFont
 		});
 		t.overlayCtx = new asc.DrawingContext({
-			canvas: t.canvasOverlay, units: 1/*pt*/, fmgrGraphics: this.fmgrGraphics, font: this.m_oFont
+			canvas: t.canvasOverlay, units: 0/*px*/, fmgrGraphics: this.fmgrGraphics, font: this.m_oFont
 		});
 		t.textRender = new AscCommonExcel.CellTextRender(t.drawingCtx);
-		t.textRender.setDefaultFont(settings.font.clone());
 
 		// bind event handlers
 		if (t.canvasOuter && t.canvasOuter.addEventListener) {
@@ -275,7 +275,6 @@
 	 *   flags      - text flags (wrapText, textAlign)
 	 *   font
 	 *   background
-	 *   textColor
 	 *   saveValueCallback
 	 */
 	CellEditor.prototype.open = function ( options ) {
@@ -287,7 +286,7 @@
 			window.addEventListener( "mousemove", this.fKeyMouseMove, false );
 		}
 		this._setOptions( options );
-		this.isTopLineActive = true === this.input.isFocused;
+		this._updateTopLineActive(true === this.input.isFocused);
 
 		this._updateFormulaEditMod( /*bIsOpen*/true );
 		this._draw();
@@ -320,15 +319,56 @@
 		this._updateUndoRedoChanged();
 	};
 
-	CellEditor.prototype.close = function (saveValue) {
-		var opt = this.options, ret;
+	CellEditor.prototype.close = function (saveValue, bApplyByArray, callback) {
+		var opt = this.options;
+		var t = this;
 
-		if (saveValue && "function" === typeof opt.saveValueCallback) {
-			var isFormula = this.isFormula();
-			// Для формул делаем пересчет всегда. Для остального - только если мы изменили что-то. http://bugzilla.onlyoffice.com/show_bug.cgi?id=31889
-			// Сюда же добавляется и ячейка с wrap-текстом, у которой выключен wrap.
-			// Иначе F2 по ячейке с '\n', у которой выключен wrap, не станет снова wrap. http://bugzilla.onlyoffice.com/show_bug.cgi?id=17590
-			if (0 < this.undoList.length || isFormula || this.textFlags.wrapOnlyNL) {
+		var localSaveValueCallback = function(isSuccess) {
+			t.textFlags.bApplyByArray = null;
+			if(!isSuccess) {
+				t.handlers.trigger('setStrictClose', true);
+				if(callback) {
+					callback(false);
+				}
+				return false;
+			}
+
+			t.isOpened = false;
+
+			t._formula = null;
+			t._parseResult = null;
+
+			if (!window['IS_NATIVE_EDITOR']) {
+				if (window.removeEventListener) {
+					window.removeEventListener("mouseup", t.fKeyMouseUp, false);
+					window.removeEventListener("mousemove", t.fKeyMouseMove, false);
+				}
+				t.input.blur();
+				t.isTopLineActive = false;
+				t.input.isFocused = false;
+				t._hideCursor();
+				// hide
+				t._hideCanvas();
+			}
+
+			// delete autoComplete
+			t.objAutoComplete = {};
+
+			// Сброс состояния редактора
+			t.m_nEditorState = c_oAscCellEditorState.editEnd;
+			t.handlers.trigger("closed");
+
+			if(callback) {
+				callback(true);
+			} else {
+				return true;
+			}
+		};
+
+		if (saveValue) {
+			// Пересчет делаем всегда для не пустой ячейки или если были изменения. http://bugzilla.onlyoffice.com/show_bug.cgi?id=34864
+			if (0 < this.undoList.length || 0 < AscCommonExcel.getFragmentsLength(this.options.fragments)) {
+				var isFormula = this.isFormula();
 				// Делаем замену текста на автодополнение, если есть select и текст полностью совпал.
 				if (this.sAutoComplete && !isFormula) {
 					this.selectionBegin = this.textRender.getBeginOfText();
@@ -338,18 +378,15 @@
 					this.noUpdateMode = false;
 				}
 
-				ret = opt.saveValueCallback(opt.fragments, this.textFlags, /*skip NL check*/ret);
-				if (!ret) {
-					// При ошибке нужно выставить флаг, чтобы по стрелкам не закрывался редактор
-					this.handlers.trigger('setStrictClose', true);
-					return false;
-				}
+				this.textFlags.bApplyByArray = bApplyByArray;
+				return opt.saveValueCallback(opt.fragments, this.textFlags, localSaveValueCallback);
 			}
 		}
 
 		this.isOpened = false;
 
 		this._formula = null;
+		this._parseResult = null;
 
 		if (!window['IS_NATIVE_EDITOR']) {
 			if (window.removeEventListener) {
@@ -357,7 +394,7 @@
 				window.removeEventListener("mousemove", this.fKeyMouseMove, false);
 			}
 			this.input.blur();
-			this.isTopLineActive = false;
+			this._updateTopLineActive(false);
 			this.input.isFocused = false;
 			this._hideCursor();
 			// hide
@@ -370,10 +407,17 @@
 		// Сброс состояния редактора
 		this.m_nEditorState = c_oAscCellEditorState.editEnd;
 		this.handlers.trigger("closed");
+		if(callback) {
+			callback(true);
+		}
+
 		return true;
 	};
 
 	CellEditor.prototype.setTextStyle = function (prop, val) {
+		if (this.isFormula()) {
+			return;
+		}
 		var t = this, opt = t.options, begin, end, i, first, last;
 
 		if (t.selectionBegin !== t.selectionEnd) {
@@ -420,8 +464,8 @@
 					t.newTextFormat = opt.fragments[first.index].format.clone();
 				}
 				t._setFormatProperty(t.newTextFormat, prop, val);
+				t._update();
 			}
-
 		}
 	};
 
@@ -447,9 +491,9 @@
 		return this.drawingCtx.getZoom();
 	};
 
-	CellEditor.prototype.changeZoom = function ( factor ) {
-		this.drawingCtx.changeZoom( factor );
-		this.overlayCtx.changeZoom( factor );
+	CellEditor.prototype.changeZoom = function (factor) {
+		this.drawingCtx.changeZoom(factor);
+		this.overlayCtx.changeZoom(factor);
 	};
 
 	CellEditor.prototype.canEnterCellRange = function () {
@@ -587,61 +631,21 @@
 		text = text.replace(/\r/g, "");
 		text = text.replace(/^\n+|\n+$/g, "");
 
-		var length = text.length;
-		if (!(length > 0)) {
-			return;
-		}
-		if (!this._checkMaxCellLength(length)) {
+		if (0 === text.length) {
 			return;
 		}
 
-		var wrap = -1 !== text.indexOf(kNewLine);
-		if (this.selectionBegin !== this.selectionEnd) {
-			this._removeChars();
-		} else {
-			this.undoList.push({fn: "fake", args: []});
-		}//фейковый undo(потому что у нас делает undo по 2 действия)
-
-		// save info to undo/redo
-		this.undoList.push({fn: this._removeChars, args: [this.cursorPos, length]});
-		this.redoList = [];
-
-		var opt = this.options;
-		var nInsertPos = this.cursorPos;
-		var fr;
-		fr = this._findFragmentToInsertInto(nInsertPos - (nInsertPos > 0 ? 1 : 0));
-		if (fr) {
-			var oCurFragment = opt.fragments[fr.index];
-			if (fr.end <= nInsertPos) {
-				oCurFragment.text += text;
-			} else {
-				var sNewText = oCurFragment.text.substring(0, nInsertPos);
-				sNewText += text;
-				sNewText += oCurFragment.text.substring(nInsertPos);
-				oCurFragment.text = sNewText;
-			}
-			this.cursorPos = nInsertPos + length;
-			this._update();
-		}
-
-		if (wrap) {
-			this._wrapText();
-			this._update();
-		}
+		this._addChars(text);
 	};
 
 	CellEditor.prototype.paste = function (fragments, cursorPos) {
 		if (!(fragments.length > 0)) {
 			return;
 		}
-		var length = this._getFragmentsLength(fragments);
+		var length = AscCommonExcel.getFragmentsLength(fragments);
 		if (!this._checkMaxCellLength(length)) {
 			return;
 		}
-
-		var wrap = fragments.some(function (val) {
-			return -1 !== val.text.indexOf(kNewLine);
-		});
 
 		this._cleanFragments(fragments);
 
@@ -654,11 +658,6 @@
 		this.redoList = [];
 
 		this._addFragments(fragments, this.cursorPos);
-
-		if (wrap) {
-			this._wrapText();
-			this._update();
-		}
 
 		// Сделано только для вставки формулы в ячейку (когда не открыт редактор)
 		if (undefined !== cursorPos) {
@@ -683,8 +682,8 @@
 	CellEditor.prototype.formulaIsOperator = function () {
 		var elem;
 		return this.isFormula() &&
-			(null !== (elem = this._formula.getElementByPos(this.cursorPos - 1)) && elem.type === cElementType.operator ||
-			null === elem || this._formula.operand_expected);
+			(null !== (elem = this._parseResult.getElementByPos(this.cursorPos - 1)) && elem.type === cElementType.operator ||
+			null === elem || this._parseResult.operand_expected);
 	};
 
 	CellEditor.prototype.insertFormula = function ( functionName, isDefName ) {
@@ -743,6 +742,7 @@
 		if ( this.textFlags.textAlign === AscCommon.align_Justify || this.isFormula() ) {
 			this.textFlags.textAlign = AscCommon.align_Left;
 		}
+		this.textFlags.shrinkToFit = false;
 
 		this._cleanFragments( opt.fragments );
 		this.textRender.setString( opt.fragments, this.textFlags );
@@ -777,17 +777,16 @@
 	};
 
 	CellEditor.prototype._parseRangeStr = function (s) {
-		//var range = AscCommonExcel.g_oRangeCache.getActiveRange(s);
 		var range = AscCommonExcel.g_oRangeCache.getAscRange(s);
 		return range ? range.clone() : null;
 	};
 
 	CellEditor.prototype._parseFormulaRanges = function () {
-		var s = this._getFragmentsText(
+		var s = AscCommonExcel.getFragmentsText(
 			this.options.fragments), t = this, ret = false, range, wsOPEN = this.handlers.trigger(
 			"getCellFormulaEnterWSOpen"), ws = wsOPEN ? wsOPEN.model : this.handlers.trigger("getActiveWS");
 
-		if (s.length < 1 || s.charAt(0) !== "=" || this.options.cellNumFormat == Asc.c_oAscNumFormatType.Text) {
+		if (Asc.c_oAscNumFormatType.Text === this.options.cellNumFormat || s.length < 1 || s.charAt(0) !== "=") {
 			return ret;
 		}
 
@@ -811,17 +810,19 @@
 //             var __e__ = new Date().getTime();
 //             console.log("e-s "+ (__e__ - __s__));
 
-		var bbox = AscCommonExcel.g_oRangeCache.getActiveRange(this.options.cellName);
-		this._formula = new AscCommonExcel.parserFormula(s.substr(1), null, ws);
-		this._formula.parse(true, true);
+		var bbox = this.options.bbox;
+		this._parseResult = new AscCommonExcel.ParseResult([], []);
+		var cellWithFormula = new window['AscCommonExcel'].CCellWithFormula(ws, bbox.r1, bbox.c1);
+		this._formula = new AscCommonExcel.parserFormula(s.substr(1), cellWithFormula, ws);
+		this._formula.parse(true, true, this._parseResult, true);
 
-		var r, offset, _e, _s, wsName = null, refStr, isName = false, _sColorPos;
+		var r, offset, _e, _s, wsName = null, refStr, isName = false, _sColorPos, localStrObj;
 
-		if (this._formula.RefPos && this._formula.RefPos.length > 0) {
-			for (var index = 0; index < this._formula.RefPos.length; index++) {
+		if (this._parseResult.refPos && this._parseResult.refPos.length > 0) {
+			for (var index = 0; index < this._parseResult.refPos.length; index++) {
 				wsName = null;
 				isName = false;
-				r = this._formula.RefPos[index];
+				r = this._parseResult.refPos[index];
 
 				offset = r.end;
 				_e = r.end;
@@ -834,15 +835,16 @@
 							wsName = wsOPEN.model.getName();
 						}
 						ret = true;
-						refStr = r.oper.value;
+						refStr = r.oper.toLocaleString();
 						break;
 					}
 					case cElementType.cell3D        : {
+						localStrObj = r.oper.toLocaleStringObj();
+						refStr = localStrObj[1];
 						ret = true;
-						wsName = r.oper.ws.getName();
-						_s = _e - r.oper.value.length;
-						_sColorPos = _e - r.oper.toString().length;
-						refStr = r.oper.value;
+						wsName = r.oper.getWS().getName();
+						_s = _e - localStrObj[1].length;
+						_sColorPos = _e - localStrObj[0].length;
 						break;
 					}
 					case cElementType.cellsRange    : {
@@ -850,7 +852,7 @@
 							wsName = wsOPEN.model.getName();
 						}
 						ret = true;
-						refStr = r.oper.value;
+						refStr = r.oper.toLocaleString();
 						break;
 					}
 					case cElementType.cellsRange3D  : {
@@ -858,14 +860,16 @@
 							continue;
 						}
 						ret = true;
-						refStr = r.oper.value;
+						localStrObj = r.oper.toLocaleStringObj();
+						refStr = localStrObj[1];
 						wsName = r.oper.getWS().getName();
-						_s = _e - r.oper.value.length;
-						_sColorPos = _e - r.oper.toString().length;
+						_s = _e - localStrObj[1].length;
+						_sColorPos = _e - localStrObj[0].length;
 						break;
 					}
 					case cElementType.table          :
-					case cElementType.name          : {
+					case cElementType.name          :
+					case cElementType.name3D : {
 						var nameRef = r.oper.toRef(bbox);
 						if (nameRef instanceof AscCommonExcel.cError) {
 							continue;
@@ -876,13 +880,34 @@
 								if (!nameRef.isSingleSheet()) {
 									continue;
 								}
+								
+								ret = true;
+								localStrObj = nameRef.toLocaleStringObj();
+								refStr = localStrObj[1];
+								wsName = nameRef.getWS().getName();
+
+								localStrObj = r.oper.toLocaleStringObj();
+								_s = _e - localStrObj[1].length;
+								_sColorPos = _e - localStrObj[0].length;
+								break;
 							}
-							case cElementType.cellsRange          :
+							case cElementType.cellsRange          :{
+								ret = true;
+								localStrObj = r.oper.toLocaleStringObj();
+								refStr = localStrObj[1];
+								wsName = nameRef.getWS().getName();
+								_s = _e - localStrObj[1].length;
+								break;
+							}
 							case cElementType.cell3D        : {
 								ret = true;
-								refStr = nameRef.value;
+								localStrObj = nameRef.toLocaleStringObj();
+								refStr = localStrObj[1];
 								wsName = nameRef.getWS().getName();
-								_s = _e - r.oper.value.length;
+
+								localStrObj = r.oper.toLocaleStringObj();
+								_s = _e - localStrObj[1].length;
+								_sColorPos = _e - localStrObj[0].length;
 								break;
 							}
 						}
@@ -934,16 +959,18 @@
 
 		/*не нашли диапазонов под курсором, парсим формулу*/
 		var r, offset, _e, _s, wsName = null, ret = false, refStr, isName = false, _sColorPos, wsOPEN = this.handlers.trigger(
-			"getCellFormulaEnterWSOpen"), ws = wsOPEN ? wsOPEN.model : this.handlers.trigger("getActiveWS");
+			"getCellFormulaEnterWSOpen"), ws = wsOPEN ? wsOPEN.model : this.handlers.trigger("getActiveWS"), localStrObj;
 
-		var bbox = AscCommonExcel.g_oRangeCache.getActiveRange(this.options.cellName);
-		this._formula = new AscCommonExcel.parserFormula(s.substr(1), null, ws);
-		this._formula.parse(true, true);
+		var bbox = this.options.bbox;
+		this._parseResult = new AscCommonExcel.ParseResult([], []);
+		var cellWithFormula = new window['AscCommonExcel'].CCellWithFormula(ws, bbox.r1, bbox.c1);
+		this._formula = new AscCommonExcel.parserFormula(s.substr(1), cellWithFormula, ws);
+		this._formula.parse(true, true, this._parseResult, bbox);
 
-		if (this._formula.RefPos && this._formula.RefPos.length > 0) {
-			for (var index = 0; index < this._formula.RefPos.length; index++) {
+		if (this._parseResult.refPos && this._parseResult.refPos.length > 0) {
+			for (var index = 0; index < this._parseResult.refPos.length; index++) {
 				wsName = null;
-				r = this._formula.RefPos[index];
+				r = this._parseResult.refPos[index];
 
 				offset = r.end;
 				_e = r.end;
@@ -954,23 +981,24 @@
 						if (wsOPEN) {
 							wsName = wsOPEN.model.getName();
 						}
-						refStr = r.oper.value;
+						refStr = r.oper.toLocaleString();
 						ret = true;
 						break;
 					}
 					case cElementType.cell3D        : {
-						refStr = r.oper.value;
+						localStrObj = r.oper.toLocaleStringObj();
+						refStr = localStrObj[1];
 						ret = true;
-						wsName = r.oper.ws.getName();
-						_s = _e - r.oper.value.length + 1;
-						_sColorPos = _e - r.oper.toString().length;
+						wsName = r.oper.getWS().getName();
+						_s = _e - localStrObj[1].length + 1;
+						_sColorPos = _e - localStrObj[0].length;
 						break;
 					}
 					case cElementType.cellsRange    : {
 						if (wsOPEN) {
 							wsName = wsOPEN.model.getName();
 						}
-						refStr = r.oper.value;
+						refStr = r.oper.toLocaleString();
 						ret = true;
 						break;
 					}
@@ -979,13 +1007,15 @@
 							continue;
 						}
 						ret = true;
-						refStr = r.oper.value;
+						localStrObj = r.oper.toLocaleStringObj();
+						refStr = localStrObj[1];
 						wsName = r.oper.getWS().getName();
-						_s = _e - r.oper.value.length + 1;
+						_s = _e - localStrObj[1].length + 1;
 						break;
 					}
 					case cElementType.table          :
-					case cElementType.name          : {
+					case cElementType.name          :
+					case cElementType.name3D : {
 						var nameRef = r.oper.toRef(bbox);
 						if (nameRef instanceof AscCommonExcel.cError) {
 							continue;
@@ -1000,9 +1030,10 @@
 							case cElementType.cellsRange          :
 							case cElementType.cell3D        : {
 								ret = true;
-								refStr = nameRef.value;
+								localStrObj = nameRef.toLocaleStringObj();
+								refStr = localStrObj[1];
 								wsName = nameRef.getWS().getName();
-								_s = _e - r.oper.value.length;
+								_s = _e - localStrObj[1].length;
 								break;
 							}
 						}
@@ -1014,7 +1045,7 @@
 				}
 
 				if (ret && t.cursorPos > _s && t.cursorPos <= _s + r.oper.value.length) {
-					range = t._parseRangeStr(r.oper.value);
+					range = t._parseRangeStr(refStr);
 					if (range) {
 						if (this.handlers.trigger("getActiveWS") && this.handlers.trigger("getActiveWS").getName() != wsName) {
 							return {index: -1, length: 0, range: null};
@@ -1030,7 +1061,16 @@
 		{index: _s, length: r.oper.value.length, range: range, wsName: wsName};
 	};
 
+	CellEditor.prototype._updateTopLineActive = function (state) {
+		if (state !== this.isTopLineActive) {
+			this.isTopLineActive = state;
+			this.handlers.trigger("updateEditorState", this.isTopLineActive ? c_oAscCellEditorState.editInFormulaBar : c_oAscCellEditorState.editInCell);
+		}
+	};
 	CellEditor.prototype._updateFormulaEditMod = function ( bIsOpen ) {
+		if(this.getMenuEditorMode()) {
+			return;
+		}
 		var isFormula = this.isFormula();
 		if ( !bIsOpen ) {
 			this._updateEditorState( isFormula );
@@ -1054,7 +1094,7 @@
 		if ( undefined === isFormula ) {
 			isFormula = this.isFormula();
 		}
-		var editorState = isFormula ? c_oAscCellEditorState.editFormula : "" === this._getFragmentsText( this.options.fragments ) ? c_oAscCellEditorState.editEmptyCell : c_oAscCellEditorState.editText;
+		var editorState = isFormula ? c_oAscCellEditorState.editFormula : "" === AscCommonExcel.getFragmentsText( this.options.fragments ) ? c_oAscCellEditorState.editEmptyCell : c_oAscCellEditorState.editText;
 
 		if ( this.m_nEditorState !== editorState ) {
 			this.m_nEditorState = editorState;
@@ -1135,7 +1175,9 @@
 		this._adjustCanvas();
 		this._showCanvas();
 		this._renderText();
-		this.input.value = this._getFragmentsText(fragments);
+		if(!this.getMenuEditorMode()) {
+			this.input.value = AscCommonExcel.getFragmentsText(fragments);
+		}
 		this._updateCursorPosition();
 		this._showCursor();
 	};
@@ -1143,7 +1185,7 @@
 	CellEditor.prototype._update = function () {
 		this._updateFormulaEditMod(/*bIsOpen*/false);
 
-		var tm, canExpW, canExpH, oldLC, doAjust = false, fragments = this._getRenderFragments();
+		var tm, canExpW, canExpH, oldLC, doAjust = false, fragments = this._getRenderFragments(), bChangedH;
 
 		if (0 < fragments.length) {
 			oldLC = this.textRender.getLinesCount();
@@ -1166,49 +1208,126 @@
 			while (tm.height > this._getContentHeight() && canExpH) {
 				canExpH = this._expandHeight();
 				doAjust = true;
+				bChangedH = true;
+			}
+
+			//reduce editor height for interface
+			if(this.getMenuEditorMode()) {
+				if(!bChangedH && tm.height < this._getContentHeight() && this._reduceHeight(tm.height)) {
+					doAjust = true;
+					bChangedH = true;
+				}
 			}
 		}
 		if (doAjust) {
 			this._adjustCanvas();
+			if(bChangedH && this.getMenuEditorMode()) {
+				this.handlers.trigger("resizeEditorHeight");
+			}
 		}
 
 		this._renderText();  // вызов нужен для пересчета поля line.startX, которое используется в _updateCursorPosition
-		this._fireUpdated(); // вызов нужен для обновление текста верхней строки, перед обновлением позиции курсора
+		// вызов нужен для обновление текста верхней строки, перед обновлением позиции курсора
+		if(!this.getMenuEditorMode()) {
+			this._fireUpdated();
+		}
 		this._updateCursorPosition(true);
 		this._showCursor();
 
 		this._updateUndoRedoChanged();
 
-		if (window['IS_NATIVE_EDITOR'] && !this.dontUpdateText) {
-			window['native']['onCellEditorChangeText'](this._getFragmentsText(this.options.fragments));
+		if (window['IS_NATIVE_EDITOR']) {
+			window['native']['onCellEditorChangeText'](AscCommonExcel.getFragmentsText(this.options.fragments));
 		}
 	};
 
 	CellEditor.prototype._fireUpdated = function () {
-		var t = this;
-		var s = t._getFragmentsText( t.options.fragments );
-		var isFormula = s.charAt( 0 ) === "=";
-		var funcPos, funcName, match;
+		var s = AscCommonExcel.getFragmentsText(this.options.fragments);
+		var isFormula = -1 === this.beginCompositePos && s.charAt(0) === "=";
+		var fPos, fName, match, fCurrent;
 
-		if ( !t.isTopLineActive || !t.skipTLUpdate || t.undoMode ) {
-			t.input.value = s;
+		if (!this.isTopLineActive || !this.skipTLUpdate || this.undoMode) {
+			this.input.value = s;
 		}
 
-		if ( isFormula ) {
-			funcPos = asc_lastidx( s, t.reNotFormula, t.cursorPos ) + 1;
-			if ( funcPos > 0 ) {
-				match = s.slice( funcPos, t.cursorPos ).match( t.reFormula );
+		if (isFormula) {
+			fPos = asc_lastidx(s, this.reNotFormula, this.cursorPos) + 1;
+			if (fPos > 0) {
+				match = s.slice(fPos, this.cursorPos).match(this.reFormula);
 			}
-			if ( match ) {
-				funcName = match[1];
+			if (match) {
+				fName = match[1];
+			} else {
+				fPos = undefined;
+				fName = undefined;
 			}
-			else {
-				funcPos = undefined;
-				funcName = undefined;
+			fCurrent = this._getEditableFunction(this._parseResult).func;
+		}
+
+		this.handlers.trigger("updated", s, this.cursorPos, fPos, fName);
+		this.handlers.trigger("updatedEditableFunction", fCurrent);
+	};
+
+	CellEditor.prototype._getEditableFunction = function (parseResult, bEndCurPos) {
+		var findOpenFunc = [], editableFunction = null, level = -1;
+		if(!parseResult) {
+			//в этом случае запускаю парсинг формулы до текущей позиции
+			var s = AscCommonExcel.getFragmentsText(this.options.fragments);
+			var isFormula = -1 === this.beginCompositePos && s.charAt(0) === "=";
+			if(isFormula) {
+				var pos = this.cursorPos;
+				var wsOPEN = this.handlers.trigger("getCellFormulaEnterWSOpen");
+				var ws = wsOPEN ? wsOPEN.model : this.handlers.trigger("getActiveWS");
+				var bbox = this.options.bbox;
+
+				var endPos = pos;
+				if(!bEndCurPos) {
+					for(var n = pos; n < s.length; n++) {
+						if("(" === s[n]) {
+							endPos = n;
+						}
+					}
+				}
+
+				var formulaStr = s.substring(1, endPos);
+				parseResult = new AscCommonExcel.ParseResult([], []);
+				var cellWithFormula = new window['AscCommonExcel'].CCellWithFormula(ws, bbox.r1, bbox.c1);
+				var tempFormula = new AscCommonExcel.parserFormula(formulaStr, cellWithFormula, ws);
+				tempFormula.parse(true, true, parseResult, true);
 			}
 		}
 
-		t.handlers.trigger( "updated", s, t.cursorPos, isFormula, funcPos, funcName );
+		var elements = parseResult ? parseResult.elems : null;
+		if(elements) {
+			for(var i = 0; i < elements.length; i++) {
+				if(cElementType.func === elements[i].type && elements[i + 1] && "(" === elements[i + 1].name) {
+					level++;
+					findOpenFunc[level] = {elem: elements[i], counter: 1};
+					i++;
+				} else if(-1 !== level) {
+					if("(" === elements[i].name) {
+						findOpenFunc[level].counter++;
+					} else if(")" === elements[i].name) {
+						findOpenFunc[level].counter--;
+					}
+				}
+				if(level > -1 && findOpenFunc[level].counter === 0) {
+					findOpenFunc.splice(level,1);
+					level--;
+				}
+			}
+		}
+
+		if(findOpenFunc) {
+			for(var j = findOpenFunc.length - 1; j >= 0; j--) {
+				if(findOpenFunc[j].counter > 0 && !(findOpenFunc[j].elem instanceof window['AscCommonExcel'].cUnknownFunction)) {
+					editableFunction = findOpenFunc[j].elem.name;
+					break;
+				}
+			}
+		}
+
+		return {func: editableFunction, argPos: parseResult ? parseResult.argPos : null};
 	};
 
 	CellEditor.prototype._expandWidth = function () {
@@ -1274,6 +1393,18 @@
 		return false;
 	};
 
+	CellEditor.prototype._reduceHeight = function (height) {
+
+		var t = this, bottomSide = this.sides.b, i = asc_search( bottomSide, function ( v ) {
+			return v > height;
+		} );
+		if ( i >= 0 ) {
+			t.bottom = bottomSide[i];
+			return true;
+		}
+		return false;
+	};
+
 	CellEditor.prototype._cleanText = function () {
 		this.drawingCtx.clear();
 	};
@@ -1286,37 +1417,40 @@
 	};
 
 	CellEditor.prototype._adjustCanvas = function () {
+		var isRetina = AscBrowser.isRetina;
 		var z = this.defaults.canvasZIndex;
+		var borderSize = 1;
 		var left = this.left * this.kx;
 		var top = this.top * this.ky;
-		var widthStyle = (this.right - this.left) * this.kx - 1; // ToDo разобраться с '-1'
-		var heightStyle = (this.bottom - this.top) * this.ky - 1;
-		var isRetina = AscBrowser.isRetina;
-		var width = widthStyle, height = heightStyle;
+		var width, height, widthStyle, heightStyle;
 
-		if ( isRetina ) {
+		if (isRetina) {
+			borderSize = AscCommon.AscBrowser.convertToRetinaValue(borderSize, true);
+		}
+
+		width = widthStyle = (this.right - this.left) * this.kx - borderSize;
+		height = heightStyle = (this.bottom - this.top) * this.ky - borderSize;
+
+		if (isRetina) {
 			left = AscCommon.AscBrowser.convertToRetinaValue(left);
 			top = AscCommon.AscBrowser.convertToRetinaValue(top);
 
 			widthStyle = AscCommon.AscBrowser.convertToRetinaValue(widthStyle);
 			heightStyle = AscCommon.AscBrowser.convertToRetinaValue(heightStyle);
-
-			width = AscCommon.AscBrowser.convertToRetinaValue(widthStyle, true);
-			height = AscCommon.AscBrowser.convertToRetinaValue(heightStyle, true);
 		}
 
 		this.canvasOuterStyle.left = left + 'px';
 		this.canvasOuterStyle.top = top + 'px';
 		this.canvasOuterStyle.width = widthStyle + 'px';
 		this.canvasOuterStyle.height = heightStyle + 'px';
-		this.canvasOuterStyle.zIndex = this.top < 0 ? -1 : z;
+		if(!this.getMenuEditorMode()) {
+			this.canvasOuterStyle.zIndex = this.top < 0 ? -1 : z;
+		}
 
 		this.canvas.width = this.canvasOverlay.width = width;
 		this.canvas.height = this.canvasOverlay.height = height;
-		if ( isRetina ) {
-			this.canvas.style.width = this.canvasOverlay.style.width = widthStyle + 'px';
-			this.canvas.style.height = this.canvasOverlay.style.height = heightStyle + 'px';
-		}
+		this.canvas.style.width = this.canvasOverlay.style.width = widthStyle + 'px';
+		this.canvas.style.height = this.canvasOverlay.style.height = heightStyle + 'px';
 	};
 
 	CellEditor.prototype._renderText = function (dy) {
@@ -1328,7 +1462,7 @@
 		}
 
 		if (opt.fragments.length > 0) {
-			t.textRender.render(t._getContentLeft(), dy || 0, t._getContentWidth(), opt.textColor);
+			t.textRender.render(undefined, t._getContentLeft(), dy || 0, t._getContentWidth(), opt.font.getColor());
 		}
 	};
 
@@ -1337,45 +1471,46 @@
 	};
 
 	CellEditor.prototype._drawSelection = function () {
-		var ctx = this.overlayCtx, ppix = ctx.getPPIX(), ppiy = ctx.getPPIY();
-		var begPos, endPos, top, top1, top2, begInfo, endInfo, line1, line2, i, selection = [];
+		var ctx = this.overlayCtx;
+		var zoom = this.getZoom();
+		var begPos, endPos, top, topLine, begInfo, endInfo, line, i, y, h, selection = [];
 
-		function drawRect( x, y, w, h ) {
-			if ( window['IS_NATIVE_EDITOR'] ) {
-				selection.push( [asc_calcnpt( x, ppix ), asc_calcnpt( y, ppiy ), asc_calcnpt( w, ppix ), asc_calcnpt( h, ppiy )] );
-			}
-			else {
-				ctx.fillRect( asc_calcnpt( x, ppix ), asc_calcnpt( y, ppiy ), asc_calcnpt( w, ppix ), asc_calcnpt( h, ppiy ) );
+		function drawRect(x, y, w, h) {
+			if (window['IS_NATIVE_EDITOR']) {
+				selection.push([x, y, w, h]);
+			} else {
+				ctx.fillRect(x, y, w, h);
 			}
 		}
 
 		begPos = this.selectionBegin;
 		endPos = this.selectionEnd;
 
-		if ( !window['IS_NATIVE_EDITOR'] ) {
-			ctx.setFillStyle( this.defaults.selectColor ).clear();
+		if (!window['IS_NATIVE_EDITOR']) {
+			ctx.setFillStyle(this.defaults.selectColor).clear();
 		}
 
-		if ( begPos !== endPos && !this.isTopLineActive ) {
-			top = this.textRender.calcLineOffset( this.topLineIndex );
-			begInfo = this.textRender.calcCharOffset( Math.min( begPos, endPos ) );
-			line1 = this.textRender.getLineInfo( begInfo.lineIndex );
-			top1 = this.textRender.calcLineOffset( begInfo.lineIndex );
-			endInfo = this.textRender.calcCharOffset( Math.max( begPos, endPos ) );
-			if ( begInfo.lineIndex === endInfo.lineIndex ) {
-				drawRect( begInfo.left, top1 - top, endInfo.left - begInfo.left, line1.th );
-			}
-			else {
-				line2 = this.textRender.getLineInfo( endInfo.lineIndex );
-				top2 = this.textRender.calcLineOffset( endInfo.lineIndex );
-				drawRect( begInfo.left, top1 - top, line1.tw - begInfo.left + line1.startX, line1.th );
-				if ( line2 ) {
-					drawRect( line2.startX, top2 - top, endInfo.left - line2.startX, line2.th );
+		if (begPos !== endPos && !this.isTopLineActive) {
+			top = this.textRender.calcLineOffset(this.topLineIndex);
+			begInfo = this.textRender.calcCharOffset(Math.min(begPos, endPos));
+			line = this.textRender.getLineInfo(begInfo.lineIndex);
+			topLine = this.textRender.calcLineOffset(begInfo.lineIndex);
+			endInfo = this.textRender.calcCharOffset(Math.max(begPos, endPos));
+			h = asc_round(line.th * zoom);
+			y = topLine - top;
+			if (begInfo.lineIndex === endInfo.lineIndex) {
+				drawRect(begInfo.left, y, endInfo.left - begInfo.left, h);
+			} else {
+				drawRect(begInfo.left, y, line.tw - begInfo.left + line.startX, h);
+				for (i = begInfo.lineIndex + 1, y += h; i < endInfo.lineIndex; ++i, y += h) {
+					line = this.textRender.getLineInfo(i);
+					h = asc_round(line.th * zoom);
+					drawRect(line.startX, y, line.tw, h);
 				}
-				top = top1 - top + line1.th;
-				for ( i = begInfo.lineIndex + 1; i < endInfo.lineIndex; ++i, top += line1.th ) {
-					line1 = this.textRender.getLineInfo( i );
-					drawRect( line1.startX, top, line1.tw, line1.th );
+				line = this.textRender.getLineInfo(endInfo.lineIndex);
+				topLine = this.textRender.calcLineOffset(endInfo.lineIndex);
+				if (line) {
+					drawRect(line.startX, topLine - top, endInfo.left - line.startX, asc_round(line.th * zoom));
 				}
 			}
 		}
@@ -1414,13 +1549,12 @@
 	};
 
 	CellEditor.prototype._hideCursor = function () {
-		if ( window['IS_NATIVE_EDITOR'] ) {
+		if (window['IS_NATIVE_EDITOR']) {
 			return;
 		}
 
-		var t = this;
-		window.clearInterval( t.cursorTID );
-		t.cursorStyle.display = "none";
+		window.clearInterval(this.cursorTID);
+		this.cursorStyle.display = "none";
 	};
 
 	CellEditor.prototype._updateCursorPosition = function (redrawText) {
@@ -1435,6 +1569,7 @@
 		var curTop = asc_round(((cur !== null ? cur.top : 0) + y) * this.ky);
 		var curHeight = asc_round((cur !== null ? cur.height : this._getContentHeight()) * this.ky);
 		var i, dy, nCount = this.textRender.getLinesCount();
+		var zoom = this.getZoom();
 
 		while (1 < nCount) {
 			if (curTop + curHeight - 1 > h) {
@@ -1442,7 +1577,7 @@
 				if (i === nCount) {
 					break;
 				}
-				dy = this.textRender.getLineInfo(i).th;
+				dy = asc_round(this.textRender.getLineInfo(i).th * zoom);
 				y -= dy;
 				curTop -= asc_round(dy * this.ky);
 				++this.topLineIndex;
@@ -1450,7 +1585,7 @@
 			}
 			if (curTop < 0) {
 				--this.topLineIndex;
-				dy = this.textRender.getLineInfo(this.topLineIndex).th;
+				dy = asc_round(this.textRender.getLineInfo(this.topLineIndex).th * zoom);
 				y += dy;
 				curTop += asc_round(dy * this.ky);
 				continue;
@@ -1468,12 +1603,11 @@
 			curHeight = AscCommon.AscBrowser.convertToRetinaValue(curHeight);
 		}
 
+		this.curLeft = curLeft;
+		this.curTop = curTop;
+		this.curHeight = curHeight;
 
-		if (window['IS_NATIVE_EDITOR']) {
-			this.curLeft = curLeft;
-			this.curTop = curTop;
-			this.curHeight = curHeight;
-		} else {
+		if (!window['IS_NATIVE_EDITOR']) {
 			this.cursorStyle.left = curLeft + "px";
 			this.cursorStyle.top = curTop + "px";
 			this.cursorStyle.height = curHeight + "px";
@@ -1489,10 +1623,18 @@
 		if (this.isTopLineActive && !this.skipTLUpdate) {
 			this._updateTopLineCurPos();
 		}
+
+		if(this.getMenuEditorMode()) {
+			this.handlers.trigger( "updateMenuEditorCursorPosition", curTop, curHeight );
+		}
+
+		//var fCurrent = this._getEditableFunction(null, true);
+		//console.log("func: " + fCurrent.func + " arg: " + fCurrent.argPos);
 		this._updateSelectionInfo();
 	};
 
 	CellEditor.prototype._moveCursor = function (kind, pos) {
+		this.newTextFormat = null;
 		var t = this;
 		this.sAutoComplete = null;
 		switch (kind) {
@@ -1547,9 +1689,10 @@
 		var t = this;
 		var lc = t.textRender.getLinesCount();
 		var i, h, w, li, chw;
+		var zoom = this.getZoom();
 		for ( h = 0, i = Math.max( t.topLineIndex, 0 ); i < lc; ++i ) {
 			li = t.textRender.getLineInfo( i );
-			h += li.th;
+			h += asc_round(li.th * zoom);
 			if ( coord.y <= h ) {
 				for ( w = li.startX, i = li.beg; i <= li.end; ++i ) {
 					chw = t.textRender.getCharWidth( i );
@@ -1565,23 +1708,24 @@
 	};
 
 	CellEditor.prototype._updateTopLineCurPos = function () {
-		var t = this;
-		var isSelected = t.selectionBegin !== t.selectionEnd;
-		var b = isSelected ? t.selectionBegin : t.cursorPos;
-		var e = isSelected ? t.selectionEnd : t.cursorPos;
-		if ( t.input.setSelectionRange ) {
-			t.input.setSelectionRange( Math.min( b, e ), Math.max( b, e ) );
+		if (this.loadFonts) {
+			return;
+		}
+		var isSelected = this.selectionBegin !== this.selectionEnd;
+		var b = isSelected ? this.selectionBegin : this.cursorPos;
+		var e = isSelected ? this.selectionEnd : this.cursorPos;
+		if (this.input.setSelectionRange) {
+			this.input.setSelectionRange(Math.min(b, e), Math.max(b, e));
 		}
 	};
 
 	CellEditor.prototype._topLineGotFocus = function () {
-		var t = this;
-		t.isTopLineActive = true;
-		t.input.isFocused = true;
-		t.setFocus(true);
-		t._hideCursor();
-		t._updateTopLineCurPos();
-		t._cleanSelection();
+		this._updateTopLineActive(true);
+		this.input.isFocused = true;
+		this.setFocus(true);
+		this._hideCursor();
+		this._updateTopLineCurPos();
+		this._cleanSelection();
 	};
 
 	CellEditor.prototype._topLineMouseUp = function () {
@@ -1608,10 +1752,10 @@
 
 	CellEditor.prototype._syncEditors = function () {
 		var t = this;
-		var s1 = t._getFragmentsText(t.options.fragments);
+		var s1 = AscCommonExcel.getFragmentsText(t.options.fragments);
 		var s2 = t.input.value;
 		var l = Math.min(s1.length, s2.length);
-		var i1 = 0, i2 = 0;
+		var i1 = 0, i2;
 
 		while (i1 < l && s1.charAt(i1) === s2.charAt(i1)) {
 			++i1;
@@ -1631,11 +1775,11 @@
 	// Content
 
 	CellEditor.prototype._getContentLeft = function () {
-		return asc_calcnpt( 0, this.drawingCtx.getPPIX(), this.defaults.padding/*px*/ );
+		return this.defaults.padding;
 	};
 
 	CellEditor.prototype._getContentWidth = function () {
-		return this.right - this.left - asc_calcnpt( 0, this.drawingCtx.getPPIX(), this.defaults.padding + this.defaults.padding + 1/*px*/ );
+		return this.right - this.left - 2 * this.defaults.padding + 1/*px*/;
 	};
 
 	CellEditor.prototype._getContentHeight = function () {
@@ -1644,15 +1788,13 @@
 	};
 
 	CellEditor.prototype._getContentPosition = function () {
-		var ppix = this.drawingCtx.getPPIX();
-
-		switch ( this.textFlags.textAlign ) {
+		switch (this.textFlags.textAlign) {
 			case AscCommon.align_Right:
-				return asc_calcnpt( this.right - this.left, ppix, -this.defaults.padding - 1 );
+				return this.right - this.left - this.defaults.padding - 1;
 			case AscCommon.align_Center:
-				return asc_calcnpt( 0.5 * (this.right - this.left), ppix, 0 );
+				return 0.5 * (this.right - this.left);
 		}
-		return asc_calcnpt( 0, ppix, this.defaults.padding );
+		return this.defaults.padding;
 	};
 
 	CellEditor.prototype._wrapText = function () {
@@ -1660,14 +1802,17 @@
 	};
 
 	CellEditor.prototype._addChars = function (str, pos, isRange) {
-		var opt = this.options, f, l, s, length = str.length;
-
+		var length = str.length;
 		if (!this._checkMaxCellLength(length)) {
 			return false;
 		}
 
+		var opt = this.options, f, l, s;
+
+		var noUpdateMode = this.noUpdateMode;
+		this.noUpdateMode = true;
+
 		this.sAutoComplete = null;
-		this.dontUpdateText = true;
 
 		if (this.selectionBegin !== this.selectionEnd) {
 			var copyFragment = this._findFragmentToInsertInto(Math.min(this.selectionBegin, this.selectionEnd) + 1);
@@ -1678,32 +1823,37 @@
 			this._removeChars(undefined, undefined, isRange);
 		}
 
-		this.dontUpdateText = false;
+		if (0 !== length) {
+			if (pos === undefined) {
+				pos = this.cursorPos;
+			}
 
-		if (pos === undefined) {
-			pos = this.cursorPos;
-		}
+			if (!this.undoMode) {
+				// save info to undo/redo
+				this.undoList.push({fn: this._removeChars, args: [pos, length], isRange: isRange});
+				this.redoList = [];
+			}
 
-		if (!this.undoMode) {
-			// save info to undo/redo
-			this.undoList.push({fn: this._removeChars, args: [pos, length], isRange: isRange});
-			this.redoList = [];
-		}
+			if (this.newTextFormat) {
+				var oNewObj = new Fragment({format: this.newTextFormat, text: str});
+				this._addFragments([oNewObj], pos);
+				this.newTextFormat = null;
+			} else {
+				f = this._findFragmentToInsertInto(pos);
+				if (f) {
+					l = pos - f.begin;
+					s = opt.fragments[f.index].text;
+					opt.fragments[f.index].text = s.slice(0, l) + str + s.slice(l);
+				}
+			}
 
-		if (this.newTextFormat) {
-			var oNewObj = new Fragment({format: this.newTextFormat, text: str});
-			this._addFragments([oNewObj], pos);
-			this.newTextFormat = null;
-		} else {
-			f = this._findFragmentToInsertInto(pos);
-			if (f) {
-				l = pos - f.begin;
-				s = opt.fragments[f.index].text;
-				opt.fragments[f.index].text = s.slice(0, l) + str + s.slice(l);
+			this.cursorPos = pos + str.length;
+			if (-1 !== str.indexOf(kNewLine)) {
+				this._wrapText();
 			}
 		}
 
-		this.cursorPos = pos + str.length;
+		this.noUpdateMode = noUpdateMode;
 		if (!this.noUpdateMode) {
 			this._update();
 		}
@@ -1946,7 +2096,7 @@
 		// merge fragments with equal formats
 		t._mergeFragments();
 
-		t.cursorPos = pos + t._getFragmentsLength( f );
+		t.cursorPos = pos + AscCommonExcel.getFragmentsLength(f);
 		if ( !t.noUpdateMode ) {
 			t._update();
 		}
@@ -1983,24 +2133,12 @@
 			fr[i].text = s;
 			f = fr[i].format;
 			if (f.getName() === "") {
-				f.setName(t.options.font.FontFamily.Name);
+				f.setName(t.options.font.getName());
 			}
 			if (f.getSize() === 0) {
-				f.setSize(t.options.font.FontSize);
+				f.setSize(t.options.font.getSize());
 			}
 		}
-	};
-
-	CellEditor.prototype._getFragmentsLength = function ( f ) {
-		return f.length > 0 ? f.reduce( function ( pv, cv ) {
-			return pv + cv.text.length;
-		}, 0 ) : 0;
-	};
-
-	CellEditor.prototype._getFragmentsText = function ( f ) {
-		return f.length > 0 ? f.reduce( function ( pv, cv ) {
-			return pv + cv.text;
-		}, "" ) : "";
 	};
 
 	CellEditor.prototype._setFormatProperty = function (format, prop, val) {
@@ -2075,7 +2213,7 @@
 		}
 		else if ( action.fn === t._addFragments ) {
 			pos = action.args[1];
-			len = t._getFragmentsLength( action.args[0] );
+			len = AscCommonExcel.getFragmentsLength(action.args[0]);
 			list2.push( {fn: t._removeChars, args: [pos, len], isRange: action.isRange} );
 		}
 		else {
@@ -2091,10 +2229,18 @@
 		t.undoMode = false;
 	};
 
-	CellEditor.prototype._tryCloseEditor = function (event) {
-		if (this.close(true)) {
-			this.handlers.trigger("applyCloseEvent", event);
+	CellEditor.prototype._tryCloseEditor = function (event, bApplyByArray) {
+		var t = this;
+		var callback = function(success) {
+			//для случая, когда пользователь нажимает ctrl+shift+enter переход на новую строку не осуществляется
+			if(!bApplyByArray && success) {
+				t.handlers.trigger("applyCloseEvent", event);
+			}
+		};
+		if(!window['AscCommonExcel'].bIsSupportArrayFormula) {
+			bApplyByArray = false;
 		}
+		this.close(true, bApplyByArray, callback);
 	};
 
 	CellEditor.prototype._getAutoComplete = function (str) {
@@ -2121,7 +2267,7 @@
 		if ( !tmp ) {
 			return;
 		}
-		tmp = this.options.fragments[tmp.index].format;
+		tmp = this.newTextFormat || this.options.fragments[tmp.index].format;
 		var va = tmp.getVerticalAlign();
 		var fc = tmp.getColor();
 		var result = new AscCommonExcel.asc_CFont();
@@ -2134,22 +2280,23 @@
 		result.strikeout = tmp.getStrikeout();
 		result.subscript = va === AscCommon.vertalign_SubScript;
 		result.superscript = va === AscCommon.vertalign_SuperScript;
-		result.color = (fc ? asc.colorObjToAscColor( fc ) : new Asc.asc_CColor( this.options.textColor ));
+		result.color = (fc ? asc.colorObjToAscColor( fc ) : new Asc.asc_CColor(this.options.font.getColor()));
 
 		this.handlers.trigger( "updateEditorSelectionInfo", result );
 	};
 
 	CellEditor.prototype._checkMaxCellLength = function ( length ) {
-		var newLength = this._getFragmentsLength( this.options.fragments ) + length;
+		var newLength = AscCommonExcel.getFragmentsLength( this.options.fragments ) + length;
+		var maxLength = Asc.c_oAscMaxCellOrCommentLength;
 		// Ограничение на ввод
-		if ( newLength > Asc.c_oAscMaxCellOrCommentLength ) {
+		if ( newLength > maxLength ) {
 			if ( this.selectionBegin === this.selectionEnd ) {
 				return false;
 			}
 
 			var b = Math.min( this.selectionBegin, this.selectionEnd );
 			var e = Math.max( this.selectionBegin, this.selectionEnd );
-			if ( newLength - this._getFragmentsLength( this._getFragments( b, e - b ) ) > Asc.c_oAscMaxCellOrCommentLength ) {
+			if ( newLength - AscCommonExcel.getFragmentsLength(this._getFragments( b, e - b ) ) > maxLength) {
 				return false;
 			}
 		}
@@ -2181,14 +2328,14 @@
 		t.skipTLUpdate = false;
 
 		// определение ввода иероглифов
-		if (t.isTopLineActive && t._getFragmentsLength(t.options.fragments) !== t.input.value.length) {
+		if (t.isTopLineActive && AscCommonExcel.getFragmentsLength(t.options.fragments) !== t.input.value.length) {
 			hieroglyph = true;
 		}
 
 		switch (event.which) {
 
 			case 27:  // "esc"
-				if (t.handlers.trigger("isGlobalLockEditCell")) {
+				if (t.handlers.trigger("isGlobalLockEditCell") || this.getMenuEditorMode()) {
 					return false;
 				}
 				t.close();
@@ -2206,9 +2353,11 @@
 					if (!(event.altKey && event.shiftKey)) {
 						if (event.altKey) {
 							t._addNewLine();
+						} else if(this.getMenuEditorMode()) {
+							t._addNewLine();
 						} else {
 							if (false === t.handlers.trigger("isGlobalLockEditCell")) {
-								t._tryCloseEditor(event);
+								t._tryCloseEditor(event, event.shiftKey&&event.ctrlKey);
 							}
 						}
 					}
@@ -2235,21 +2384,19 @@
 					break;
 				}
 
-				if (window['IS_NATIVE_EDITOR']) {
-					t._removeChars(ctrlKey ? kPrevWord : kPrevChar);
-				} else {
+				if (!window['IS_NATIVE_EDITOR']) {
 					// Отключим стандартную обработку браузера нажатия backspace
 					event.stopPropagation();
 					event.preventDefault();
 					if (hieroglyph) {
 						t._syncEditors();
 					}
-					t._removeChars(ctrlKey ? kPrevWord : kPrevChar);
 				}
+				t._removeChars(ctrlKey ? kPrevWord : kPrevChar);
 				return false;
 
 			case 46:  // "del"
-				if (!this.enableKeyEvents) {
+				if (!this.enableKeyEvents || event.shiftKey) {
 					break;
 				}
 
@@ -2474,10 +2621,6 @@
 				break;
 			case 89:  // ctrl + y
 			case 90:  // ctrl + z
-				if (!this.enableKeyEvents) {
-					break;
-				}
-
 				if (ctrlKey) {
 					event.stopPropagation();
 					event.preventDefault();
@@ -2500,7 +2643,9 @@
 				var res = this._findRangeUnderCursor();
 				if (res.range) {
 					res.range.switchReference();
-					this.enterCellRange(res.range.getName());
+					//_getNameRange - работает только для случая, когда ссылаемся на тот же лист, в противном функция _findRangeUnderCursor возвращает null
+					//если поменяется функция _findRangeUnderCursor для 3d ссылок, тогда необходимо это учитывать и в функции _getNameRange
+					this.enterCellRange(this._getNameRange(res.range));
 				}
 
 				event.stopPropagation();
@@ -2511,6 +2656,18 @@
 		t.skipKeyPress = false;
 		t.skipTLUpdate = true;
 		return true;
+	};
+
+	CellEditor.prototype._getNameRange = function (range) {
+		//check on merge
+		var currentRange = range.clone();
+		var wsOPEN = this.handlers.trigger("getCellFormulaEnterWSOpen"), ws = wsOPEN ? wsOPEN.model : this.handlers.trigger("getActiveWS");
+		var mergedRange = ws.getMergedByCell(currentRange.r1, currentRange.c1);
+		if (mergedRange && currentRange.isEqual(mergedRange)) {
+			currentRange.r2 = currentRange.r1;
+			currentRange.c2 = currentRange.c1;
+		}
+		return currentRange.getName();
 	};
 
 	/** @param event {KeyboardEvent} */
@@ -2537,7 +2694,7 @@
 			}
 
 			// определение ввода иероглифов
-			if (t.isTopLineActive && t._getFragmentsLength(t.options.fragments) !== t.input.value.length) {
+			if (t.isTopLineActive && AscCommonExcel.getFragmentsLength(t.options.fragments) !== t.input.value.length) {
 				t._syncEditors();
 			}
 
@@ -2558,7 +2715,7 @@
 			t._updateCursorPosition();
 		}
 		if (t.textRender.getEndOfText() === t.cursorPos && !t.isFormula()) {
-			var s = t._getFragmentsText(t.options.fragments);
+			var s = AscCommonExcel.getFragmentsText(t.options.fragments);
 			if (!AscCommon.isNumber(s)) {
 				var arrAutoComplete = t._getAutoComplete(s.toLowerCase());
 				var lengthInput = s.length;
@@ -2588,6 +2745,7 @@
 
 	/** @param event {MouseEvent} */
 	CellEditor.prototype._onWindowMouseUp = function ( event ) {
+		AscCommon.global_mouseEvent.UnLockMouse();
 		this.isSelectMode = c_oAscCellEditorSelectState.no;
 		if ( this.callTopLineMouseup ) {
 			this._topLineMouseUp();
@@ -2608,18 +2766,22 @@
 		if (AscCommon.g_inputContext && AscCommon.g_inputContext.externalChangeFocus())
 			return;
 
+		AscCommon.global_mouseEvent.LockMouse();
+
 		var pos;
+		var button = AscCommon.getMouseButton(event);
 		var coord = this._getCoordinates(event);
 		if (!window['IS_NATIVE_EDITOR']) {
-			this.clickCounter.mouseDownEvent(coord.x, coord.y, event.button);
+			this.clickCounter.mouseDownEvent(coord.x, coord.y, button);
 		}
 
 		this.setFocus(true);
+		this.handlers.trigger('setStrictClose', true);
 
-		this.isTopLineActive = false;
+		this._updateTopLineActive(false);
 		this.input.isFocused = false;
 
-		if (0 === event.button) {
+		if (0 === button) {
 			if (1 === this.clickCounter.getClickCount() % 2) {
 				this.isSelectMode = c_oAscCellEditorSelectState.char;
 				if (!event.shiftKey) {
@@ -2642,14 +2804,17 @@
 				this._moveCursor(kPosition, startWord);
 				this._selectChars(kPosition, endWord);
 			}
+		} else if (2 === button) {
+			this.handlers.trigger('onContextMenu', event);
 		}
 		return true;
 	};
 
 	/** @param event {MouseEvent} */
 	CellEditor.prototype._onMouseUp = function (event) {
-		if (2 === event.button) {
-			this.handlers.trigger('onContextMenu', event);
+		var button = AscCommon.getMouseButton(event);
+		AscCommon.global_mouseEvent.UnLockMouse();
+		if (2 === button) {
 			return true;
 		}
 		this.isSelectMode = c_oAscCellEditorSelectState.no;
@@ -2675,12 +2840,17 @@
 
 	/** @param event {jQuery.Event} */
 	CellEditor.prototype._onInputTextArea = function (event) {
-		if (this.handlers.trigger("isViewerMode")) {
+		var t = this;
+		if (!this.handlers.trigger("canEdit") || this.loadFonts) {
 			return true;
 		}
-		this.skipTLUpdate = true;
-		this.replaceText(0, this.textRender.getEndOfLine(this.cursorPos), this.input.value);
-		this._updateCursorByTopLine();
+		this.loadFonts = true;
+		AscFonts.FontPickerByCharacter.checkText(this.input.value, this, function () {
+			t.loadFonts = false;
+			t.skipTLUpdate = true;
+			t.replaceText(0, t.textRender.getEndOfText(), t.input.value);
+			t._updateCursorByTopLine();
+		});
 		return true;
 	};
 
@@ -2707,8 +2877,8 @@
 			this.beginCompositePos = this.cursorPos;
 			this.compositeLength = 0;
 		} else {
-			this.beginCompositePos = this.selectionBegin;
-			this.compositeLength = this.selectionEnd - this.selectionBegin;
+			this.beginCompositePos = Math.min(this.selectionBegin, this.selectionEnd);
+			this.compositeLength = Math.max(this.selectionBegin, this.selectionEnd) - this.beginCompositePos;
 		}
 		this.setTextStyle('u', Asc.EUnderline.underlineSingle);
 	};
@@ -2770,6 +2940,9 @@
 	};
 	CellEditor.prototype.Get_MaxCursorPosInCompositeText = function () {
 		return this.compositeLength;
+	};
+	CellEditor.prototype.getMenuEditorMode = function () {
+		return this.options && this.options.menuEditor;
 	};
 
 

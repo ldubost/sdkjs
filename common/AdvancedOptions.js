@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2019
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -12,8 +12,8 @@
  * warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR  PURPOSE. For
  * details, see the GNU AGPL at: http://www.gnu.org/licenses/agpl-3.0.html
  *
- * You can contact Ascensio System SIA at Lubanas st. 125a-25, Riga, Latvia,
- * EU, LV-1021.
+ * You can contact Ascensio System SIA at 20A-12 Ernesta Birznieka-Upisha
+ * street, Riga, Latvia, EU, LV-1050.
  *
  * The  interactive user interfaces in modified source and object code versions
  * of the Program must display Appropriate Legal Notices, as required under
@@ -38,77 +38,55 @@
 	 * @param {undefined} undefined
 	 */
 	function ( window, undefined) {
-
 		/** @constructor */
-		function asc_CAdvancedOptions(id,opt){
-			this.optionId = null;
-			this.options = null;
+		function asc_CDownloadOptions(fileType, isDownloadEvent) {
+			this.fileType = fileType;
+			this.isDownloadEvent = !!isDownloadEvent;
+			this.advancedOptions = null;
+			this.compatible = false;
 
-			switch(id){
-				case Asc.c_oAscAdvancedOptionsID.CSV:
-					this.optionId = id;
-					this.options = new asc_CCSVOptions(opt);
-					break;
-				case Asc.c_oAscAdvancedOptionsID.TXT:
-					this.optionId = id;
-					this.options = new asc_CTXTOptions(opt);
-					break;
-				case Asc.c_oAscAdvancedOptionsID.DRM:
-					this.optionId = id;
-					break;
-			}
+			this.isNaturalDownload = false;
+			this.errorDirect = null;
+			this.oDocumentMailMerge = null;
+			this.oMailMergeSendData = null;
+			this.callback = null;
 		}
-		asc_CAdvancedOptions.prototype.asc_getOptionId = function(){ return this.optionId; };
-		asc_CAdvancedOptions.prototype.asc_getOptions = function(){ return this.options; };
+
+		asc_CDownloadOptions.prototype.asc_setFileType = function (fileType) {this.fileType = fileType;};
+		asc_CDownloadOptions.prototype.asc_setIsDownloadEvent = function (isDownloadEvent) {this.isDownloadEvent = isDownloadEvent;};
+		asc_CDownloadOptions.prototype.asc_setAdvancedOptions = function (advancedOptions) {this.advancedOptions = advancedOptions;};
+		asc_CDownloadOptions.prototype.asc_setCompatible = function (compatible) {this.compatible = compatible;};
 
 		/** @constructor */
-		function asc_CCSVOptions(opt){
-			this.codePages = function(){
+		function asc_CAdvancedOptions(opt) {
+			this.codePages = function () {
 				var arr = [], c, encodings = opt["encodings"];
-				for(var i = 0; i < encodings.length; i++ ){
+				for (var i = 0; i < encodings.length; i++) {
 					c = new asc_CCodePage();
 					c.init(encodings[i]);
 					arr.push(c);
 				}
 				return arr;
 			}();
-			this.recommendedSettings = new asc_CCSVAdvancedOptions (opt["codepage"], /*opt["delimiter"]*/AscCommon.c_oAscCsvDelimiter.Comma); // ToDo разделитель пока только "," http://bugzilla.onlyoffice.com/show_bug.cgi?id=31009
+			this.recommendedSettings = new asc_CTextOptions(opt["codepage"], opt["delimiter"]);
+			this.data = opt["data"];
 		}
-		asc_CCSVOptions.prototype.asc_getCodePages = function(){ return this.codePages;};
-		asc_CCSVOptions.prototype.asc_getRecommendedSettings = function () { return this.recommendedSettings; };
+		asc_CAdvancedOptions.prototype.asc_getCodePages = function () {return this.codePages;};
+		asc_CAdvancedOptions.prototype.asc_getRecommendedSettings = function () {return this.recommendedSettings;};
+		asc_CAdvancedOptions.prototype.asc_getData = function () {return this.data;};
 
 		/** @constructor */
-		function asc_CTXTOptions(opt){
-			this.codePages = function(){
-				var arr = [], c, encodings = opt["encodings"];
-				for(var i = 0; i < encodings.length; i++ ){
-					c = new asc_CCodePage();
-					c.init(encodings[i]);
-					arr.push(c);
-				}
-				return arr;
-			}();
-			this.recommendedSettings = new asc_CTXTAdvancedOptions (opt["codepage"]);
-		}
-		asc_CTXTOptions.prototype.asc_getCodePages = function(){ return this.codePages;};
-		asc_CTXTOptions.prototype.asc_getRecommendedSettings = function () { return this.recommendedSettings; };
-
-		/** @constructor */
-		function asc_CCSVAdvancedOptions(codepage,delimiter){
+		function asc_CTextOptions(codepage, delimiter, delimiterChar) {
 			this.codePage = codepage;
 			this.delimiter = delimiter;
+			this.delimiterChar = delimiterChar;
 		}
-		asc_CCSVAdvancedOptions.prototype.asc_getDelimiter = function(){return this.delimiter;};
-		asc_CCSVAdvancedOptions.prototype.asc_setDelimiter = function(v){this.delimiter = v;};
-		asc_CCSVAdvancedOptions.prototype.asc_getCodePage = function(){return this.codePage;};
-		asc_CCSVAdvancedOptions.prototype.asc_setCodePage = function(v){this.codePage = v;};
-		
-		/** @constructor */
-		function asc_CTXTAdvancedOptions(codepage){
-			this.codePage = codepage;
-		}
-		asc_CTXTAdvancedOptions.prototype.asc_getCodePage = function(){return this.codePage;};
-		asc_CTXTAdvancedOptions.prototype.asc_setCodePage = function(v){this.codePage = v;};
+		asc_CTextOptions.prototype.asc_getDelimiter = function(){return this.delimiter;};
+		asc_CTextOptions.prototype.asc_setDelimiter = function(v){this.delimiter = v;};
+		asc_CTextOptions.prototype.asc_getDelimiterChar = function(){return this.delimiterChar;};
+		asc_CTextOptions.prototype.asc_setDelimiterChar = function(v){this.delimiterChar = v;};
+		asc_CTextOptions.prototype.asc_getCodePage = function(){return this.codePage;};
+		asc_CTextOptions.prototype.asc_setCodePage = function(v){this.codePage = v;};
 
 		/** @constructor */
 		function asc_CDRMAdvancedOptions(password){
@@ -122,11 +100,13 @@
 			this.codePageName = null;
 			this.codePage = null;
 			this.text = null;
+			this.lcid = null;
 		}
 		asc_CCodePage.prototype.init = function (encoding) {
 			this.codePageName = encoding["name"];
 			this.codePage = encoding["codepage"];
 			this.text = encoding["text"];
+			this.lcid = encoding["lcid"];
 		};
 		asc_CCodePage.prototype.asc_getCodePageName = function(){return this.codePageName;};
 		asc_CCodePage.prototype.asc_setCodePageName = function(v){this.codePageName = v;};
@@ -134,6 +114,8 @@
 		asc_CCodePage.prototype.asc_setCodePage = function(v){this.codePage = v;};
 		asc_CCodePage.prototype.asc_getText = function(){return this.text;};
 		asc_CCodePage.prototype.asc_setText = function(v){this.text = v;};
+		asc_CCodePage.prototype.asc_getLcid = function(){return this.lcid;};
+		asc_CCodePage.prototype.asc_setLcid = function(v){this.lcid = v;};
 
 		/** @constructor */
 		function asc_CDelimiter(delimiter){
@@ -154,7 +136,6 @@
 		/** @constructor */
 		function asc_CFormula(o){
 			this.name = o.name;
-			this.arg = o.args;
 		}
 		asc_CFormula.prototype.asc_getName = function () {
 			return this.name;
@@ -162,36 +143,31 @@
 		asc_CFormula.prototype.asc_getLocaleName = function () {
 			return AscCommonExcel.cFormulaFunctionToLocale ? AscCommonExcel.cFormulaFunctionToLocale[this.name] : this.name;
 		};
-		asc_CFormula.prototype.asc_getArguments = function () {
-			return this.arg;
-		};
 
 		//----------------------------------------------------------export----------------------------------------------------
 		var prot;
 		window['Asc'] = window['Asc'] || {};
 		window['AscCommon'] = window['AscCommon'] || {};
+
+		window["Asc"].asc_CDownloadOptions = window["Asc"]["asc_CDownloadOptions"] = asc_CDownloadOptions;
+		prot = asc_CDownloadOptions.prototype;
+		prot["asc_setFileType"] = prot.asc_setFileType;
+		prot["asc_setIsDownloadEvent"] = prot.asc_setIsDownloadEvent;
+		prot["asc_setAdvancedOptions"] = prot.asc_setAdvancedOptions;
+		prot["asc_setCompatible"] = prot.asc_setCompatible;
+
 		window["AscCommon"].asc_CAdvancedOptions = asc_CAdvancedOptions;
 		prot = asc_CAdvancedOptions.prototype;
-		prot["asc_getOptionId"]			= prot.asc_getOptionId;
-		prot["asc_getOptions"]			= prot.asc_getOptions;
+		prot["asc_getCodePages"] = prot.asc_getCodePages;
+		prot["asc_getRecommendedSettings"] = prot.asc_getRecommendedSettings;
+		prot["asc_getData"]	= prot.asc_getData;
 
-		prot = asc_CCSVOptions.prototype;
-		prot["asc_getCodePages"]			= prot.asc_getCodePages;
-		prot["asc_getRecommendedSettings"]	= prot.asc_getRecommendedSettings;
-
-		prot = asc_CTXTOptions.prototype;
-		prot["asc_getCodePages"]			= prot.asc_getCodePages;
-		prot["asc_getRecommendedSettings"]	= prot.asc_getRecommendedSettings;
-
-		window["Asc"].asc_CCSVAdvancedOptions = window["Asc"]["asc_CCSVAdvancedOptions"] = asc_CCSVAdvancedOptions;
-		prot = asc_CCSVAdvancedOptions.prototype;
+		window["Asc"].asc_CTextOptions = window["Asc"]["asc_CTextOptions"] = asc_CTextOptions;
+		prot = asc_CTextOptions.prototype;
 		prot["asc_getDelimiter"] = prot.asc_getDelimiter;
 		prot["asc_setDelimiter"] = prot.asc_setDelimiter;
-		prot["asc_getCodePage"] = prot.asc_getCodePage;
-		prot["asc_setCodePage"] = prot.asc_setCodePage;
-
-		window["Asc"].asc_CTXTAdvancedOptions = window["Asc"]["asc_CTXTAdvancedOptions"] = asc_CTXTAdvancedOptions;
-		prot = asc_CTXTAdvancedOptions.prototype;
+		prot["asc_getDelimiterChar"] = prot.asc_getDelimiterChar;
+		prot["asc_setDelimiterChar"] = prot.asc_setDelimiterChar;
 		prot["asc_getCodePage"] = prot.asc_getCodePage;
 		prot["asc_setCodePage"] = prot.asc_setCodePage;
 
@@ -207,6 +183,8 @@
 		prot["asc_setCodePage"]			= prot.asc_setCodePage;
 		prot["asc_getText"]				= prot.asc_getText;
 		prot["asc_setText"]				= prot.asc_setText;
+		prot["asc_getLcid"]				= prot.asc_getLcid;
+		prot["asc_setLcid"]				= prot.asc_setLcid;
 
 		prot = asc_CDelimiter.prototype;
 		prot["asc_getDelimiterName"]			= prot.asc_getDelimiterName;
@@ -222,6 +200,5 @@
 		prot = asc_CFormula.prototype;
 		prot["asc_getName"]				= prot.asc_getName;
 		prot["asc_getLocaleName"]	= prot.asc_getLocaleName;
-		prot["asc_getArguments"]		= prot.asc_getArguments;
 	}
 )(window);

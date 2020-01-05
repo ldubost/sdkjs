@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2019
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -12,8 +12,8 @@
  * warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR  PURPOSE. For
  * details, see the GNU AGPL at: http://www.gnu.org/licenses/agpl-3.0.html
  *
- * You can contact Ascensio System SIA at Lubanas st. 125a-25, Riga, Latvia,
- * EU, LV-1021.
+ * You can contact Ascensio System SIA at 20A-12 Ernesta Birznieka-Upisha
+ * street, Riga, Latvia, EU, LV-1050.
  *
  * The  interactive user interfaces in modified source and object code versions
  * of the Program must display Appropriate Legal Notices, as required under
@@ -65,6 +65,7 @@ AscDFH.changesFactory[AscDFH.historyitem_Style_Hidden]          = CChangesStyleH
 AscDFH.changesFactory[AscDFH.historyitem_Style_SemiHidden]      = CChangesStyleSemiHidden;
 AscDFH.changesFactory[AscDFH.historyitem_Style_UnhideWhenUsed]  = CChangesStyleUnhideWhenUsed;
 AscDFH.changesFactory[AscDFH.historyitem_Style_Link]            = CChangesStyleLink;
+AscDFH.changesFactory[AscDFH.historyitem_Style_Custom]          = CChangesStyleCustom;
 
 AscDFH.changesFactory[AscDFH.historyitem_Styles_Add]                              = CChangesStylesAdd;
 AscDFH.changesFactory[AscDFH.historyitem_Styles_Remove]                           = CChangesStylesRemove;
@@ -83,6 +84,11 @@ AscDFH.changesFactory[AscDFH.historyitem_Styles_ChangeDefaultHyperlinkId]       
 AscDFH.changesFactory[AscDFH.historyitem_Styles_ChangeDefaultFootnoteTextId]      = CChangesStylesChangeDefaultFootnoteTextId;
 AscDFH.changesFactory[AscDFH.historyitem_Styles_ChangeDefaultFootnoteTextCharId]  = CChangesStylesChangeDefaultFootnoteTextCharId;
 AscDFH.changesFactory[AscDFH.historyitem_Styles_ChangeDefaultFootnoteReferenceId] = CChangesStylesChangeDefaultFootnoteReferenceId;
+AscDFH.changesFactory[AscDFH.historyitem_Styles_ChangeDefaultNoSpacingId]         = CChangesStylesChangeDefaultNoSpacingId;
+AscDFH.changesFactory[AscDFH.historyitem_Styles_ChangeDefaultTitleId]             = CChangesStylesChangeDefaultTitleId;
+AscDFH.changesFactory[AscDFH.historyitem_Styles_ChangeDefaultSubtitleId]          = CChangesStylesChangeDefaultSubtitleId;
+AscDFH.changesFactory[AscDFH.historyitem_Styles_ChangeDefaultQuoteId]             = CChangesStylesChangeDefaultQuoteId;
+AscDFH.changesFactory[AscDFH.historyitem_Styles_ChangeDefaultIntenseQuoteId]      = CChangesStylesChangeDefaultIntenseQuoteId;
 
 //----------------------------------------------------------------------------------------------------------------------
 // Карта зависимости изменений
@@ -139,6 +145,11 @@ AscDFH.changesRelationMap[AscDFH.historyitem_Styles_ChangeDefaultHyperlinkId]   
 AscDFH.changesRelationMap[AscDFH.historyitem_Styles_ChangeDefaultFootnoteTextId]      = [AscDFH.historyitem_Styles_ChangeDefaultFootnoteTextId];
 AscDFH.changesRelationMap[AscDFH.historyitem_Styles_ChangeDefaultFootnoteTextCharId]  = [AscDFH.historyitem_Styles_ChangeDefaultFootnoteTextCharId];
 AscDFH.changesRelationMap[AscDFH.historyitem_Styles_ChangeDefaultFootnoteReferenceId] = [AscDFH.historyitem_Styles_ChangeDefaultFootnoteReferenceId];
+AscDFH.changesRelationMap[AscDFH.historyitem_Styles_ChangeDefaultNoSpacingId]         = [AscDFH.historyitem_Styles_ChangeDefaultNoSpacingId];
+AscDFH.changesRelationMap[AscDFH.historyitem_Styles_ChangeDefaultTitleId]             = [AscDFH.historyitem_Styles_ChangeDefaultTitleId];
+AscDFH.changesRelationMap[AscDFH.historyitem_Styles_ChangeDefaultSubtitleId]          = [AscDFH.historyitem_Styles_ChangeDefaultSubtitleId];
+AscDFH.changesRelationMap[AscDFH.historyitem_Styles_ChangeDefaultQuoteId]             = [AscDFH.historyitem_Styles_ChangeDefaultQuoteId];
+AscDFH.changesRelationMap[AscDFH.historyitem_Styles_ChangeDefaultIntenseQuoteId]      = [AscDFH.historyitem_Styles_ChangeDefaultIntenseQuoteId];
 //----------------------------------------------------------------------------------------------------------------------
 
 
@@ -873,6 +884,21 @@ CChangesStyleLink.prototype.private_SetValue = function(Value)
 	this.Class.Link = Value;
 };
 
+/**
+ * @constructor
+ * @extends {CChangesStyleBaseBoolProperty}
+ */
+function CChangesStyleCustom(Class, Old, New)
+{
+	CChangesStyleBaseBoolProperty.call(this, Class, Old, New);
+}
+CChangesStyleCustom.prototype = Object.create(CChangesStyleBaseBoolProperty.prototype);
+CChangesStyleCustom.prototype.constructor = CChangesStyleCustom;
+CChangesStyleCustom.prototype.Type = AscDFH.historyitem_Style_Custom;
+CChangesStyleCustom.prototype.private_SetValue = function(Value)
+{
+	this.Class.Custom = Value;
+};
 
 /**
  * @constructor
@@ -1277,4 +1303,79 @@ CChangesStylesChangeDefaultFootnoteReferenceId.prototype.Type = AscDFH.historyit
 CChangesStylesChangeDefaultFootnoteReferenceId.prototype.private_SetValue = function(Value)
 {
 	this.Class.Default.FootnoteReference = Value;
+};
+/**
+ * @constructor
+ * @extends {CChangesStyleBaseStringProperty}
+ */
+function CChangesStylesChangeDefaultNoSpacingId(Class, Old, New)
+{
+	CChangesStyleBaseStringProperty.call(this, Class, Old, New);
+}
+CChangesStylesChangeDefaultNoSpacingId.prototype = Object.create(CChangesStyleBaseStringProperty.prototype);
+CChangesStylesChangeDefaultNoSpacingId.prototype.constructor = CChangesStylesChangeDefaultNoSpacingId;
+CChangesStylesChangeDefaultNoSpacingId.prototype.Type = AscDFH.historyitem_Styles_ChangeDefaultNoSpacingId;
+CChangesStylesChangeDefaultNoSpacingId.prototype.private_SetValue = function(Value)
+{
+	this.Class.Default.NoSpacing = Value;
+};
+/**
+ * @constructor
+ * @extends {CChangesStyleBaseStringProperty}
+ */
+function CChangesStylesChangeDefaultTitleId(Class, Old, New)
+{
+	CChangesStyleBaseStringProperty.call(this, Class, Old, New);
+}
+CChangesStylesChangeDefaultTitleId.prototype = Object.create(CChangesStyleBaseStringProperty.prototype);
+CChangesStylesChangeDefaultTitleId.prototype.constructor = CChangesStylesChangeDefaultTitleId;
+CChangesStylesChangeDefaultTitleId.prototype.Type = AscDFH.historyitem_Styles_ChangeDefaultTitleId;
+CChangesStylesChangeDefaultTitleId.prototype.private_SetValue = function(Value)
+{
+	this.Class.Default.Title = Value;
+};
+/**
+ * @constructor
+ * @extends {CChangesStyleBaseStringProperty}
+ */
+function CChangesStylesChangeDefaultSubtitleId(Class, Old, New)
+{
+	CChangesStyleBaseStringProperty.call(this, Class, Old, New);
+}
+CChangesStylesChangeDefaultSubtitleId.prototype = Object.create(CChangesStyleBaseStringProperty.prototype);
+CChangesStylesChangeDefaultSubtitleId.prototype.constructor = CChangesStylesChangeDefaultSubtitleId;
+CChangesStylesChangeDefaultSubtitleId.prototype.Type = AscDFH.historyitem_Styles_ChangeDefaultSubtitleId;
+CChangesStylesChangeDefaultSubtitleId.prototype.private_SetValue = function(Value)
+{
+	this.Class.Default.Subtitle = Value;
+};
+/**
+ * @constructor
+ * @extends {CChangesStyleBaseStringProperty}
+ */
+function CChangesStylesChangeDefaultQuoteId(Class, Old, New)
+{
+	CChangesStyleBaseStringProperty.call(this, Class, Old, New);
+}
+CChangesStylesChangeDefaultQuoteId.prototype = Object.create(CChangesStyleBaseStringProperty.prototype);
+CChangesStylesChangeDefaultQuoteId.prototype.constructor = CChangesStylesChangeDefaultQuoteId;
+CChangesStylesChangeDefaultQuoteId.prototype.Type = AscDFH.historyitem_Styles_ChangeDefaultQuoteId;
+CChangesStylesChangeDefaultQuoteId.prototype.private_SetValue = function(Value)
+{
+	this.Class.Default.Quote = Value;
+};
+/**
+ * @constructor
+ * @extends {CChangesStyleBaseStringProperty}
+ */
+function CChangesStylesChangeDefaultIntenseQuoteId(Class, Old, New)
+{
+	CChangesStyleBaseStringProperty.call(this, Class, Old, New);
+}
+CChangesStylesChangeDefaultIntenseQuoteId.prototype = Object.create(CChangesStyleBaseStringProperty.prototype);
+CChangesStylesChangeDefaultIntenseQuoteId.prototype.constructor = CChangesStylesChangeDefaultIntenseQuoteId;
+CChangesStylesChangeDefaultIntenseQuoteId.prototype.Type = AscDFH.historyitem_Styles_ChangeDefaultIntenseQuoteId;
+CChangesStylesChangeDefaultIntenseQuoteId.prototype.private_SetValue = function(Value)
+{
+	this.Class.Default.IntenseQuote = Value;
 };

@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2019
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -12,8 +12,8 @@
  * warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR  PURPOSE. For
  * details, see the GNU AGPL at: http://www.gnu.org/licenses/agpl-3.0.html
  *
- * You can contact Ascensio System SIA at Lubanas st. 125a-25, Riga, Latvia,
- * EU, LV-1021.
+ * You can contact Ascensio System SIA at 20A-12 Ernesta Birznieka-Upisha
+ * street, Riga, Latvia, EU, LV-1050.
  *
  * The  interactive user interfaces in modified source and object code versions
  * of the Program must display Appropriate Legal Notices, as required under
@@ -35,31 +35,6 @@
 (function (window, undefined)
 {
 	window['Asc'] = window['Asc'] || {};
-// ---------------------------------------------------------------
-	function CAscTableStyle()
-	{
-		this.Id = "";
-		this.Type = 0;
-		this.Image = "";
-	}
-
-	CAscTableStyle.prototype.get_Id = function ()
-	{
-		return this.Id;
-	};
-	CAscTableStyle.prototype.get_Image = function ()
-	{
-		return this.Image;
-	};
-	CAscTableStyle.prototype.get_Type = function ()
-	{
-		return this.Type;
-	};
-	window['Asc']['CAscTableStyle'] = window['Asc'].CAscTableStyle = CAscTableStyle;
-	CAscTableStyle.prototype['get_Id'] = CAscTableStyle.prototype.get_Id;
-	CAscTableStyle.prototype['get_Image'] = CAscTableStyle.prototype.get_Image;
-	CAscTableStyle.prototype['get_Type'] = CAscTableStyle.prototype.get_Type;
-
 // ---------------------------------------------------------------
 // CBackground
 // Value : тип заливки(прозрачная или нет),
@@ -504,7 +479,7 @@
 			this.ForSelectedCells = (undefined != tblProp.ForSelectedCells) ? tblProp.ForSelectedCells : true;
 			this.TableStyle = (undefined != tblProp.TableStyle) ? tblProp.TableStyle : null;
 			this.TableLook = (undefined != tblProp.TableLook) ? new CTablePropLook(tblProp.TableLook) : null;
-			this.RowsInHeader = (undefined != tblProp.RowsInHeader) ? tblProp.RowsInHeader : 0;
+			this.RowsInHeader = (undefined !== tblProp.RowsInHeader) ? tblProp.RowsInHeader : false;
 			this.CellsVAlign = (undefined != tblProp.CellsVAlign) ? tblProp.CellsVAlign : c_oAscVertAlignJc.Top;
 			this.AllowOverlap = (undefined != tblProp.AllowOverlap) ? tblProp.AllowOverlap : undefined;
 			this.TableLayout = tblProp.TableLayout;
@@ -516,6 +491,9 @@
 			this.PercentFullWidth = tblProp.PercentFullWidth;
 			this.TableDescription = tblProp.TableDescription;
 			this.TableCaption = tblProp.TableCaption;
+
+			this.ColumnWidth = tblProp.ColumnWidth;
+			this.RowHeight   = tblProp.RowHeight;
 		}
 		else
 		{
@@ -795,6 +773,22 @@
 	{
 		this.TableCaption = v;
 	};
+	CTableProp.prototype.get_ColumnWidth = function()
+	{
+		return this.ColumnWidth;
+	};
+	CTableProp.prototype.put_ColumnWidth = function(v)
+	{
+		this.ColumnWidth = v;
+	};
+	CTableProp.prototype.get_RowHeight = function()
+	{
+		return this.RowHeight;
+	};
+	CTableProp.prototype.put_RowHeight = function(v)
+	{
+		this.RowHeight = v;
+	};
 
 	window['Asc']['CTableProp'] = window['Asc'].CTableProp = CTableProp;
 	CTableProp.prototype['get_Width'] = CTableProp.prototype.get_Width;
@@ -859,6 +853,10 @@
 	CTableProp.prototype['put_TableDescription'] = CTableProp.prototype.put_TableDescription;
 	CTableProp.prototype['get_TableCaption'] = CTableProp.prototype.get_TableCaption;
 	CTableProp.prototype['put_TableCaption'] = CTableProp.prototype.put_TableCaption;
+	CTableProp.prototype['get_ColumnWidth'] = CTableProp.prototype.get_ColumnWidth;
+	CTableProp.prototype['put_ColumnWidth'] = CTableProp.prototype.put_ColumnWidth;
+	CTableProp.prototype['get_RowHeight'] = CTableProp.prototype.get_RowHeight;
+	CTableProp.prototype['put_RowHeight'] = CTableProp.prototype.put_RowHeight;
 
 // ---------------------------------------------------------------
 	function CBorders(obj)
@@ -1034,6 +1032,7 @@
 			this.Shd = (undefined != obj.Shd && null != obj.Shd) ? new Asc.asc_CParagraphShd(obj.Shd) : null;
 			this.WidowControl = (undefined != obj.WidowControl) ? obj.WidowControl : null;                  // Запрет висячих строк
 			this.Tabs = obj.Tabs;
+			this.OutlineLvl = (undefined !== obj.OutlineLvl) ? obj.OutlineLvl : 0;
 		}
 		else
 		{
@@ -1085,6 +1084,7 @@
 			this.Shd = new Asc.asc_CParagraphShd();
 			this.WidowControl = true;                  // Запрет висячих строк
 			this.Tabs = null;
+			this.OutlineLvl = 0;
 		}
 	}
 
@@ -1128,6 +1128,10 @@
 	{
 		return this.Tabs;
 	};
+	CParagraphPropEx.prototype.get_OutlineLvl = function()
+	{
+		return this.OutlineLvl;
+	};
 
 	function CTextProp(obj)
 	{
@@ -1137,7 +1141,7 @@
 			this.Italic = (undefined != obj.Italic) ? obj.Italic : null;
 			this.Underline = (undefined != obj.Underline) ? obj.Underline : null;
 			this.Strikeout = (undefined != obj.Strikeout) ? obj.Strikeout : null;
-			this.FontFamily = (undefined != obj.FontFamily && null != obj.FontFamily) ? new AscCommon.asc_CTextFontFamily(obj.FontFamily) : null;
+			this.FontFamily = (undefined != obj.FontFamily && null != obj.FontFamily) ? new AscCommon.asc_CTextFontFamily(obj.FontFamily) : new AscCommon.asc_CTextFontFamily({Name : "", Index : -1});
 			this.FontSize = (undefined != obj.FontSize) ? obj.FontSize : null;
 			this.Color = (undefined != obj.Color && null != obj.Color) ? AscCommon.CreateAscColorCustom(obj.Color.r, obj.Color.g, obj.Color.b) : null;
 			this.VertAlign = (undefined != obj.VertAlign) ? obj.VertAlign : null;
@@ -1146,6 +1150,7 @@
 			this.Spacing = (undefined != obj.Spacing) ? obj.Spacing : null;
 			this.Caps = (undefined != obj.Caps) ? obj.Caps : null;
 			this.SmallCaps = (undefined != obj.SmallCaps) ? obj.SmallCaps : null;
+			this.Lang = (undefined != obj.Lang) ? obj.Lang.Val : null;
 		}
 		else
 		{
@@ -1171,7 +1176,7 @@
 			this.Italic = false;
 			this.Underline = false;
 			this.Strikeout = false;
-			this.FontFamily = new asc_CTextFontFamily();
+			this.FontFamily = new AscCommon.asc_CTextFontFamily();
 			this.FontSize = 12;
 			this.Color = AscCommon.CreateAscColorCustom(0, 0, 0);
 			this.VertAlign = AscCommon.vertalign_Baseline;
@@ -1180,6 +1185,7 @@
 			this.Spacing = 0;
 			this.Caps = false;
 			this.SmallCaps = false;
+			this.Lang = null;
 		}
 	}
 
@@ -1235,6 +1241,10 @@
 	{
 		return this.SmallCaps;
 	};
+	CTextProp.prototype.get_Lang = function ()
+	{
+		return this.Lang;
+	};
 
 	CParagraphPropEx.prototype['get_ContextualSpacing'] = CParagraphPropEx.prototype.get_ContextualSpacing;
 	CParagraphPropEx.prototype['get_Ind'] = CParagraphPropEx.prototype.get_Ind;
@@ -1246,6 +1256,7 @@
 	CParagraphPropEx.prototype['get_Shd'] = CParagraphPropEx.prototype.get_Shd;
 	CParagraphPropEx.prototype['get_WidowControl'] = CParagraphPropEx.prototype.get_WidowControl;
 	CParagraphPropEx.prototype['get_Tabs'] = CParagraphPropEx.prototype.get_Tabs;
+	CParagraphPropEx.prototype['get_OutlineLvl'] = CParagraphPropEx.prototype.get_OutlineLvl;
 	CTextProp.prototype['get_Bold'] = CTextProp.prototype.get_Bold;
 	CTextProp.prototype['get_Italic'] = CTextProp.prototype.get_Italic;
 	CTextProp.prototype['get_Underline'] = CTextProp.prototype.get_Underline;
@@ -1259,18 +1270,48 @@
 	CTextProp.prototype['get_DStrikeout'] = CTextProp.prototype.get_DStrikeout;
 	CTextProp.prototype['get_Caps'] = CTextProp.prototype.get_Caps;
 	CTextProp.prototype['get_SmallCaps'] = CTextProp.prototype.get_SmallCaps;
+	CTextProp.prototype['get_Lang'] = CTextProp.prototype.get_Lang;
 
-// paragraph and text properties objects container
+	CTextProp.prototype['put_Bold'] = CTextProp.prototype.put_Bold = function(v){this.Bold = v;};
+	CTextProp.prototype['put_Italic'] = CTextProp.prototype.put_Italic = function(v){this.Italic = v;};
+	CTextProp.prototype['put_Underline'] = CTextProp.prototype.put_Underline = function(v){this.Underline = v;};
+	CTextProp.prototype['put_Strikeout'] = CTextProp.prototype.put_Strikeout = function(v){this.Strikeout = v;};
+	CTextProp.prototype['put_FontFamily'] = CTextProp.prototype.put_FontFamily = function(v){this.FontFamily = v;};
+	CTextProp.prototype['put_FontSize'] = CTextProp.prototype.put_FontSize = function(v){this.FontSize = v;};
+	CTextProp.prototype['put_Color'] = CTextProp.prototype.put_Color = function(v){this.Color = v;};
+	CTextProp.prototype['put_VertAlign'] = CTextProp.prototype.put_VertAlign = function(v){this.VertAlign = v;};
+	CTextProp.prototype['put_HighLight'] = CTextProp.prototype.put_HighLight = function(v){this.HighLight = v;};
+	CTextProp.prototype['put_Spacing'] = CTextProp.prototype.put_Spacing = function(v){this.Spacing = v;};
+	CTextProp.prototype['put_DStrikeout'] = CTextProp.prototype.put_DStrikeout = function(v){this.DStrikeout = v;};
+	CTextProp.prototype['put_Caps'] = CTextProp.prototype.put_Caps = function(v){this.Caps = v;};
+	CTextProp.prototype['put_SmallCaps'] = CTextProp.prototype.put_SmallCaps = function(v){this.SmallCaps = v;};
+	CTextProp.prototype['put_Lang'] = CTextProp.prototype.put_Lang = function(v){this.Lang = v;};
+
+
+	window['Asc']['CTextProp'] = window['Asc'].CTextProp = CTextProp;
+
+	/**
+	 * Paragraph and text properties objects container
+	 * @param paragraphProp
+	 * @param textProp
+	 * @constructor
+	 */
 	function CParagraphAndTextProp(paragraphProp, textProp)
 	{
 		this.ParaPr = (undefined != paragraphProp && null != paragraphProp) ? new CParagraphPropEx(paragraphProp) : null;
 		this.TextPr = (undefined != textProp && null != textProp) ? new CTextProp(textProp) : null;
 	}
 
+	/**
+	 * @returns {?CParagraphPropEx}
+	 */
 	CParagraphAndTextProp.prototype.get_ParaPr = function ()
 	{
 		return this.ParaPr;
 	};
+	/**
+	 * @returns {?CTextProp}
+	 */
 	CParagraphAndTextProp.prototype.get_TextPr = function ()
 	{
 		return this.TextPr;
@@ -1280,83 +1321,6 @@
 	CParagraphAndTextProp.prototype['get_ParaPr'] = CParagraphAndTextProp.prototype.get_ParaPr;
 	CParagraphAndTextProp.prototype['get_TextPr'] = CParagraphAndTextProp.prototype.get_TextPr;
 // ---------------------------------------------------------------
-
-	function GenerateTableStyles(drawingDoc, logicDoc, tableLook)
-	{
-		var _dst_styles = [];
-
-		var _styles = logicDoc.Styles.Get_AllTableStyles();
-		var _styles_len = _styles.length;
-
-		if (_styles_len == 0)
-			return _dst_styles;
-
-		var _x_mar = 10;
-		var _y_mar = 10;
-		var _r_mar = 10;
-		var _b_mar = 10;
-		var _pageW = 297;
-		var _pageH = 210;
-
-		var W = (_pageW - _x_mar - _r_mar);
-		var H = (_pageH - _y_mar - _b_mar);
-		var Grid = [];
-
-		var Rows = 5;
-		var Cols = 5;
-
-		for (var i = 0; i < Cols; i++)
-			Grid[i] = W / Cols;
-
-		var _canvas = document.createElement('canvas');
-		if (!this.m_oWordControl.bIsRetinaSupport)
-		{
-			_canvas.width = TABLE_STYLE_WIDTH_PIX;
-			_canvas.height = TABLE_STYLE_HEIGHT_PIX;
-		}
-		else
-		{
-			_canvas.width = AscCommon.AscBrowser.convertToRetinaValue(TABLE_STYLE_WIDTH_PIX, true);
-			_canvas.height = AscCommon.AscBrowser.convertToRetinaValue(TABLE_STYLE_HEIGHT_PIX, true);
-		}
-		var ctx = _canvas.getContext('2d');
-
-		AscCommon.History.TurnOff();
-		for (var i1 = 0; i1 < _styles_len; i1++)
-		{
-			var i = _styles[i1];
-			var _style = logicDoc.Styles.Style[i];
-
-			if (!_style || _style.Type != styletype_Table)
-				continue;
-
-			var table = new CTable(drawingDoc, logicDoc, true, 0, _x_mar, _y_mar, 1000, 1000, Rows, Cols, Grid);
-			table.Set_Props({TableStyle: i});
-
-			for (var j = 0; j < Rows; j++)
-				table.Content[j].Set_Height(H / Rows, Asc.linerule_AtLeast);
-
-			ctx.fillStyle = "#FFFFFF";
-			ctx.fillRect(0, 0, _canvas.width, _canvas.height);
-
-			var graphics = new AscCommon.CGraphics();
-			graphics.init(ctx, _canvas.width, _canvas.height, _pageW, _pageH);
-			graphics.m_oFontManager = AscCommon.g_fontManager;
-			graphics.transform(1, 0, 0, 1, 0, 0);
-
-			table.Recalculate_Page(0);
-			table.Draw(0, graphics);
-
-			var _styleD = new CAscTableStyle();
-			_styleD.Type = 0;
-			_styleD.Image = _canvas.toDataURL("image/png");
-			_styleD.Id = i;
-			_dst_styles.push(_styleD);
-		}
-		AscCommon.History.TurnOn();
-
-		return _dst_styles;
-	}
 
 	/*
 	 структура заголовков, предварительно, выглядит так
@@ -1417,4 +1381,629 @@
 	CHeader.prototype['get_X'] = CHeader.prototype.get_X;
 	CHeader.prototype['get_Y'] = CHeader.prototype.get_Y;
 	CHeader.prototype['get_Level'] = CHeader.prototype.get_Level;
+
+	/**
+	 * Класс для работы с настройками таблицы содержимого
+	 * @constructor
+	 */
+	function CTableOfContentsPr()
+	{
+		this.Hyperlink    = true;
+		this.OutlineStart = -1;
+		this.OutlineEnd   = -1;
+		this.Styles       = [];
+		this.PageNumbers  = true;
+		this.RightTab     = true;
+
+		// Эти параметры задаются только из интерфейса
+		this.TabLeader    = undefined;
+
+		this.StylesType   = Asc.c_oAscTOCStylesType.Current;
+
+		this.ComplexField = null;
+	}
+	CTableOfContentsPr.prototype.InitFromTOCInstruction = function(oComplexField)
+	{
+		if (!oComplexField)
+			return;
+
+		var oInstruction = oComplexField.GetInstruction();
+		if (!oInstruction)
+			return;
+
+		this.Hyperlink    = oInstruction.IsHyperlinks();
+		this.OutlineStart = oInstruction.GetHeadingRangeStart();
+		this.OutlineEnd   = oInstruction.GetHeadingRangeEnd();
+		this.Styles       = oInstruction.GetStylesArray();
+
+		this.PageNumbers  = !oInstruction.IsSkipPageRefLvl();
+		this.RightTab     = "" === oInstruction.GetSeparator();
+
+		var oBeginChar = oComplexField.GetBeginChar();
+		if (oBeginChar && oBeginChar.GetRun() && oBeginChar.GetRun().GetParagraph())
+		{
+			var oTabs = oBeginChar.GetRun().GetParagraph().GetParagraphTabs();
+
+			if (oTabs.Tabs.length > 0)
+			{
+				this.TabLeader = oTabs.Tabs[oTabs.Tabs.length - 1].Leader;
+			}
+		}
+
+		this.ComplexField = oComplexField;
+	};
+	CTableOfContentsPr.prototype.InitFromSdtTOC = function(oSdtTOC)
+	{
+		this.ComplexField = oSdtTOC;
+	};
+	CTableOfContentsPr.prototype.CheckStylesType = function(oStyles)
+	{
+		if (oStyles)
+			this.StylesType = oStyles.GetTOCStylesType();
+	};
+	CTableOfContentsPr.prototype.get_Hyperlink = function()
+	{
+		return this.Hyperlink;
+	};
+	CTableOfContentsPr.prototype.put_Hyperlink = function(isHyperlink)
+	{
+		this.Hyperlink = isHyperlink;
+	};
+	CTableOfContentsPr.prototype.get_OutlineStart = function()
+	{
+		return this.OutlineStart;
+	};
+	CTableOfContentsPr.prototype.get_OutlineEnd = function()
+	{
+		return this.OutlineEnd;
+	};
+	CTableOfContentsPr.prototype.put_OutlineRange = function(nStart, nEnd)
+	{
+		this.OutlineStart = nStart;
+		this.OutlineEnd   = nEnd;
+	};
+	CTableOfContentsPr.prototype.get_StylesCount = function()
+	{
+		return this.Styles.length;
+	};
+	CTableOfContentsPr.prototype.get_StyleName = function(nIndex)
+	{
+		if (nIndex < 0 || nIndex >= this.Styles.length)
+			return "";
+
+		return this.Styles[nIndex].Name;
+	};
+	CTableOfContentsPr.prototype.get_StyleLevel = function(nIndex)
+	{
+		if (nIndex < 0 || nIndex >= this.Styles.length)
+			return -1;
+
+		return this.Styles[nIndex].Lvl;
+	};
+	CTableOfContentsPr.prototype.get_Styles = function()
+	{
+		return this.Styles;
+	};
+	CTableOfContentsPr.prototype.clear_Styles = function()
+	{
+		this.Styles = [];
+	};
+	CTableOfContentsPr.prototype.add_Style = function(sName, nLvl)
+	{
+		this.Styles.push({Name : sName, Lvl : nLvl});
+	};
+	CTableOfContentsPr.prototype.put_ShowPageNumbers = function(isShow)
+	{
+		this.PageNumbers = isShow;
+	};
+	CTableOfContentsPr.prototype.get_ShowPageNumbers = function()
+	{
+		return this.PageNumbers;
+	};
+	CTableOfContentsPr.prototype.put_RightAlignTab = function(isRightTab)
+	{
+		this.RightTab = isRightTab;
+	};
+	CTableOfContentsPr.prototype.get_RightAlignTab = function()
+	{
+		return this.RightTab;
+	};
+	CTableOfContentsPr.prototype.put_TabLeader = function(nTabLeader)
+	{
+		this.TabLeader = nTabLeader;
+	};
+	CTableOfContentsPr.prototype.get_TabLeader = function()
+	{
+		return this.TabLeader;
+	};
+	CTableOfContentsPr.prototype.get_StylesType = function()
+	{
+		return this.StylesType;
+	};
+	CTableOfContentsPr.prototype.put_StylesType = function(nType)
+	{
+		this.StylesType = nType;
+	};
+	CTableOfContentsPr.prototype.get_InternalClass = function()
+	{
+		return this.ComplexField;
+	};
+
+
+	window['Asc']['CTableOfContentsPr'] = window['Asc'].CTableOfContentsPr = CTableOfContentsPr;
+	CTableOfContentsPr.prototype['get_Hyperlink']       = CTableOfContentsPr.prototype.get_Hyperlink;
+	CTableOfContentsPr.prototype['put_Hyperlink']       = CTableOfContentsPr.prototype.put_Hyperlink;
+	CTableOfContentsPr.prototype['get_OutlineStart']    = CTableOfContentsPr.prototype.get_OutlineStart;
+	CTableOfContentsPr.prototype['get_OutlineEnd']      = CTableOfContentsPr.prototype.get_OutlineEnd;
+	CTableOfContentsPr.prototype['put_OutlineRange']    = CTableOfContentsPr.prototype.put_OutlineRange;
+	CTableOfContentsPr.prototype['get_StylesCount']     = CTableOfContentsPr.prototype.get_StylesCount;
+	CTableOfContentsPr.prototype['get_StyleName']       = CTableOfContentsPr.prototype.get_StyleName;
+	CTableOfContentsPr.prototype['get_StyleLevel']      = CTableOfContentsPr.prototype.get_StyleLevel;
+	CTableOfContentsPr.prototype['clear_Styles']        = CTableOfContentsPr.prototype.clear_Styles;
+	CTableOfContentsPr.prototype['add_Style']           = CTableOfContentsPr.prototype.add_Style;
+	CTableOfContentsPr.prototype['put_ShowPageNumbers'] = CTableOfContentsPr.prototype.put_ShowPageNumbers;
+	CTableOfContentsPr.prototype['get_ShowPageNumbers'] = CTableOfContentsPr.prototype.get_ShowPageNumbers;
+	CTableOfContentsPr.prototype['put_RightAlignTab']   = CTableOfContentsPr.prototype.put_RightAlignTab;
+	CTableOfContentsPr.prototype['get_RightAlignTab']   = CTableOfContentsPr.prototype.get_RightAlignTab;
+	CTableOfContentsPr.prototype['get_TabLeader']       = CTableOfContentsPr.prototype.get_TabLeader;
+	CTableOfContentsPr.prototype['put_TabLeader']       = CTableOfContentsPr.prototype.put_TabLeader;
+	CTableOfContentsPr.prototype['get_StylesType']      = CTableOfContentsPr.prototype.get_StylesType;
+	CTableOfContentsPr.prototype['put_StylesType']      = CTableOfContentsPr.prototype.put_StylesType;
+	CTableOfContentsPr.prototype['get_InternalClass']   = CTableOfContentsPr.prototype.get_InternalClass;
+
+
+	/**
+	 * Класс для работы с настройками стиля
+	 * @constructor
+	 */
+	function CAscStyle()
+	{
+		this.Name = "";
+		this.Type = Asc.c_oAscStyleType.Paragraph;
+
+		this.qFormat    = undefined;
+		this.uiPriority = undefined;
+
+		this.StyleId  = "";
+	}
+	CAscStyle.prototype.get_Name = function()
+	{
+		return this.Name;
+	};
+	CAscStyle.prototype.put_Name = function(sName)
+	{
+		this.Name = sName;
+	};
+	CAscStyle.prototype.get_Type = function()
+	{
+		return this.Type;
+	};
+	CAscStyle.prototype.put_Type = function(nType)
+	{
+		this.Type = nType;
+	};
+	CAscStyle.prototype.get_QFormat = function()
+	{
+		return this.qFormat;
+	};
+	CAscStyle.prototype.put_QFormat = function(isQFormat)
+	{
+		this.qFormat = isQFormat;
+	};
+	CAscStyle.prototype.get_UIPriority = function()
+	{
+		return this.uiPriority;
+	};
+	CAscStyle.prototype.put_UIPriority = function(nPriority)
+	{
+		this.uiPriority = nPriority;
+	};
+	CAscStyle.prototype.get_StyleId = function()
+	{
+		return this.StyleId;
+	};
+
+	window['Asc']['CAscStyle'] = window['Asc'].CAscStyle = CAscStyle;
+	CAscStyle.prototype['get_Name']       = CAscStyle.prototype.get_Name;
+	CAscStyle.prototype['put_Name']       = CAscStyle.prototype.put_Name;
+	CAscStyle.prototype['get_Type']       = CAscStyle.prototype.get_Type;
+	CAscStyle.prototype['put_Type']       = CAscStyle.prototype.put_Type;
+	CAscStyle.prototype['get_QFormat']    = CAscStyle.prototype.get_QFormat;
+	CAscStyle.prototype['put_QFormat']    = CAscStyle.prototype.put_QFormat;
+	CAscStyle.prototype['get_UIPriority'] = CAscStyle.prototype.get_UIPriority;
+	CAscStyle.prototype['put_UIPriority'] = CAscStyle.prototype.put_UIPriority;
+	CAscStyle.prototype['get_StyleId']    = CAscStyle.prototype.get_StyleId;
+
+
+	/**
+	 * Класс для работы с настройками нумерации
+	 * @constructor
+	 */
+	function CAscNumbering()
+	{
+		this.NumId = "";
+		this.Lvl   = new Array(9);
+		for (var nLvl = 0; nLvl < 9; ++nLvl)
+		{
+			this.Lvl[nLvl] = new CAscNumberingLvl(nLvl);
+		}
+	}
+	CAscNumbering.prototype.get_InternalId = function()
+	{
+		return this.NumId;
+	};
+	CAscNumbering.prototype.get_Lvl = function(nLvl)
+	{
+		if (nLvl < 0)
+			return this.Lvl[0];
+		else if (nLvl > 8)
+			return this.Lvl[8];
+		else if (!this.Lvl[nLvl])
+			return this.Lvl[0];
+
+		return this.Lvl[nLvl];
+	};
+	window['Asc']['CAscNumbering'] = window['Asc'].CAscNumbering = CAscNumbering;
+	CAscNumbering.prototype['get_InternalId'] = CAscNumbering.prototype.get_InternalId;
+	CAscNumbering.prototype['get_Lvl']        = CAscNumbering.prototype.get_Lvl;
+
+
+	/**
+	 * Класс для работы с текстом конкретного уровня нумерации
+	 * @constructor
+	 */
+	function CAscNumberingLvlText(Type, Value)
+	{
+		this.Type  = undefined !== Type ? Type : Asc.c_oAscNumberingLvlTextType.Text;
+		this.Value = undefined !== Value ? Value : "";
+	}
+	CAscNumberingLvlText.prototype.get_Type = function()
+	{
+		return this.Type;
+	};
+	CAscNumberingLvlText.prototype.put_Type = function(nType)
+	{
+		this.Type = nType;
+	};
+	CAscNumberingLvlText.prototype.get_Value = function()
+	{
+		return this.Value;
+	};
+	CAscNumberingLvlText.prototype.put_Value = function(vVal)
+	{
+		this.Value = vVal;
+	};
+	window['Asc']['CAscNumberingLvlText'] = window['Asc'].CAscNumberingLvlText = CAscNumberingLvlText;
+	CAscNumberingLvlText.prototype['get_Type']  = CAscNumberingLvlText.prototype.get_Type;
+	CAscNumberingLvlText.prototype['put_Type']  = CAscNumberingLvlText.prototype.put_Type;
+	CAscNumberingLvlText.prototype['get_Value'] = CAscNumberingLvlText.prototype.get_Value;
+	CAscNumberingLvlText.prototype['put_Value'] = CAscNumberingLvlText.prototype.put_Value;
+
+
+	/**
+	 * Класс для работы с настройками конкретного уровня нумерации
+	 * @constructor
+	 */
+	function CAscNumberingLvl(nLvlNum)
+	{
+		this.LvlNum  = nLvlNum;
+		this.Format  = Asc.c_oAscNumberingFormat.Bullet;
+		this.Text    = [];
+		this.TextPr  = new AscCommonWord.CTextPr();
+		this.ParaPr  = new AscCommonWord.CParaPr();
+		this.Start   = 1;
+		this.Restart = -1;
+		this.Suff    = Asc.c_oAscNumberingSuff.Tab;
+		this.Align   = AscCommon.align_Left;
+	}
+	CAscNumberingLvl.prototype.get_LvlNum = function()
+	{
+		return this.LvlNum;
+	};
+	CAscNumberingLvl.prototype.get_Format = function()
+	{
+		return this.Format;
+	};
+	CAscNumberingLvl.prototype.put_Format = function(nFormat)
+	{
+		this.Format = nFormat;
+	};
+	CAscNumberingLvl.prototype.get_Text = function()
+	{
+		return this.Text;
+	};
+	CAscNumberingLvl.prototype.put_Text = function(arrText)
+	{
+		this.Text = arrText;
+	};
+	CAscNumberingLvl.prototype.get_TextPr = function()
+	{
+		return this.TextPr;
+	};
+	CAscNumberingLvl.prototype.get_ParaPr = function()
+	{
+		return this.ParaPr;
+	};
+	CAscNumberingLvl.prototype.get_Start = function()
+	{
+		return this.Start;
+	};
+	CAscNumberingLvl.prototype.put_Start = function(nStart)
+	{
+		this.Start = nStart;
+	};
+	CAscNumberingLvl.prototype.get_Restart = function()
+	{
+		return this.Restart;
+	};
+	CAscNumberingLvl.prototype.put_Restart = function(nRestart)
+	{
+		this.Restart = nRestart;
+	};
+	CAscNumberingLvl.prototype.get_Suff = function()
+	{
+		return this.Suff;
+	};
+	CAscNumberingLvl.prototype.put_Suff = function(nSuff)
+	{
+		this.Suff = nSuff;
+	};
+	CAscNumberingLvl.prototype.get_Align = function()
+	{
+		return this.Align;
+	};
+	CAscNumberingLvl.prototype.put_Align = function(nAlign)
+	{
+		this.Align = nAlign;
+	};
+	window['Asc']['CAscNumberingLvl'] = window['Asc'].CAscNumberingLvl = CAscNumberingLvl;
+	CAscNumberingLvl.prototype['get_LvlNum']  = CAscNumberingLvl.prototype.get_LvlNum;
+	CAscNumberingLvl.prototype['get_Format']  = CAscNumberingLvl.prototype.get_Format;
+	CAscNumberingLvl.prototype['put_Format']  = CAscNumberingLvl.prototype.put_Format;
+	CAscNumberingLvl.prototype['get_Text']    = CAscNumberingLvl.prototype.get_Text;
+	CAscNumberingLvl.prototype['put_Text']    = CAscNumberingLvl.prototype.put_Text;
+	CAscNumberingLvl.prototype['get_TextPr']  = CAscNumberingLvl.prototype.get_TextPr;
+	CAscNumberingLvl.prototype['get_ParaPr']  = CAscNumberingLvl.prototype.get_ParaPr;
+	CAscNumberingLvl.prototype['get_Start']   = CAscNumberingLvl.prototype.get_Start;
+	CAscNumberingLvl.prototype['put_Start']   = CAscNumberingLvl.prototype.put_Start;
+	CAscNumberingLvl.prototype['get_Restart'] = CAscNumberingLvl.prototype.get_Restart;
+	CAscNumberingLvl.prototype['put_Restart'] = CAscNumberingLvl.prototype.put_Restart;
+	CAscNumberingLvl.prototype['get_Suff']    = CAscNumberingLvl.prototype.get_Suff;
+	CAscNumberingLvl.prototype['put_Suff']    = CAscNumberingLvl.prototype.put_Suff;
+	CAscNumberingLvl.prototype['get_Align']   = CAscNumberingLvl.prototype.get_Align;
+	CAscNumberingLvl.prototype['put_Align']   = CAscNumberingLvl.prototype.put_Align;
+
+
+	function CAscWatermarkProperties()
+	{
+		this.Type = c_oAscWatermarkType.None;
+
+		this.Text = null;
+		this.TextPr = null;
+		this.Opacity = null;
+		this.IsDiagonal = null;
+
+		this.ImageUrl = null;
+		this.Scale = null;
+
+		this.DivId = null;
+		this.Api = null;
+	}
+
+	window['Asc']['CAscWatermarkProperties'] = window['Asc'].CAscWatermarkProperties = CAscWatermarkProperties;
+
+	CAscWatermarkProperties.prototype['put_Api'] = CAscWatermarkProperties.prototype.put_Api = function (v) {
+		this.Api = v;
+	};
+	CAscWatermarkProperties.prototype['put_Type'] = CAscWatermarkProperties.prototype.put_Type = function (v) {
+		this.Type = v;
+	};
+
+	CAscWatermarkProperties.prototype['get_Type'] = CAscWatermarkProperties.prototype.get_Type = function () {
+		return this.Type;
+	};
+	CAscWatermarkProperties.prototype['put_Text'] = CAscWatermarkProperties.prototype.put_Text = function (v) {
+		this.Text = v;
+	};
+	CAscWatermarkProperties.prototype['get_Text'] = CAscWatermarkProperties.prototype.get_Text = function () {
+		return this.Text;
+	};
+	CAscWatermarkProperties.prototype['put_TextPr'] = CAscWatermarkProperties.prototype.put_TextPr = function (v) {
+		this.TextPr = v;
+	};
+	CAscWatermarkProperties.prototype['get_TextPr'] = CAscWatermarkProperties.prototype.get_TextPr = function () {
+		return this.TextPr;
+	};
+	CAscWatermarkProperties.prototype['put_Opacity'] = CAscWatermarkProperties.prototype.put_Opacity = function (v) {
+		this.Opacity = v;
+	};
+	CAscWatermarkProperties.prototype['get_Opacity'] = CAscWatermarkProperties.prototype.get_Opacity = function () {
+		return this.Opacity;
+	};
+	CAscWatermarkProperties.prototype['put_IsDiagonal'] = CAscWatermarkProperties.prototype.put_IsDiagonal = function (v) {
+		this.IsDiagonal = v;
+	};
+	CAscWatermarkProperties.prototype['get_IsDiagonal'] = CAscWatermarkProperties.prototype.get_IsDiagonal = function () {
+		return this.IsDiagonal;
+	};
+
+	CAscWatermarkProperties.prototype['put_ImageUrl'] = CAscWatermarkProperties.prototype.put_ImageUrl = function (sUrl, token) {
+		var _this = this;
+		if(!_this.Api)
+		{
+			return;
+		}
+		AscCommon.sendImgUrls(_this.Api, [sUrl], function(data) {
+			if (data && data[0])
+			{
+				_this.Api.ImageLoader.LoadImagesWithCallback([data[0].url], function(){
+					_this.ImageUrl = data[0].url;
+					_this.Type = Asc.c_oAscWatermarkType.Image;
+					_this.drawTexture();
+					_this.Api.sendEvent("asc_onWatermarkImageLoaded");
+				});
+			}
+		}, false, undefined, token);
+	};
+	CAscWatermarkProperties.prototype['put_ImageUrl2'] = CAscWatermarkProperties.prototype.put_ImageUrl2 = function (sUrl) {
+		this.ImageUrl = sUrl;
+	};
+	CAscWatermarkProperties.prototype['get_ImageUrl'] = CAscWatermarkProperties.prototype.get_ImageUrl = function () {
+		return this.ImageUrl;
+	};
+	CAscWatermarkProperties.prototype['put_Scale'] = CAscWatermarkProperties.prototype.put_Scale = function (v) {
+		this.Scale = v;
+	};
+	CAscWatermarkProperties.prototype['get_Scale'] = CAscWatermarkProperties.prototype.get_Scale = function () {
+		return this.Scale;
+	};
+	CAscWatermarkProperties.prototype['put_DivId'] = CAscWatermarkProperties.prototype.put_DivId = function (v) {
+		this.DivId = v;
+		this.drawTexture();
+	};
+	CAscWatermarkProperties.prototype['updateView'] = CAscWatermarkProperties.prototype.updateView = function (v) {
+		this.drawTexture();
+	};
+	CAscWatermarkProperties.prototype['showFileDialog'] = CAscWatermarkProperties.prototype.showFileDialog = function () {
+		if(!this.Api || !this.DivId){
+			return;
+		}
+		var t = this.Api;
+		var _this = this;
+		AscCommon.ShowImageFileDialog(t.documentId, t.documentUserId, t.CoAuthoringApi.get_jwt(), function(error, files)
+			{
+				if (Asc.c_oAscError.ID.No !== error)
+				{
+					t.sendEvent("asc_onError", error, Asc.c_oAscError.Level.NoCritical);
+				}
+				else
+				{
+					t.sync_StartAction(Asc.c_oAscAsyncActionType.BlockInteraction, Asc.c_oAscAsyncAction.UploadImage);
+					AscCommon.UploadImageFiles(files, t.documentId, t.documentUserId, t.CoAuthoringApi.get_jwt(), function(error, urls)
+					{
+						if (Asc.c_oAscError.ID.No !== error)
+						{
+							t.sendEvent("asc_onError", error, Asc.c_oAscError.Level.NoCritical);
+							t.sync_EndAction(Asc.c_oAscAsyncActionType.BlockInteraction, Asc.c_oAscAsyncAction.UploadImage);
+						}
+						else
+						{
+							t.ImageLoader.LoadImagesWithCallback(urls, function(){
+								if(urls.length > 0)
+								{
+									_this.ImageUrl = urls[0];
+									_this.Type = Asc.c_oAscWatermarkType.Image;
+									_this.drawTexture();
+									t.sendEvent("asc_onWatermarkImageLoaded");
+								}
+								t.sync_EndAction(Asc.c_oAscAsyncActionType.BlockInteraction, Asc.c_oAscAsyncAction.UploadImage);
+							});
+						}
+					});
+				}
+			},
+			function(error)
+			{
+				if (Asc.c_oAscError.ID.No !== error)
+				{
+					t.sendEvent("asc_onError", error, Asc.c_oAscError.Level.NoCritical);
+				}
+				t.sync_StartAction(Asc.c_oAscAsyncActionType.BlockInteraction, Asc.c_oAscAsyncAction.UploadImage);
+			});
+	};
+
+	CAscWatermarkProperties.prototype['loadImageUrl'] = CAscWatermarkProperties.prototype.loadImageUrl = function(sUrl, token)	{
+		var _this = this;
+		if(!_this.Api)
+		{
+			return;
+		}
+		AscCommon.sendImgUrls(_this.Api, [sUrl], function(data) {
+			if (data && data[0])
+			{
+				_this.ImageLoader.LoadImagesWithCallback([data[0].url], function(){
+					_this.ImageUrl = data[0].url;
+					_this.Type = Asc.c_oAscWatermarkType.Image;
+					_this.drawTexture();
+					_this.sendEvent("asc_onWatermarkImageLoaded");
+				});
+			}
+		}, false, undefined, token);
+	};
+
+	CAscWatermarkProperties.prototype['drawTexture'] = CAscWatermarkProperties.prototype.drawTexture = function () {
+		if(!this.ImageUrl || !this.Api){
+			return;
+		}
+		var oDiv = document.getElementById(this.DivId);
+		if(!oDiv){
+			return;
+		}
+		var aChildren = oDiv.children;
+		var oCanvas = null;
+		for(var i = 0; i < aChildren.length; ++i){
+			if(aChildren[i].nodeName && aChildren[i].nodeName.toUpperCase() === 'CANVAS'){
+				oCanvas = aChildren[i];
+				break;
+			}
+		}
+		var nWidth = oDiv.clientWidth;
+		var nHeight = oDiv.clientHeight;
+		if(null === oCanvas){
+			oCanvas = document.createElement('canvas');
+			oCanvas.width = parseInt(nWidth);
+			oCanvas.height = parseInt(nHeight);
+			oDiv.appendChild(oCanvas);
+		}
+		var oContext = oCanvas.getContext('2d');
+		oContext.clearRect(0, 0, oCanvas.width, oCanvas.height);
+		var _img = this.Api.ImageLoader.map_image_index[AscCommon.getFullImageSrc2(this.ImageUrl)];
+		if (_img != undefined && _img.Image != null && _img.Status != AscFonts.ImageLoadStatus.Loading)
+		{
+			var _x = 0;
+			var _y = 0;
+			var _w = Math.max(_img.Image.width, 1);
+			var _h = Math.max(_img.Image.height, 1);
+
+			var dAspect1 = nWidth / nHeight;
+			var dAspect2 = _w / _h;
+
+			_w = nWidth;
+			_h = nHeight;
+			if (dAspect1 >= dAspect2)
+			{
+				_w = dAspect2 * nHeight;
+				_x = (nWidth - _w) / 2;
+			}
+			else
+			{
+				_h = _w / dAspect2;
+				_y = (nHeight - _h) / 2;
+			}
+			oContext.drawImage(_img.Image, _x, _y, _w, _h);
+		}
+		else if (!_img || !_img.Image)
+		{
+			oContext.lineWidth = 1;
+
+			oContext.beginPath();
+			oContext.moveTo(0, 0);
+			oContext.lineTo(nWidth, nHeight);
+			oContext.moveTo(nWidth, 0);
+			oContext.lineTo(0, nHeight);
+			oContext.strokeStyle = "#FF0000";
+			oContext.stroke();
+
+			oContext.beginPath();
+			oContext.moveTo(0, 0);
+			oContext.lineTo(nWidth, 0);
+			oContext.lineTo(nWidth, nHeight);
+			oContext.lineTo(0, nHeight);
+			oContext.closePath();
+
+			oContext.strokeStyle = "#000000";
+			oContext.stroke();
+			oContext.beginPath();
+		}
+	};
 })(window, undefined);

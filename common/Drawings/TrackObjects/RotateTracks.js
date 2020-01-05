@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2019
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -12,8 +12,8 @@
  * warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR  PURPOSE. For
  * details, see the GNU AGPL at: http://www.gnu.org/licenses/agpl-3.0.html
  *
- * You can contact Ascensio System SIA at Lubanas st. 125a-25, Riga, Latvia,
- * EU, LV-1021.
+ * You can contact Ascensio System SIA at 20A-12 Ernesta Birznieka-Upisha
+ * street, Riga, Latvia, EU, LV-1050.
  *
  * The  interactive user interfaces in modified source and object code versions
  * of the Program must display Appropriate Legal Notices, as required under
@@ -167,7 +167,7 @@ function OverlayObject(geometry, extX, extY, brush, pen, transform )
                 && this.pen.Fill.fill.type != c_oAscFill.FILL_TYPE_NOFILL && this.pen.Fill.fill.type != c_oAscFill.FILL_TYPE_NONE)
                 || (this.brush && this.brush.fill && this.brush.fill
                 && this.brush.fill.type != c_oAscFill.FILL_TYPE_NOFILL && this.brush.fill.type != c_oAscFill.FILL_TYPE_NONE) );
-    }
+    };
 
 
     this.check_bounds = function(boundsChecker)
@@ -186,7 +186,7 @@ function OverlayObject(geometry, extX, extY, brush, pen, transform )
             boundsChecker._z();
             boundsChecker._e();
         }
-    }
+    };
 }
 
 function ObjectToDraw(brush, pen, extX, extY, geometry, transform, x, y, oComment)
@@ -201,7 +201,7 @@ function ObjectToDraw(brush, pen, extX, extY, geometry, transform, x, y, oCommen
     this.pen = pen;
     this.brush = brush;
 
-    /*������� �������*/
+	/*позиция символа*/
     this.x = x;
     this.y = y;
 }
@@ -350,6 +350,7 @@ ObjectToDraw.prototype =
 };
 function RotateTrackShapeImage(originalObject)
 {
+    this.bIsTracked = false;
     this.originalObject = originalObject;
     this.transform = new CMatrix();
     var brush;
@@ -362,7 +363,7 @@ function RotateTrackShapeImage(originalObject)
     {
         brush = originalObject.brush;
     }
-    this.overlayObject = new OverlayObject(originalObject.spPr.geometry, originalObject.extX, originalObject.extY, brush, originalObject.pen, this.transform);
+    this.overlayObject = new OverlayObject(originalObject.getGeom(), originalObject.extX, originalObject.extY, brush, originalObject.pen, this.transform);
 
     this.angle = originalObject.rot;
     var full_flip_h = this.originalObject.getFullFlipH();
@@ -379,6 +380,7 @@ function RotateTrackShapeImage(originalObject)
 
     this.track = function(angle, e)
     {
+        this.bIsTracked = true;
         var new_rot = angle + this.originalObject.rot;
         while(new_rot < 0)
             new_rot += 2*Math.PI;
@@ -429,6 +431,9 @@ function RotateTrackShapeImage(originalObject)
 
     this.trackEnd = function()
     {
+        if(!this.bIsTracked){
+            return;
+        }
         AscFormat.CheckSpPrXfrm(this.originalObject);
         this.originalObject.spPr.xfrm.setRot(this.angle);
     };
@@ -480,6 +485,7 @@ function RotateTrackShapeImage(originalObject)
 
 function RotateTrackGroup(originalObject)
 {
+    this.bIsTracked = false;
     this.originalObject = originalObject;
     this.transform = new CMatrix();
 
@@ -490,13 +496,16 @@ function RotateTrackGroup(originalObject)
     this.arrTransforms2 = [];
     var arr_graphic_objects = originalObject.getArrGraphicObjects();
     var group_invert_transform = originalObject.getInvertTransform();
-    for(var i = 0; i < arr_graphic_objects.length; ++i)
+    if(group_invert_transform)
     {
-        var gr_obj_transform_copy = arr_graphic_objects[i].getTransformMatrix().CreateDublicate();
-        global_MatrixTransformer.MultiplyAppend(gr_obj_transform_copy, group_invert_transform);
-        this.arrTransforms2[i] = gr_obj_transform_copy;
-        this.overlayObjects[i] = new OverlayObject(arr_graphic_objects[i].spPr.geometry, arr_graphic_objects[i].extX, arr_graphic_objects[i].extY,
-            arr_graphic_objects[i].brush,  arr_graphic_objects[i].pen, new CMatrix());
+        for(var i = 0; i < arr_graphic_objects.length; ++i)
+        {
+            var gr_obj_transform_copy = arr_graphic_objects[i].getTransformMatrix().CreateDublicate();
+            global_MatrixTransformer.MultiplyAppend(gr_obj_transform_copy, group_invert_transform);
+            this.arrTransforms2[i] = gr_obj_transform_copy;
+            this.overlayObjects[i] = new OverlayObject(arr_graphic_objects[i].getGeom(), arr_graphic_objects[i].extX, arr_graphic_objects[i].extY,
+                arr_graphic_objects[i].brush,  arr_graphic_objects[i].pen, new CMatrix());
+        }
     }
 
 
@@ -548,6 +557,7 @@ function RotateTrackGroup(originalObject)
 
     this.track = function(angle, e)
     {
+        this.bIsTracked = true;
         var new_rot = angle + this.originalObject.rot;
         while(new_rot < 0)
             new_rot += 2*Math.PI;
@@ -589,15 +599,29 @@ function RotateTrackGroup(originalObject)
         }
     };
 
-    this.trackEnd = function()
+    this.trackEnd = function(bWord)
     {
-        AscFormat.CheckSpPrXfrm(this.originalObject);
+        if(!this.bIsTracked){
+            return;
+        }
+        var x = this.originalObject.x;
+        var y = this.originalObject.y;
+        if(bWord){
+            this.originalObject.x = 0;
+            this.originalObject.y = 0;
+        }
+        AscFormat.CheckSpPrXfrm3(this.originalObject);
+        if(bWord){
+            this.originalObject.x = x;
+            this.originalObject.y = y;
+        }
         this.originalObject.spPr.xfrm.setRot(this.angle);
     }
 }
 
 function Chart3dAdjustTrack(oChartSpace, numHandle, startX, startY)
 {
+    this.bIsTracked = false;
     this.chartSpace = oChartSpace;
 
 
@@ -635,7 +659,7 @@ function Chart3dAdjustTrack(oChartSpace, numHandle, startX, startY)
 
 
     AscFormat.ExecuteNoHistory(function(){
-        this.view3D = oChartSpace.chart.view3D.createDuplicate();
+        this.view3D = oChartSpace.chart.getView3d();
         this.chartSizes = this.chartSpace.getChartSizes();
 
         this.cX = this.chartSizes.startX + this.chartSizes.w/2;
@@ -808,13 +832,24 @@ function Chart3dAdjustTrack(oChartSpace, numHandle, startX, startY)
 
     this.track = function(x, y)
     {
+        this.bIsTracked = true;
 
         var tx = this.chartSpace.invertTransform.TransformPointX(x, y);
         var ty = this.chartSpace.invertTransform.TransformPointY(x, y);
-        var deltaAng = 0;
-        var StratRotY = oChartSpace.chart.view3D && oChartSpace.chart.view3D.rotY ? oChartSpace.chart.view3D.rotY : 0;
-        deltaAng = -90*(tx - this.startX)/(this.chartSizes.w/2);
+
+        var _view3d = oChartSpace.chart.getView3d();
+        var StratRotY = _view3d && _view3d.rotY ? _view3d.rotY : 0;
+        var deltaAng = -90*(tx - this.startX)/(this.chartSizes.w/2);
         this.view3D.rotY = StratRotY + deltaAng;
+
+        if(_view3d.getRAngAx()){
+            if(this.view3D.rotY < 0){
+                this.view3D.rotY = 0;
+            }
+            if(this.view3D.rotY > 90){
+                this.view3D.rotY = 90;
+            }
+        }
         while(this.view3D.rotY < 0){
             this.view3D.rotY += 360;
         }
@@ -822,7 +857,7 @@ function Chart3dAdjustTrack(oChartSpace, numHandle, startX, startY)
             this.view3D.rotY -= 360;
         }
 
-        var StratRotX = oChartSpace.chart.view3D && oChartSpace.chart.view3D.rotX ? oChartSpace.chart.view3D.rotX : 0;
+        var StratRotX = _view3d && _view3d.rotX ? _view3d.rotX : 0;
         deltaAng = 90*(ty - this.startY)/(this.chartSizes.h/2);
         this.view3D.rotX = StratRotX + deltaAng;
 
@@ -858,6 +893,9 @@ function Chart3dAdjustTrack(oChartSpace, numHandle, startX, startY)
 
     this.trackEnd = function()
     {
+        if(!this.bIsTracked){
+            return;
+        }
         oChartSpace.chart.setView3D(this.view3D.createDuplicate());
         oChartSpace.setRecalculateInfo();
     }

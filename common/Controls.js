@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2019
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -12,8 +12,8 @@
  * warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR  PURPOSE. For
  * details, see the GNU AGPL at: http://www.gnu.org/licenses/agpl-3.0.html
  *
- * You can contact Ascensio System SIA at Lubanas st. 125a-25, Riga, Latvia,
- * EU, LV-1021.
+ * You can contact Ascensio System SIA at 20A-12 Ernesta Birznieka-Upisha
+ * street, Riga, Latvia, EU, LV-1050.
  *
  * The  interactive user interfaces in modified source and object code versions
  * of the Program must display Appropriate Legal Notices, as required under
@@ -38,10 +38,10 @@
 
 function CBounds()
 {
-    this.L      = 0;    // ����� �������
-    this.T      = 0;    // ������� �������
-    this.R      = 0;    // ������ ������� (���� ������ ���� isAbsR, �� ��� ���������� ������, � �� R)
-    this.B      = 0;    // ������� ������� (���� ������ ���� isAbsB, �� ��� ���������� ������, � �� B)
+    this.L      = 0;    // левая граница
+    this.T      = 0;    // верхняя граница
+    this.R      = 0;    // правая граница (если поднят флаг isAbsR, то это расстояние справа, а не R)
+    this.B      = 0;    // верхняя граница (если поднят флаг isAbsB, то это расстояние справа, а не B)
 
     this.isAbsL = false;
     this.isAbsT = false;

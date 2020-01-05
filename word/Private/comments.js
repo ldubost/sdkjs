@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2019
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -12,8 +12,8 @@
  * warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR  PURPOSE. For
  * details, see the GNU AGPL at: http://www.gnu.org/licenses/agpl-3.0.html
  *
- * You can contact Ascensio System SIA at Lubanas st. 125a-25, Riga, Latvia,
- * EU, LV-1021.
+ * You can contact Ascensio System SIA at 20A-12 Ernesta Birznieka-Upisha
+ * street, Riga, Latvia, EU, LV-1050.
  *
  * The  interactive user interfaces in modified source and object code versions
  * of the Program must display Appropriate Legal Notices, as required under
@@ -35,27 +35,27 @@
 Asc['asc_docs_api'].prototype.asc_addComment = function(AscCommentData)
 {
 	if (true === AscCommon.CollaborativeEditing.Get_GlobalLock())
-	{
 		return;
-	}
 
-	if (null == this.WordControl.m_oLogicDocument)
-	{
+	var oLogicDocument = this.WordControl.m_oLogicDocument;
+
+	if (!oLogicDocument)
 		return;
-	}
 
 	// Комментарий без цитаты позволяем добавить всегда
-	if (true !== this.can_AddQuotedComment() || false === this.WordControl.m_oLogicDocument.Document_Is_SelectionLocked(AscCommon.changestype_Paragraph_Content))
+	if (true !== this.can_AddQuotedComment() || false === oLogicDocument.Document_Is_SelectionLocked(AscCommon.changestype_Paragraph_Content, null, true, oLogicDocument.IsEditCommentsMode()))
 	{
 		var CommentData = new CCommentData();
 		CommentData.Read_FromAscCommentData(AscCommentData);
 
-		this.WordControl.m_oLogicDocument.Create_NewHistoryPoint(AscDFH.historydescription_Document_AddComment);
-		var Comment = this.WordControl.m_oLogicDocument.Add_Comment(CommentData);
+		this.WordControl.m_oLogicDocument.StartAction(AscDFH.historydescription_Document_AddComment);
+		var Comment = this.WordControl.m_oLogicDocument.AddComment(CommentData, AscCommentData.asc_getDocumentFlag());
 		if (null != Comment)
 		{
 			this.sync_AddComment(Comment.Get_Id(), CommentData);
 		}
+
+		this.WordControl.m_oLogicDocument.FinalizeAction();
 
 		return Comment.Get_Id();
 	}

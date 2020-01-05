@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2019
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -12,8 +12,8 @@
  * warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR  PURPOSE. For
  * details, see the GNU AGPL at: http://www.gnu.org/licenses/agpl-3.0.html
  *
- * You can contact Ascensio System SIA at Lubanas st. 125a-25, Riga, Latvia,
- * EU, LV-1021.
+ * You can contact Ascensio System SIA at 20A-12 Ernesta Birznieka-Upisha
+ * street, Riga, Latvia, EU, LV-1050.
  *
  * The  interactive user interfaces in modified source and object code versions
  * of the Program must display Appropriate Legal Notices, as required under
@@ -297,7 +297,7 @@ ChartPreviewManager.prototype.getChartByType = function(type)
 {
 	return AscFormat.ExecuteNoHistory(function()
 	{
-		var settings = new AscCommon.asc_ChartSettings();
+		var settings = new Asc.asc_ChartSettings();
 		settings.type = type;
 		var chartSeries = {series: this.getAscChartSeriesDefault(type), parsedHeaders: {bLeft: true, bTop: true}};
 		var chart_space = AscFormat.DrawingObjectsController.prototype._getChartSpace(chartSeries, settings, true);
@@ -437,71 +437,77 @@ ChartPreviewManager.prototype.clearPreviews = function()
 {
 	this.previewGroups.length = 0;
 };
-ChartPreviewManager.prototype.createChartPreview = function(type, styleIndex) {
-    return AscFormat.ExecuteNoHistory(function(){
-        if(!this.chartsByTypes[type])
-            this.chartsByTypes[type] = this.getChartByType(type);
-        var chart_space = this.chartsByTypes[type];
-		AscFormat.ApplyPresetToChartSpace(chart_space, AscCommon.g_oChartPresets[type][styleIndex]);
-		chart_space.recalcInfo.recalculateReferences = false;
-		chart_space.recalculate();
+ChartPreviewManager.prototype.createChartPreview = function(graphics, type, preset) {
+	if (!this.chartsByTypes[type]) {
+		this.chartsByTypes[type] = this.getChartByType(type);
+	}
+	var chart_space = this.chartsByTypes[type];
+	AscFormat.ApplyPresetToChartSpace(chart_space, preset);
+	chart_space.recalcInfo.recalculateReferences = false;
+	chart_space.recalculate();
+	graphics.save();
+	chart_space.draw(graphics);
+	graphics.restore();
+};
 
-        if (null === this._canvas_charts) {
-            this._canvas_charts = document.createElement('canvas');
-            this._canvas_charts.width = this.CHART_PREVIEW_WIDTH_PIX;
-            this._canvas_charts.height = this.CHART_PREVIEW_HEIGHT_PIX;
+ChartPreviewManager.prototype._isCachedChartStyles = function(chartType) {
+	var res = this.previewGroups.hasOwnProperty(chartType);
+	if(!res) {
+		this.previewGroups[chartType] = [];
+	}
+	return res;
+};
+ChartPreviewManager.prototype._getGraphics = function() {
+	if (null === this._canvas_charts) {
+		this._canvas_charts = document.createElement('canvas');
+		this._canvas_charts.width = this.CHART_PREVIEW_WIDTH_PIX;
+		this._canvas_charts.height = this.CHART_PREVIEW_HEIGHT_PIX;
 
-            if (AscCommon.AscBrowser.isRetina) {
-                this._canvas_charts.width = AscCommon.AscBrowser.convertToRetinaValue(this._canvas_charts.width, true);
-                this._canvas_charts.height = AscCommon.AscBrowser.convertToRetinaValue(this._canvas_charts.height, true);
-            }
-        }
+		if (AscCommon.AscBrowser.isRetina) {
+			this._canvas_charts.width = AscCommon.AscBrowser.convertToRetinaValue(this._canvas_charts.width, true);
+			this._canvas_charts.height = AscCommon.AscBrowser.convertToRetinaValue(this._canvas_charts.height, true);
+		}
+	}
 
-        var _canvas = this._canvas_charts;
-        var ctx = _canvas.getContext('2d');
-        var graphics = new AscCommon.CGraphics();
-        graphics.init(ctx, _canvas.width, _canvas.height, fChartSize, fChartSize);
-        graphics.m_oFontManager = AscCommon.g_fontManager;
-        graphics.transform(1,0,0,1,0,0);
-        chart_space.draw(graphics);
-        return _canvas.toDataURL("image/png");
-    }, this, []);
-
+	var _canvas = this._canvas_charts;
+	var ctx = _canvas.getContext('2d');
+	var graphics = new AscCommon.CGraphics();
+	graphics.init(ctx, _canvas.width, _canvas.height, fChartSize, fChartSize);
+	graphics.m_oFontManager = AscCommon.g_fontManager;
+	graphics.transform(1,0,0,1,0,0);
+	return graphics;
 };
 
 ChartPreviewManager.prototype.getChartPreviews = function(chartType) {
 	if (AscFormat.isRealNumber(chartType)) {
-		if (!this.previewGroups.hasOwnProperty(chartType)) {
-			this.previewGroups[chartType] = [];
-			var arr = this.previewGroups[chartType];
-			if(AscCommon.g_oChartPresets[chartType]){
-				var nStylesCount = AscCommon.g_oChartPresets[chartType].length;
-				for(var i = 0; i < nStylesCount; ++i)
-					arr.push(this.createChartPreview(chartType, i));
-			}
+		if (!this._isCachedChartStyles(chartType)) {
+			var presets = AscCommon.g_oChartPresets[chartType];
+			if (presets) {
+				AscFormat.ExecuteNoHistory(function () {
+					var graphics = this._getGraphics();
+					for (var i = 0; i < presets.length; ++i) {
+						this.createChartPreview(graphics, chartType, presets[i]);
+						if (!window["IS_NATIVE_EDITOR"]) {
+							var chartStyle = new AscCommon.CStyleImage();
+							chartStyle.name = i + 1;
+							chartStyle.image = this._canvas_charts.toDataURL("image/png");
+							this.previewGroups[chartType].push(chartStyle);
+						}
+					}
+				}, this, []);
 
-			if (Asc['editor'] && AscCommon.c_oEditorId.Spreadsheet === Asc['editor'].getEditorId()) {
-				var api_sheet = Asc['editor'];
-				var _graphics = api_sheet.wb.getWorksheet().shapeCtx;
-				if (_graphics.ClearLastFont)
-					_graphics.ClearLastFont();
+				var api = Asc['editor'];
+				if (api && AscCommon.c_oEditorId.Spreadsheet === api.getEditorId()) {
+					var _graphics = api.wb.shapeCtx;
+					if (_graphics.ClearLastFont) {
+						_graphics.ClearLastFont();
+					}
+				}
 			}
 
 		}
-		var group = this.previewGroups[chartType];
-		var objectGroup = [];
-
-		for (var style = 0; style <  group.length; ++style) {
-			var chartStyle = new AscFormat.asc_CChartStyle();
-			chartStyle.asc_setStyle(style + 1);
-			chartStyle.asc_setImageUrl(group[style]);
-			objectGroup.push(chartStyle);
-		}
-
-		return objectGroup;
 	}
-	else
-		return null;
+	return this.previewGroups[chartType];
 };
 
 function CreateAscColorByIndex(nIndex)
@@ -713,135 +719,74 @@ TextArtPreviewManager.prototype.getShapeByPrst = function(prst)
     }
 	var oContent = oShape.getDocContent();
 
-	var textStr = "abcde";
 	var TextSpacing = undefined;
 	switch(prst)
 	{
 		case "textButton":
 		{
 			TextSpacing = 4;
-			textStr = "abcde";
-			for(var i = 0; i < textStr.length; ++i)
-			{
-				oContent.Paragraph_Add(new ParaText(textStr[i]), false);
-			}
-
-			textStr = "Fghi";
-			oContent.Add_NewParagraph();
-			for(var i = 0; i < textStr.length; ++i)
-			{
-				oContent.Paragraph_Add(new ParaText(textStr[i]), false);
-			}
-
-			textStr = "Jklmn";
-			oContent.Add_NewParagraph();
-			for(var i = 0; i < textStr.length; ++i)
-			{
-				oContent.Paragraph_Add(new ParaText(textStr[i]), false);
-			}
+			oContent.AddText("abcde");
+			oContent.AddNewParagraph();
+			oContent.AddText("Fghi");
+			oContent.AddNewParagraph();
+			oContent.AddText("Jklmn");
 			break;
 		}
 		case "textArchUp":
 		case "textArchDown":
 		{
 			TextSpacing = 4;
-			textStr = "abcdefg";
-			for(var i = 0; i < textStr.length; ++i)
-			{
-				oContent.Paragraph_Add(new ParaText(textStr[i]), false);
-			}
+			oContent.AddText("abcdefg");
 			break;
 		}
 
 		case "textCircle":
 		{
 			TextSpacing = 4;
-			textStr = "abcdefghijklmnop";
-			for(var i = 0; i < textStr.length; ++i)
-			{
-				oContent.Paragraph_Add(new ParaText(textStr[i]), false);
-			}
+			oContent.AddText("abcdefghijklmnop");
 			break;
 		}
         case "textButtonPour":
         {
-            textStr = "abcde";
-            for(var i = 0; i < textStr.length; ++i)
-            {
-                oContent.Paragraph_Add(new ParaText(textStr[i]), false);
-            }
-
-            oContent.Add_NewParagraph();
-            textStr = "abc";
-            for(var i = 0; i < textStr.length; ++i)
-            {
-                oContent.Paragraph_Add(new ParaText(textStr[i]), false);
-            }
-
-
-            oContent.Add_NewParagraph();
-            textStr = "abcde";
-            for(var i = 0; i < textStr.length; ++i)
-            {
-                oContent.Paragraph_Add(new ParaText(textStr[i]), false);
-            }
+			oContent.AddText("abcde");
+            oContent.AddNewParagraph();
+			oContent.AddText("abc");
+            oContent.AddNewParagraph();
+			oContent.AddText("abcde");
             break;
         }
         case "textDeflateInflate":
         {
-            textStr = "abcde";
-            for(var i = 0; i < textStr.length; ++i)
-            {
-                oContent.Paragraph_Add(new ParaText(textStr[i]), false);
-            }
-            oContent.Add_NewParagraph();
-            textStr = "abcde";
-            for(var i = 0; i < textStr.length; ++i)
-            {
-                oContent.Paragraph_Add(new ParaText(textStr[i]), false);
-            }
+			oContent.AddText("abcde");
+            oContent.AddNewParagraph();
+			oContent.AddText("abcde");
             break;
         }
         case "textDeflateInflateDeflate":
         {
-            textStr = "abcde";
-            for(var i = 0; i < textStr.length; ++i)
-            {
-                oContent.Paragraph_Add(new ParaText(textStr[i]), false);
-            }
-            oContent.Add_NewParagraph();
-            textStr = "abcde";
-            for(var i = 0; i < textStr.length; ++i)
-            {
-                oContent.Paragraph_Add(new ParaText(textStr[i]), false);
-            }
-            oContent.Add_NewParagraph();
-            textStr = "abcde";
-            for(var i = 0; i < textStr.length; ++i)
-            {
-                oContent.Paragraph_Add(new ParaText(textStr[i]), false);
-            }
+			oContent.AddText("abcde");
+            oContent.AddNewParagraph();
+			oContent.AddText("abcde");
+            oContent.AddNewParagraph();
+			oContent.AddText("abcde");
             break;
         }
 		default:
 		{
-			textStr = "abcde";
-			for(var i = 0; i < textStr.length; ++i)
-			{
-				oContent.Paragraph_Add(new ParaText(textStr[i]), false);
-			}
+			oContent.AddText("abcde");
+			break;
 		}
 	}
 	oContent.Set_ApplyToAll(true);
-	oContent.Set_ParagraphAlign(AscCommon.align_Center);
-	oContent.Paragraph_Add(new ParaTextPr({FontSize: 36, Spacing: TextSpacing}));
+	oContent.SetParagraphAlign(AscCommon.align_Center);
+	oContent.AddToParagraph(new ParaTextPr({FontSize: 36, Spacing: TextSpacing}));
 	oContent.Set_ApplyToAll(false);
 
 	var oBodypr = oShape.getBodyPr().createDuplicate();
 	oBodypr.prstTxWarp = AscFormat.ExecuteNoHistory(
 		function()
 		{
-			return  CreatePrstTxWarpGeometry(prst)
+			return AscFormat.CreatePrstTxWarpGeometry(prst)
 		}, []);
 	if(!oShape.bWordShape)
 	{
@@ -876,6 +821,8 @@ TextArtPreviewManager.prototype.getShape =  function()
 			}
 		}
 	}
+
+
 	var oParentObjects = oShape.getParentObjects();
 	var oTrack = new AscFormat.NewShapeTrack("textRect", 0, 0, oParentObjects.theme, oParentObjects.master, oParentObjects.layout, oParentObjects.slide, 0);
 	oTrack.track({}, oShape.convertPixToMM(this.canvasWidth), oShape.convertPixToMM(this.canvasHeight));
@@ -916,23 +863,34 @@ TextArtPreviewManager.prototype.getTAShape = function()
 {
 	if(!this.TAShape)
 	{
+
+		var MainLogicDocument = (editor && editor.WordControl && editor.WordControl.m_oLogicDocument ? editor && editor.WordControl && editor.WordControl.m_oLogicDocument : null);
+		var TrackRevisions = (MainLogicDocument && MainLogicDocument.IsTrackRevisions ? MainLogicDocument.IsTrackRevisions() : false);
+		if (MainLogicDocument && true === TrackRevisions)
+			MainLogicDocument.SetTrackRevisions(false);
 		var oShape = this.getShape();
         if(!oShape)
         {
+			if (MainLogicDocument && true === TrackRevisions)
+				MainLogicDocument.SetTrackRevisions(true);
             return null;
         }
 		var oContent = oShape.getDocContent();
-		var sText = "Ta";
-		var oParagraph = oContent.Content[0];
-		for(var i = 0; i < sText.length; ++i)
+		if(oContent)
 		{
-			oContent.Paragraph_Add(new ParaText(sText[i]), false);
+			if(oContent.MoveCursorToStartPos)
+			{
+				oContent.MoveCursorToStartPos();
+			}
+			oContent.AddText("Ta");
+			oContent.Set_ApplyToAll(true);
+			oContent.AddToParagraph(new ParaTextPr({FontSize: 109, RFonts: {Ascii : {Name: "Arial", Index: -1}}}));
+			oContent.SetParagraphAlign(AscCommon.align_Center);
+			oContent.SetParagraphIndent({FirstLine: 0, Left: 0, Right: 0});
+			oContent.Set_ApplyToAll(false);
 		}
-		oContent.Set_ApplyToAll(true);
-		oContent.Paragraph_Add(new ParaTextPr({FontSize: 109, RFonts: {Ascii : {Name: "Arial", Index: -1}}}));
-		oContent.Set_ParagraphAlign(AscCommon.align_Center);
-		oContent.Set_ParagraphIndent({FirstLine: 0, Left: 0, Right: 0});
-		oContent.Set_ApplyToAll(false);
+		if (MainLogicDocument && true === TrackRevisions)
+			MainLogicDocument.SetTrackRevisions(true);
 		this.TAShape = oShape;
 	}
 	return this.TAShape;
@@ -998,7 +956,7 @@ TextArtPreviewManager.prototype.generateTextArtStyles = function()
         oContent.Set_ApplyToAll(true);
         for(var i = 0; i < this.aStylesByIndex.length; ++i)
         {
-            oContent.Paragraph_Add(new ParaTextPr(this.aStylesByIndex[i]));
+            oContent.AddToParagraph(new ParaTextPr(this.aStylesByIndex[i]));
             graphics.init(ctx, _canvas.width, _canvas.height, oShape.extX, oShape.extY);
             graphics.transform(1,0,0,1,0,0);
             oShape.recalcText();
@@ -1029,15 +987,15 @@ function GenerateWordArtPrewiewCode()
 	var oWordArtPreview = new TextArtPreviewManager();
 	var i, j;
 	var oRetString =  "g_PresetTxWarpTypes = \n [";
-	for(i = 0; i < g_PresetTxWarpTypes.length; ++i)
+	for(i = 0; i < AscCommon.g_PresetTxWarpTypes.length; ++i)
 	{
-		var aByTypes = g_PresetTxWarpTypes[i];
+		var aByTypes = AscCommon.g_PresetTxWarpTypes[i];
 		oRetString += "\n\t[";
 		for(j = 0; j < aByTypes.length; ++j)
 		{
 			oRetString += "\n\t\t{Type: \"" + aByTypes[j]['Type'] + "\", Image: \"" + oWordArtPreview.getWordArtPreview(aByTypes[j]['Image']) + "\"}" + ((j === aByTypes.length - 1) ? "" : ",");
 		}
-		oRetString += "\n\t]" + (i < (g_PresetTxWarpTypes.length - 1) ? "," : "");
+		oRetString += "\n\t]" + (i < (AscCommon.g_PresetTxWarpTypes.length - 1) ? "," : "");
 	}
 	oRetString += "\n];";
 	return oRetString;

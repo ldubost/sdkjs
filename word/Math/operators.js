@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2019
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -12,8 +12,8 @@
  * warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR  PURPOSE. For
  * details, see the GNU AGPL at: http://www.gnu.org/licenses/agpl-3.0.html
  *
- * You can contact Ascensio System SIA at Lubanas st. 125a-25, Riga, Latvia,
- * EU, LV-1021.
+ * You can contact Ascensio System SIA at 20A-12 Ernesta Birznieka-Upisha
+ * street, Riga, Latvia, EU, LV-1050.
  *
  * The  interactive user interfaces in modified source and object code versions
  * of the Program must display Appropriate Legal Notices, as required under
@@ -3095,7 +3095,7 @@ COperator.prototype.IsArrow = function()
 
     var bArrow = this.typeOper == ARROW_LEFT || this.typeOper == ARROW_RIGHT || this.typeOper == ARROW_LR,
         bDoubleArrow = this.typeOper == DOUBLE_LEFT_ARROW || this.typeOper == DOUBLE_RIGHT_ARROW || this.typeOper == DOUBLE_ARROW_LR,
-        bAccentArrow = his.typeOper == ACCENT_ARROW_LEFT || this.typeOper == ACCENT_ARROW_RIGHT || this.typeOper == ACCENT_ARROW_LR || this.typeOper == ACCENT_HALF_ARROW_LEFT || this.typeOper == ACCENT_HALF_ARROW_RIGHT;
+        bAccentArrow = this.typeOper == ACCENT_ARROW_LEFT || this.typeOper == ACCENT_ARROW_RIGHT || this.typeOper == ACCENT_ARROW_LR || this.typeOper == ACCENT_HALF_ARROW_LEFT || this.typeOper == ACCENT_HALF_ARROW_RIGHT;
 
     return bArrow || bDoubleArrow;
 };
@@ -3456,12 +3456,12 @@ CDelimiter.prototype.Recalculate_Range = function(PRS, ParaPr, Depth)
         this.BrGapRight = this.GapRight + this.endOper.size.width;
     }
 };
-CDelimiter.prototype.Recalculate_MinMaxContentWidth = function(MinMax)
+CDelimiter.prototype.RecalculateMinMaxContentWidth = function(MinMax)
 {
     this.BrGapLeft  = this.GapLeft  + this.begOper.size.width;
     this.BrGapRight = this.GapRight + this.endOper.size.width;
 
-    CMathBase.prototype.Recalculate_MinMaxContentWidth.call(this, MinMax);
+    CMathBase.prototype.RecalculateMinMaxContentWidth.call(this, MinMax);
 };
 CDelimiter.prototype.Is_EmptyGaps = function()
 {
@@ -3919,7 +3919,7 @@ CDelimiter.prototype.Get_DeletedItemsThroughInterface = function()
             var CtrPrp = this.Get_CtrPrp();
             var NewRun = new ParaRun(this.ParaMath.Paragraph, true);
             NewRun.Apply_Pr(CtrPrp);
-            NewRun.Concat_ToContent( [NewSpace] );
+            NewRun.ConcatToContent( [NewSpace] );
 
             DeletedItems = DeletedItems.concat(NewRun);
 

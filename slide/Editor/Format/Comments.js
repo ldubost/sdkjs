@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2019
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -12,8 +12,8 @@
  * warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR  PURPOSE. For
  * details, see the GNU AGPL at: http://www.gnu.org/licenses/agpl-3.0.html
  *
- * You can contact Ascensio System SIA at Lubanas st. 125a-25, Riga, Latvia,
- * EU, LV-1021.
+ * You can contact Ascensio System SIA at 20A-12 Ernesta Birznieka-Upisha
+ * street, Riga, Latvia, EU, LV-1050.
  *
  * The  interactive user interfaces in modified source and object code versions
  * of the Program must display Appropriate Legal Notices, as required under
@@ -52,7 +52,12 @@ AscDFH.drawingsConstructorsMap[AscDFH.historyitem_Comment_Change] = CCommentData
 
 
 AscDFH.drawingsChangesMap[AscDFH.historyitem_Comment_Position] = function(oClass, value){oClass.x = value.a; oClass.y = value.b;};
-AscDFH.drawingsChangesMap[AscDFH.historyitem_Comment_Change]   = function(oClass, value){oClass.Data = value;};
+AscDFH.drawingsChangesMap[AscDFH.historyitem_Comment_Change]   = function(oClass, value){
+    oClass.Data = value;
+    if(value){
+        editor.sync_ChangeCommentData(oClass.Id, value);
+    }
+};
 AscDFH.drawingsChangesMap[AscDFH.historyitem_Comment_TypeInfo] = function(oClass, value){oClass.m_oTypeInfo = value;};
 
 function ParaComment(Start, Id)
@@ -82,11 +87,6 @@ ParaComment.prototype =
 
     Set_CommentId : function(NewCommentId)
     {
-    },
-
-    Set_Paragraph : function(Paragraph)
-    {
-        this.Paragraph = Paragraph;
     },
 
     Is_Empty : function()
@@ -128,15 +128,15 @@ ParaComment.prototype =
     {
     },
 
-    Get_NextRunElements : function(RunElements, UseContentPos, Depth)
+    GetNextRunElements : function(RunElements, UseContentPos, Depth)
     {
     },
 
-    Get_PrevRunElements : function(RunElements, UseContentPos, Depth)
+    GetPrevRunElements : function(RunElements, UseContentPos, Depth)
     {
     },
 
-    Collect_DocumentStatistics : function(ParaStats)
+	CollectDocumentStatistics : function(ParaStats)
     {
     },
 
@@ -148,12 +148,12 @@ ParaComment.prototype =
     {
     },
 
-    Get_SelectedText : function(bAll, bClearText)
+	GetSelectedText : function(bAll, bClearText)
     {
         return "";
     },
 
-    Get_SelectionDirection : function()
+	GetSelectDirection : function()
     {
         return 1;
     },
@@ -200,7 +200,7 @@ ParaComment.prototype =
     {
     },
 
-    Check_RevisionsChanges : function(Checker, ContentPos, Depth)
+    CheckRevisionsChanges : function(Checker, ContentPos, Depth)
     {
     },
 
@@ -242,19 +242,19 @@ ParaComment.prototype =
     {
     },
 
-    Save_RecalculateObject : function(Copy)
+    SaveRecalculateObject : function(Copy)
     {
     },
 
-    Load_RecalculateObject : function(RecalcObj, Parent)
+    LoadRecalculateObject : function(RecalcObj, Parent)
     {
     },
 
-    Prepare_RecalculateObject : function()
+    PrepareRecalculateObject : function()
     {
     },
 
-    Is_EmptyRange : function(_CurLine, _CurRange)
+    IsEmptyRange : function(_CurLine, _CurRange)
     {
         return true;
     },
@@ -282,7 +282,7 @@ ParaComment.prototype =
         return { X : X };
     },
 
-    Recalculate_MinMaxContentWidth : function()
+	RecalculateMinMaxContentWidth : function()
     {
 
     },
@@ -331,11 +331,11 @@ ParaComment.prototype =
         return true;
     },
 
-    Cursor_MoveToStartPos : function()
+	MoveCursorToStartPos : function()
     {
     },
 
-    Cursor_MoveToEndPos : function(SelectFromEnd)
+	MoveCursorToEndPos : function(SelectFromEnd)
     {
     },
 
@@ -433,15 +433,11 @@ ParaComment.prototype =
     {
     },
 
-    Selection_Stop : function()
+	RemoveSelection : function()
     {
     },
 
-    Selection_Remove : function()
-    {
-    },
-
-    Select_All : function(Direction)
+	SelectAll : function(Direction)
     {
     },
 
@@ -449,7 +445,7 @@ ParaComment.prototype =
     {
     },
 
-    Selection_IsEmpty : function(CheckEnd)
+	IsSelectionEmpty : function(CheckEnd)
     {
         return true;
     },
@@ -459,12 +455,12 @@ ParaComment.prototype =
         return false;
     },
 
-    Is_SelectedAll : function(Props)
+	IsSelectedAll : function(Props)
     {
         return true;
     },
 
-    Selection_CorrectLeftPos : function(Direction)
+	SkipAnchorsAtSelectionStart : function(nDirection)
     {
         return true;
     },
@@ -487,6 +483,10 @@ ParaComment.prototype =
     {
     }
 };
+ParaComment.prototype.SetParagraph = function(Paragraph)
+{
+	this.Paragraph = Paragraph;
+};
 ParaComment.prototype.Get_CurrentParaPos = function()
 {
     return new CParaPos(this.StartRange, this.StartLine, 0, 0);
@@ -498,11 +498,11 @@ ParaComment.prototype.Get_TextPr = function(ContentPos, Depth)
 //----------------------------------------------------------------------------------------------------------------------
 // Разное
 //----------------------------------------------------------------------------------------------------------------------
-ParaComment.prototype.Set_ReviewType = function(ReviewType, RemovePrChange){};
-ParaComment.prototype.Set_ReviewTypeWithInfo = function(ReviewType, ReviewInfo){};
-ParaComment.prototype.Check_RevisionsChanges = function(Checker, ContentPos, Depth){};
-ParaComment.prototype.Accept_RevisionChanges = function(Type, bAll){};
-ParaComment.prototype.Reject_RevisionChanges = function(Type, bAll){};
+ParaComment.prototype.SetReviewType = function(ReviewType, RemovePrChange){};
+ParaComment.prototype.SetReviewTypeWithInfo = function(ReviewType, ReviewInfo){};
+ParaComment.prototype.CheckRevisionsChanges = function(Checker, ContentPos, Depth){};
+ParaComment.prototype.AcceptRevisionChanges = function(Type, bAll){};
+ParaComment.prototype.RejectRevisionChanges = function(Type, bAll){};
 
 function CWriteCommentData()
 {
@@ -516,61 +516,29 @@ function CWriteCommentData()
     this.WriteText = "";
 
     this.AdditionalData = "";
+    this.timeZoneBias = null;
 
     this.x = 0;
     this.y = 0;
 }
 CWriteCommentData.prototype =
 {
-    DateToISO8601 : function(d)
-    {
-        function pad(n){return n < 10 ? '0' + n : n;}
-        return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' +
-            pad(d.getUTCDate()) + 'T' + pad(d.getUTCHours()) + ':' +
-            pad(d.getUTCMinutes()) + ':' + pad(d.getUTCSeconds())+'Z';
-    },
-
-    Iso8601ToDate : function(sDate)
-    {
-        var numericKeys = [ 1, 4, 5, 6, 7, 10, 11 ];
-        var minutesOffset = 0;
-		var struct;
-        if ((struct = /^(\d{4}|[+\-]\d{6})(?:-(\d{2})(?:-(\d{2}))?)?(?:T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{3}))?)?(?:(Z)|([+\-])(\d{2})(?::(\d{2}))?)?)?$/.exec(sDate))) {
-            // avoid NaN timestamps caused by “undefined” values being passed to Date.UTC
-            for (var i = 0, k; (k = numericKeys[i]); ++i) {
-                struct[k] = +struct[k] || 0;
-            }
-
-            // allow undefined days and months
-            struct[2] = (+struct[2] || 1) - 1;
-            struct[3] = +struct[3] || 1;
-
-            if (struct[8] !== 'Z' && struct[9] !== undefined) {
-                minutesOffset = struct[10] * 60 + struct[11];
-
-                if (struct[9] === '+') {
-                    minutesOffset = 0 - minutesOffset;
-                }
-            }
-
-            var _ret = new Date(Date.UTC(struct[1], struct[2], struct[3], struct[4], struct[5] + minutesOffset, struct[6], struct[7]));
-            return "" + _ret.getTime();
-        }
-        return "1";
-    },
-
     Calculate : function()
     {
-        var d = new Date(this.Data.m_sTime - 0);
-        this.WriteTime = this.DateToISO8601(d);
+        this.WriteTime = new Date(this.Data.m_sTime - 0).toISOString().slice(0, 19) + 'Z';
+        this.timeZoneBias = this.Data.m_nTimeZoneBias;
 
         this.CalculateAdditionalData();
     },
 
     Calculate2 : function()
     {
-        var _time = this.Iso8601ToDate(this.WriteTime);
-        this.WriteTime = _time;
+        var dateMs = AscCommon.getTimeISO8601(this.WriteTime);
+        if(!isNaN(dateMs)){
+            this.WriteTime = dateMs + "";
+        } else {
+            this.WriteTime = "1";
+        }
     },
 
     CalculateAdditionalData : function()
@@ -583,6 +551,15 @@ CWriteCommentData.prototype =
             this.AdditionalData += ("0;" + this.Data.m_sUserId.length + ";" + this.Data.m_sUserId + ";" );
             this.AdditionalData += ("1;" + this.Data.m_sUserName.length + ";" + this.Data.m_sUserName + ";" );
             this.AdditionalData += ("2;1;" + (this.Data.m_bSolved ? "1;" : "0;"));
+            if (this.Data.m_sOOTime)
+            {
+                var WriteOOTime = new Date(this.Data.m_sOOTime - 0).toISOString().slice(0, 19) + 'Z';
+                this.AdditionalData += ("3;" + WriteOOTime.length + ";" + WriteOOTime + ";");
+            }
+            if (this.Data.m_sGuid)
+            {
+                this.AdditionalData += "4;" + this.Data.m_sGuid.length + ";" + this.Data.m_sGuid + ";";
+            }
         }
     },
 
@@ -638,6 +615,14 @@ CWriteCommentData.prototype =
                 _comment_data.m_sUserName = _value;
             else if (2 == _attr)
                 _comment_data.m_bSolved = ("1" == _value) ? true : false;
+            else if (3 == _attr)
+            {
+                var dateMs = AscCommon.getTimeISO8601(_value);
+                if(!isNaN(dateMs))
+                    _comment_data.m_sOOTime = dateMs + "";
+			}
+            else if (4 == _attr)
+                _comment_data.m_sGuid = _value;
         }
     }
 };
@@ -668,15 +653,35 @@ function CCommentData()
 {
     this.m_sText      = "";
     this.m_sTime      = "";
+    this.m_sOOTime      = "";
     this.m_sUserId    = "";
     this.m_sUserName  = "";
+    this.m_sGuid  = "";
     this.m_sQuoteText = null;
     this.m_bSolved    = false;
+    this.m_nTimeZoneBias = null;
     this.m_aReplies   = [];
 }
 
 CCommentData.prototype =
 {
+
+    createDuplicate: function(){
+        var ret = new CCommentData();
+        ret.m_sText = this.m_sText;
+        ret.m_sTime = this.m_sTime;
+        ret.m_sOOTime = this.m_sOOTime;
+        ret.m_sUserId = this.m_sUserId;
+        ret.m_sUserName = this.m_sUserName;
+        ret.m_sGuid = this.m_sGuid;
+        ret.m_sQuoteText = this.m_sQuoteText;
+        ret.m_bSolved = this.m_bSolved;
+        ret.m_nTimeZoneBias = this.m_nTimeZoneBias;
+        for(var i = 0; i < this.m_aReplies.length; ++i){
+            ret.m_aReplies.push(this.m_aReplies[i].createDuplicate());
+        }
+        return ret;
+    },
 
     Add_Reply: function(CommentData)
     {
@@ -723,6 +728,26 @@ CCommentData.prototype =
         return this.m_sUserName;
     },
 
+    Set_Guid: function(Guid)
+    {
+        this.m_sGuid = Guid;
+    },
+
+    Get_Guid: function()
+    {
+        return this.m_sGuid;
+    },
+
+    Set_TimeZoneBias: function(timeZoneBias)
+    {
+        this.m_nTimeZoneBias = timeZoneBias;
+    },
+
+    Get_TimeZoneBias: function()
+    {
+        return this.m_nTimeZoneBias;
+    },
+
     Get_RepliesCount: function()
     {
         return this.m_aReplies.length;
@@ -740,10 +765,13 @@ CCommentData.prototype =
     {
         this.m_sText      = AscCommentData.asc_getText();
         this.m_sTime      = AscCommentData.asc_getTime();
+        this.m_sOOTime    = AscCommentData.asc_getOnlyOfficeTime();
         this.m_sUserId    = AscCommentData.asc_getUserId();
         this.m_sQuoteText = AscCommentData.asc_getQuoteText();
         this.m_bSolved    = AscCommentData.asc_getSolved();
         this.m_sUserName  = AscCommentData.asc_getUserName();
+        this.m_sGuid      = AscCommentData.asc_getGuid();
+        this.m_nTimeZoneBias= AscCommentData.asc_getTimeZoneBias();
 
         var RepliesCount  = AscCommentData.asc_getRepliesCount();
         for ( var Index = 0; Index < RepliesCount; Index++ )
@@ -758,8 +786,12 @@ CCommentData.prototype =
     {
         // String            : m_sText
         // String            : m_sTime
+        // String            : m_sOOTime
         // String            : m_sUserId
         // String            : m_sUserName
+        // String            : m_sGuid
+        // Bool              : Null ли TimeZoneBias
+        // Long              : TimeZoneBias
         // Bool              : Null ли QuoteText
         // String            : (Если предыдущий параметр false) QuoteText
         // Bool              : Solved
@@ -769,9 +801,18 @@ CCommentData.prototype =
         var Count = this.m_aReplies.length;
         Writer.WriteString2( this.m_sText );
         Writer.WriteString2( this.m_sTime );
+        Writer.WriteString2( this.m_sOOTime );
         Writer.WriteString2( this.m_sUserId );
         Writer.WriteString2( this.m_sUserName );
+        Writer.WriteString2( this.m_sGuid );
 
+        if ( null === this.m_nTimeZoneBias )
+            Writer.WriteBool( true );
+        else
+        {
+            Writer.WriteBool( false );
+            Writer.WriteLong( this.m_nTimeZoneBias );
+        }
         if ( null === this.m_sQuoteText )
             Writer.WriteBool( true );
         else
@@ -792,7 +833,11 @@ CCommentData.prototype =
     {
         // String            : m_sText
         // String            : m_sTime
+        // String            : m_sOOTime
         // String            : m_sUserId
+        // String            : m_sGuid
+        // Bool              : Null ли TimeZoneBias
+        // Long              : TimeZoneBias
         // Bool              : Null ли QuoteText
         // String            : (Если предыдущий параметр false) QuoteText
         // Bool              : Solved
@@ -801,9 +846,15 @@ CCommentData.prototype =
 
         this.m_sText     = Reader.GetString2();
         this.m_sTime     = Reader.GetString2();
+        this.m_sOOTime   = Reader.GetString2();
         this.m_sUserId   = Reader.GetString2();
         this.m_sUserName = Reader.GetString2();
+        this.m_sGuid     = Reader.GetString2();
 
+        if ( true != Reader.GetBool()  )
+            this.m_nTimeZoneBias = Reader.GetLong();
+        else
+            this.m_nTimeZoneBias = null;
         var bNullQuote = Reader.GetBool();
         if ( true != bNullQuote  )
             this.m_sQuoteText = Reader.GetString2();
@@ -888,6 +939,13 @@ CComment.prototype =
         return AscDFH.historyitem_type_Comment;
     },
 
+    createDuplicate: function(Parent){
+        var oData = this.Data ? this.Data.createDuplicate() : null;
+        var ret = new CComment(Parent, oData);
+        ret.setPosition(this.x, this.y);
+        return ret;
+    },
+
     hit: function(x, y)
     {
         var Flags = 0;
@@ -923,7 +981,23 @@ CComment.prototype =
             Flags |= 2;
         }
         var dd = editor.WordControl.m_oDrawingDocument;
-        graphics.DrawPresentationComment(Flags, this.x, this.y, dd.GetCommentWidth(), dd.GetCommentHeight())
+        var w = dd.GetCommentWidth();
+        var h = dd.GetCommentHeight();
+        graphics.DrawPresentationComment(Flags, this.x, this.y, w, h);
+
+        var oLock = this.Lock;
+        if(oLock && AscCommon.locktype_None !== oLock.Get_Type())
+        {
+            var bCoMarksDraw = true;
+            var oApi = editor || Asc['editor'];
+            if(oApi){
+                bCoMarksDraw = (!AscCommon.CollaborativeEditing.Is_Fast() || AscCommon.locktype_Mine !== oLock.Get_Type());
+            }
+            if(bCoMarksDraw){
+                graphics.DrawLockObjectRect(oLock.Get_Type(), this.x, this.y, w, h);
+                return true;
+            }
+        }
     },
 
     Set_StartInfo: function(PageNum, X, Y, H, ParaId)
@@ -999,15 +1073,15 @@ CComment.prototype =
         if ( Para_start === Para_end )
         {
             if ( null != Para_start )
-                Para_start.Remove_CommentMarks( this.Id );
+                Para_start.RemoveCommentMarks( this.Id );
         }
         else
         {
             if ( null != Para_start )
-                Para_start.Remove_CommentMarks( this.Id );
+                Para_start.RemoveCommentMarks( this.Id );
 
             if ( null != Para_end )
-                Para_end.Remove_CommentMarks( this.Id );
+                Para_end.RemoveCommentMarks( this.Id );
         }
     },
 
@@ -1060,6 +1134,7 @@ CComment.prototype =
         //    String : Id колонтитула
 
         Writer.WriteString2( this.Id );
+        AscFormat.writeObject(Writer, this.Parent);
         this.Data.Write_ToBinary2(Writer);
         Writer.WriteLong( this.m_oTypeInfo.Type );
 
@@ -1077,6 +1152,7 @@ CComment.prototype =
         //    String : Id колонтитула
 
         this.Id = Reader.GetString2();
+        this.Parent = AscFormat.readObject(Reader);
         this.Data = new CCommentData();
         this.Data.Read_FromBinary2(Reader);
         this.m_oTypeInfo.Type = Reader.GetLong();
@@ -1109,7 +1185,7 @@ CComment.prototype =
         }
 
         if ( false === bUse )
-            editor.WordControl.m_oLogicDocument.Remove_Comment( this.Id, true );
+            editor.WordControl.m_oLogicDocument.RemoveComment( this.Id, true );
     }
 };
 

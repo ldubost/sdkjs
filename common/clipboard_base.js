@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2019
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -12,8 +12,8 @@
  * warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR  PURPOSE. For
  * details, see the GNU AGPL at: http://www.gnu.org/licenses/agpl-3.0.html
  *
- * You can contact Ascensio System SIA at Lubanas st. 125a-25, Riga, Latvia,
- * EU, LV-1021.
+ * You can contact Ascensio System SIA at 20A-12 Ernesta Birznieka-Upisha
+ * street, Riga, Latvia, EU, LV-1050.
  *
  * The  interactive user interfaces in modified source and object code versions
  * of the Program must display Appropriate Legal Notices, as required under
@@ -87,22 +87,22 @@
 		this.CopyPasteFocusTimer = -1;
 
 		this.inputContext = null;
-		this.LastCopyBinary = null; // для вставки по кнопке, еогда браузер не позволяет
+		this.LastCopyBinary = null; // для вставки по кнопке, когда браузер не позволяет
 
 		// images counter
 		this.PasteImagesCount = 0;
 		this.PasteImagesCounter = 0;
 		this.PasteImagesBody = "";
-		
-		//special paste
-		this.specialPasteData = {};//данные последней вставки перед специальной вставкой
-		this.specialPasteUndoData = {};//для того, чтобы сделать повторную вставку с помощью special paste нужно сначала откатиться до того состояния, которое было до первой вставки
-		
-		//параметры специальной вставки из меню.используется класс для EXCEL СSpecialPasteProps. чтобы не протаскивать через все вызываемые функции, добавил это свойство
-		this.specialPasteProps = null;
-		
-		this.showSpecialPasteButton = false;//нужно показывать или нет кнопку специальной вставки
-		this.specialPasteButtonProps = {};//параметры кнопки специальной вставки - позиция. нужно при прокрутке документа, изменения масштаба и тп
+
+		this.DivOnCopyHtmlPresent = false;
+		this.DivOnCopyText = "";
+
+		this.bSaveFormat = false; //для вставки, допустим, из плагина необходимо чтобы при добавлении текста в шейп сохранялось форматирование
+		this.bCut = false;
+
+		this.clearBufferTimerId = -1;
+
+		this.needClearBuffer = false;
 	}
 
 	CClipboardBase.prototype =
@@ -110,6 +110,31 @@
 		_console_log : function(_obj)
 		{
 			//console.log(_obj);
+		},
+
+		checkCopy : function(formats)
+		{
+            if (-1 != this.clearBufferTimerId)
+			{
+                if (formats & AscCommon.c_oAscClipboardDataFormat.Text)
+				{
+					this.pushData(AscCommon.c_oAscClipboardDataFormat.Text, "");
+				}
+				if (formats & AscCommon.c_oAscClipboardDataFormat.Html)
+				{
+					this.pushData(AscCommon.c_oAscClipboardDataFormat.Html, "");
+				}
+                if (formats & AscCommon.c_oAscClipboardDataFormat.Internal)
+                {
+                    this.pushData(AscCommon.c_oAscClipboardDataFormat.Internal, "");
+                }
+
+                clearTimeout(this.clearBufferTimerId);
+                this.clearBufferTimerId = -1;
+                return;
+			}
+
+			return this.Api.asc_CheckCopy(this, formats);
 		},
 
 		_private_oncopy : function(e)
@@ -127,10 +152,12 @@
 			else
 			{
 				this.LastCopyBinary = null;
-				this.Api.asc_CheckCopy(this, AscCommon.c_oAscClipboardDataFormat.Text | AscCommon.c_oAscClipboardDataFormat.Html | AscCommon.c_oAscClipboardDataFormat.Internal);
+				this.checkCopy(AscCommon.c_oAscClipboardDataFormat.Text | AscCommon.c_oAscClipboardDataFormat.Html | AscCommon.c_oAscClipboardDataFormat.Internal);
 
 				setTimeout(function(){
-					g_clipboardBase.EndFocus();
+					//вызываю CommonDiv_End, поскольку на _private_onbeforecopy всегда делается CommonDiv_Start
+					//TODO перепроверить!
+					g_clipboardBase.CommonDiv_End();
 				}, 0);
 
 				e.preventDefault();
@@ -145,6 +172,8 @@
 			if (!this.Api.asc_IsFocus(true))
 				return;
 
+			this.bCut = true;
+
 			this.ClosureParams._e = e;
 			if (this.IsNeedDivOnCopy)
 			{
@@ -153,15 +182,18 @@
 			else
 			{
 				this.LastCopyBinary = null;
-				this.Api.asc_CheckCopy(this, AscCommon.c_oAscClipboardDataFormat.Text | AscCommon.c_oAscClipboardDataFormat.Html | AscCommon.c_oAscClipboardDataFormat.Internal);
+				this.checkCopy(AscCommon.c_oAscClipboardDataFormat.Text | AscCommon.c_oAscClipboardDataFormat.Html | AscCommon.c_oAscClipboardDataFormat.Internal);
 			}
 
 			this.Api.asc_SelectionCut();
+			this.bCut = false;
 
 			if (!this.IsNeedDivOnCopy)
 			{
 				setTimeout(function(){
-					g_clipboardBase.EndFocus();
+					//вызываю CommonDiv_End, поскольку на _private_onbeforecopy всегда делается CommonDiv_Start
+					//TODO перепроверить!
+					g_clipboardBase.CommonDiv_End();
 				}, 0);
 
 				e.preventDefault();
@@ -204,10 +236,13 @@
 				if (!_clipboard || !_clipboard.getData)
 					return false;
 
+				//window['AscCommon'].g_clipboardBase.rtf = this.ClosureParams.getData("text/rtf");
+
+				var _text_format = this.ClosureParams.getData("text/plain");
 				var _internal = this.ClosureParams.getData("text/x-custom");
-				if (_internal && _internal != "" && _internal.indexOf("asc_internalData;") == 0)
+				if (_internal && _internal != "" && _internal.indexOf("asc_internalData2;") == 0)
 				{
-					this.Api.asc_PasteData(AscCommon.c_oAscClipboardDataFormat.Internal, _internal.substr("asc_internalData;".length));
+					this.Api.asc_PasteData(AscCommon.c_oAscClipboardDataFormat.Internal, _internal.substr("asc_internalData2;".length), null, _text_format);
 					g_clipboardBase.Paste_End();
 					return false;
 				}
@@ -219,71 +254,14 @@
 					if (-1 != nIndex)
 						_html_format = _html_format.substring(0, nIndex + "</html>".length);
 
-					this.CommonIframe_PasteStart(_html_format);
+					this.CommonIframe_PasteStart(_html_format, _text_format);
 					return false;
 				}
 
-				var _text_format = this.ClosureParams.getData("text/plain");
 				if (_text_format && _text_format != "")
 				{
-					var sHtml     = "<html><body>";
-					var sCurPar   = "";
-					var nParCount = 0;
-					for (var i = 0, length = _text_format.length; i < length; i++)
-					{
-						var Char = _text_format.charAt(i);
-						var Code = _text_format.charCodeAt(i);
-						var Item = null;
-
-						if ('\n' === Char)
-						{
-							if ("" == sCurPar)
-								sHtml += "<p><span>&nbsp;</span></p>";
-							else
-							{
-								sHtml += "<p><span>" + sCurPar + "</span></p>";
-								sCurPar = "";
-							}
-							nParCount++;
-						}
-						else if (13 === Code)
-						{
-							continue;
-						}
-						else
-						{
-							if (32 == Code || 160 == Code) //160 - nbsp
-								sCurPar += " ";
-							else if (9 === Code)
-								sCurPar += "<span style='mso-tab-count:1'>    </span>";
-							else
-							{
-								if (Char == '&')
-									sCurPar += "&amp;";
-								else if (Char == '<')
-									sCurPar += "&lt;";
-								else if (Char == '>')
-									sCurPar += "&gt;";
-								else if (Char == '\'')
-									sCurPar += "&apos;";
-								else if (Char == '\"')
-									sCurPar += "&quot;";
-								else
-									sCurPar += Char;
-							}
-						}
-					}
-					if ("" != sCurPar)
-					{
-						if (0 == nParCount)
-							sHtml += ("<span>" + sCurPar + "</span>");
-						else
-							sHtml += ("<p><span>" + sCurPar + "</span></p>");
-						sCurPar = "";
-					}
-					sHtml += "</body></html>";
-
-					this.CommonIframe_PasteStart(sHtml, _text_format);
+					this.Api.asc_PasteData(AscCommon.c_oAscClipboardDataFormat.Text, _text_format);
+					g_clipboardBase.Paste_End();
 					return false;
 				}
 
@@ -327,7 +305,14 @@
                                 }
                             };
 
-                            reader.readAsDataURL(blob);
+                            try
+							{
+                                reader.readAsDataURL(blob);
+                            }
+                            catch(err)
+							{
+                                g_clipboardBase.PasteImagesCounter++;
+							}
                         }
                         else
                         {
@@ -409,6 +394,8 @@
 		Init : function(_api)
 		{
 			this.Api = _api;
+
+			window['AscCommon'].g_specialPasteHelper.Init(_api);
 
 			this.ClosureParams.getData = function(type)
 			{
@@ -511,6 +498,9 @@
 					if (!g_clipboardBase.Api.asc_IsFocus(true) || g_clipboardBase.Api.isLongAction())
 						return;
 
+					var isAltGr = AscCommon.getAltGr(e);
+					if (isAltGr)
+						return;
 
 					var isCtrl  = (e.ctrlKey === true || e.metaKey === true);
 					var isShift = e.shiftKey;
@@ -644,14 +634,21 @@
 				ElemToSelect.style.overflow               = 'hidden';
 				ElemToSelect.style.zIndex                 = -1000;
 				ElemToSelect.style.MozUserSelect          = "text";
+				ElemToSelect.style.fontFamily             = "onlyofficeDefaultFont";//дефолтовый шрифт
+				ElemToSelect.style.fontSize               = "11pt";//дефолтовый размер. значения 0 и тп не подходят - изменяются такие параметры, как line-height
+				ElemToSelect.style.color                  = "black";
 				ElemToSelect.style["-khtml-user-select"]  = "text";
 				ElemToSelect.style["-o-user-select"]      = "text";
 				ElemToSelect.style["user-select"]         = "text";
 				ElemToSelect.style["-webkit-user-select"] = "text";
-				ElemToSelect.setAttribute("contentEditable", true);
+				ElemToSelect.setAttribute("contentEditable", this.isCopyOutEnabled());
 
 				var _parent = ("" == this.CommonDivIdParent) ? document.body : document.getElementById(this.CommonDivIdParent);
 				_parent.appendChild(ElemToSelect);
+			}
+			else
+			{
+				ElemToSelect.setAttribute("contentEditable", this.isCopyOutEnabled());
 			}
 			return ElemToSelect;
 		},
@@ -728,19 +725,21 @@
 		{
 			var ElemToSelect = this.CommonDiv;
 
-			ElemToSelect.style.display                 = AscBrowser.isSafari ? "block" : "none";
+			if (ElemToSelect)
+			{
+                ElemToSelect.style.display       = AscBrowser.isSafari ? "block" : "none";
+                ElemToSelect.style.MozUserSelect = "none";
+			}
 			document.body.style.MozUserSelect          = "none";
 			document.body.style["-khtml-user-select"]  = "none";
 			document.body.style["-o-user-select"]      = "none";
 			document.body.style["user-select"]         = "none";
 			document.body.style["-webkit-user-select"] = "none";
-
 			document.body.style["background-color"] = this.ClosureParams.backgroundcolorBody;
-
-			ElemToSelect.style.MozUserSelect = "none";
-			document.body.style.overflow     = this.ClosureParams.overflowBody;
+			document.body.style.overflow = this.ClosureParams.overflowBody;
 
 			this.CopyFlag = false;
+			this.bCut = false;
 			this.EndFocus();
 		},
 
@@ -752,9 +751,19 @@
 			this.CommonDiv_Start();
 
 			this.ClosureParams.isDivCopy = true;
+			this.DivOnCopyHtmlPresent = false;
+			this.DivOnCopyText = "";
 			this.LastCopyBinary = null;
-			this.Api.asc_CheckCopy(this, AscCommon.c_oAscClipboardDataFormat.Text | AscCommon.c_oAscClipboardDataFormat.Html | AscCommon.c_oAscClipboardDataFormat.Internal);
+			this.checkCopy(AscCommon.c_oAscClipboardDataFormat.Text | AscCommon.c_oAscClipboardDataFormat.Html | AscCommon.c_oAscClipboardDataFormat.Internal);
 			this.ClosureParams.isDivCopy = false;
+
+			if (!this.DivOnCopyHtmlPresent && this.DivOnCopyText != "")
+			{
+				this.CommonDiv.innerHTML = this.DivOnCopyText;
+			}
+
+			this.DivOnCopyHtmlPresent = false;
+			this.DivOnCopyText = "";
 
 			this.CommonDiv_Select();
 
@@ -831,6 +840,10 @@
 			this.Api.decrementCounterLongAction();
 			this.PasteFlag = false;
 			this.EndFocus();
+			if(this.needClearBuffer) {
+				this.ClearBuffer();
+				this.needClearBuffer = false;
+			}
 		},
 
 		pushData : function(_format, _data)
@@ -842,7 +855,14 @@
 			if (this.ClosureParams.isDivCopy === true)
 			{
 				if (_format == AscCommon.c_oAscClipboardDataFormat.Html)
+				{
 					this.CommonDiv.innerHTML = _data;
+					this.DivOnCopyHtmlPresent = true;
+				}
+
+				if (_format == AscCommon.c_oAscClipboardDataFormat.Text)
+					this.DivOnCopyText = _data;
+
 				return;
 			}
 
@@ -862,10 +882,10 @@
 					break;
 			}
 
-			if (_data_format != "" && _data !== null)
+			if (_data_format != "" && _data !== null && this.isCopyOutEnabled())
 			{
 				if (_data_format == "text/x-custom")
-					this.ClosureParams.setData(_data_format, "asc_internalData;" + _data);
+					this.ClosureParams.setData(_data_format, "asc_internalData2;" + _data);
 				else
 					this.ClosureParams.setData(_data_format, _data);
 			}
@@ -874,16 +894,29 @@
 		Button_Copy : function()
 		{
 			if (this.inputContext)
-				this.inputContext.HtmlArea.focus();
+			{
+                if (this.inputContext.isHardCheckKeyboard)
+                    this.inputContext.enableVirtualKeyboard_Hard();
+
+                this.inputContext.HtmlArea.focus();
+            }
 			this.Api.asc_enableKeyEvents(true, true);
 
 			this.CommonDiv_Execute_CopyCut();
-			var _ret = document.execCommand("copy");
+			var _ret = false;
+			try
+			{
+				_ret = document.execCommand("copy");
+			}
+			catch (err)
+			{
+				_ret = false;
+			}
 			if (!_ret)
 			{
 				//　копирования не было
 				this.LastCopyBinary = null;
-				this.Api.asc_CheckCopy(this, AscCommon.c_oAscClipboardDataFormat.Text | AscCommon.c_oAscClipboardDataFormat.Html | AscCommon.c_oAscClipboardDataFormat.Internal);
+				this.checkCopy(AscCommon.c_oAscClipboardDataFormat.Text | AscCommon.c_oAscClipboardDataFormat.Html | AscCommon.c_oAscClipboardDataFormat.Internal);
 			}
 			return  _ret;
 		},
@@ -891,18 +924,33 @@
 		Button_Cut : function()
 		{
 			if (this.inputContext)
-				this.inputContext.HtmlArea.focus();
+			{
+                if (this.inputContext.isHardCheckKeyboard)
+                    this.inputContext.enableVirtualKeyboard_Hard();
+
+                this.inputContext.HtmlArea.focus();
+            }
 			this.Api.asc_enableKeyEvents(true, true);
 
 			this.CommonDiv_Execute_CopyCut();
-			var _ret = document.execCommand("cut");
+			var _ret = false;
+			try
+			{
+				_ret = document.execCommand("cut");
+			}
+			catch (err)
+			{
+				_ret = false;
+			}
 			if (!_ret)
 			{
 				//　копирования не было
 				this.LastCopyBinary = null;
-				this.Api.asc_CheckCopy(this, AscCommon.c_oAscClipboardDataFormat.Text | AscCommon.c_oAscClipboardDataFormat.Html | AscCommon.c_oAscClipboardDataFormat.Internal);
+				this.bCut = true;
+				this.checkCopy(AscCommon.c_oAscClipboardDataFormat.Text | AscCommon.c_oAscClipboardDataFormat.Html | AscCommon.c_oAscClipboardDataFormat.Internal);
 
 				this.Api.asc_SelectionCut();
+				this.bCut = false;
 			}
 			return _ret;
 		},
@@ -910,10 +958,24 @@
 		Button_Paste : function()
 		{
 			if (this.inputContext)
-				this.inputContext.HtmlArea.focus();
+			{
+				if (this.inputContext.isHardCheckKeyboard)
+					this.inputContext.enableVirtualKeyboard_Hard();
+
+                this.inputContext.HtmlArea.focus();
+            }
 			this.Api.asc_enableKeyEvents(true, true);
 
-			var _ret = document.execCommand("paste");
+			var _ret = false;
+			try
+			{
+				_ret = document.execCommand("paste");
+			}
+			catch (err)
+			{
+				_ret = false;
+			}
+
 			if (!_ret && null != this.LastCopyBinary)
 			{
 				var _data = null;
@@ -932,7 +994,58 @@
 			}
 			return _ret;
 		},
-		
+
+		ClearBuffer : function()
+		{
+            if (-1 != this.clearBufferTimerId)
+            {
+                // clear old timer (restart interval)
+                clearTimeout(this.clearBufferTimerId);
+            }
+            this.clearBufferTimerId = setTimeout(function(){
+                if (AscCommon.g_clipboardBase)
+                    AscCommon.g_clipboardBase.clearBufferTimerId = -1;
+            }, 500);
+
+			this.Button_Copy();
+		},
+
+		isCopyOutEnabled : function()
+		{
+			if (this.Api && this.Api.isCopyOutEnabled)
+				return this.Api.isCopyOutEnabled();
+			return true;
+		}
+	};
+
+	function CSpecialPasteHelper()
+	{
+		this.Api = null;
+
+		//special paste
+		this.specialPasteData = {};//данные последней вставки перед специальной вставкой
+
+		//параметры специальной вставки из меню.используется класс для EXCEL СSpecialPasteProps. чтобы не протаскивать через все вызываемые функции, добавил это свойство
+		this.specialPasteProps = null;
+
+		this.showSpecialPasteButton = false;//нужно показывать или нет кнопку специальной вставки
+		this.buttonInfo = new Asc.SpecialPasteShowOptions();//параметры кнопки специальной вставки - позиция. нужно при прокрутке документа, изменения масштаба и тп
+
+		this.specialPasteStart = false;//если true, то в данный момент выполняется специальная вставка
+		this.pasteStart = false;//идет процесс вставки, выставится в false только после полного ее окончания(загрузка картинок и шрифтов)
+
+		this.bIsEndTransaction = false;//временный флаг для excel. TODO пересмотреть!
+
+		this.showButtonIdParagraph = null;
+		this.endRecalcDocument = false;//для документов, закончен ли пересчет документа. нужно, чтобы грамотно рассчитать позицию иконки с/в
+		this.doNotShowButton = false;
+	}
+
+	CSpecialPasteHelper.prototype = {
+		Init : function(_api) {
+			this.Api = _api;
+		},
+
 		Special_Paste : function(props)
 		{
 			this.Api.asc_SpecialPasteData(props);
@@ -942,13 +1055,207 @@
 		Clean_SpecialPasteObj : function()
 		{
 			this.specialPasteData = {};
-			this.specialPasteUndoData = {};
+		},
+		
+		Special_Paste_Start : function()
+		{
+			this.specialPasteStart = true;
+
+			//для того, чтобы были доступны скомпилированые стили во время вставки
+			if (g_clipboardBase.CommonIframe && g_clipboardBase.CommonIframe.style.display != "block")
+			{
+				g_clipboardBase.CommonIframe.style.display = "block";
+			}
+		},
+		
+		Special_Paste_End : function()
+		{
+			this.specialPasteStart = false;
+
+			if (g_clipboardBase.CommonIframe && g_clipboardBase.CommonIframe.style.display != "none")
+			{
+				g_clipboardBase.CommonIframe.style.display = "none";
+			}
+		},
+		
+		Paste_Process_Start : function(doNotShowButton)
+		{
+			if(doNotShowButton)
+			{
+				this.Special_Paste_Hide_Button();
+			}
+			this.pasteStart = true;
+
+			AscFonts.IsCheckSymbols = true;
+		},
+
+		Special_Paste_Hide_Button: function()
+		{
+			this.doNotShowButton = true;
+		},
+
+		Paste_Process_End : function(checkEnd)
+		{
+			AscFonts.IsCheckSymbols             = false;
+			//todo возможно стоит добавить проверку
+			/*if(!this.pasteStart)
+			{
+				return;
+			}*/
+			this.pasteStart = false;
+			this.specialPasteProps = null;
+			this.bSaveFormat = false;
+			//процесс специальной вставки заканчивается вместе с общей вставкой
+			if(this.specialPasteStart)
+			{
+				this.Special_Paste_End();
+				//TODO только для презентаций! проверить на остальных редакторах!
+				if(!this.buttonInfo.isClean()){
+					this.buttonInfo.asc_setOptions(null);
+					this.Api.asc_ShowSpecialPasteButton(this.buttonInfo);
+				}
+			}
+			else//если не было специальной вставки, необходимо показать кнопку специальной вставки
+			{
+				this.SpecialPasteButton_Show();
+			}
+
+			if(!checkEnd || (checkEnd && this.endRecalcDocument)) {
+				this.doNotShowButton = false;
+			}
+
+			//TODO для excel заглушка. пересмотреть!
+			if(this.bIsEndTransaction)
+			{
+				this.bIsEndTransaction = false;
+				History.EndTransaction();
+			}
+
+			var _logicDoc = this.Api.WordControl ? this.Api.WordControl.m_oLogicDocument : null;
+			if (_logicDoc && _logicDoc.Action && _logicDoc.Action.Start && this.Api._finalizeAction) {
+				this.Api._finalizeAction();
+			}
+		},
+		
+		SpecialPasteButton_Show : function()
+		{
+			if (!this.Api || this.doNotShowButton)
+				return;
+
+			//при быстром совместном редактировании отключаем возможность специальной вставки
+			if(this.CheckFastCoEditing())
+			{
+				return;
+			}
+
+			var props = this.buttonInfo;
+			if(props && props.options)
+			{
+				if((window["Asc"] && window["Asc"]["editor"]) || props.cellCoord)
+				{
+					this.showSpecialPasteButton = true;
+					this.Api.asc_ShowSpecialPasteButton(props);
+				}
+			}
+		},
+
+
+		SpecialPasteButtonById_Show: function()
+		{
+			if(!this.pasteStart) {
+				this.endRecalcDocument = true;
+			}
+
+			if(!this.showButtonIdParagraph || this.pasteStart) {
+				return;
+			}
+
+			if(!this.Api || !this.Api.asc_specialPasteShowButton || this.doNotShowButton)
+			{
+				if(this.doNotShowButton) {
+					this.showButtonIdParagraph = null;
+				}
+				this.doNotShowButton = false;
+				return;
+			}
+
+			if(this.Api.asc_specialPasteShowButton())
+			{
+				this.showSpecialPasteButton = true;
+			}
+		},
+
+		SpecialPasteButton_Hide : function()
+		{
+			if (!this.Api)
+				return;
+
+			if(this.showSpecialPasteButton)
+			{
+				this.showSpecialPasteButton = false;
+				this.CleanButtonInfo();
+				this.Api.asc_HideSpecialPasteButton();
+			}
+		},
+		
+		SpecialPasteButton_Update_Position : function()
+		{
+			if (!this.Api || !this.buttonInfo || this.buttonInfo.isClean())
+				return;
+			
+			if(this.showSpecialPasteButton && !this.pasteStart)
+			{
+				this.Api.asc_UpdateSpecialPasteButton();
+			}
+		},
+
+		CheckFastCoEditing: function()
+		{
+			if (!this.Api)
+				return false;
+
+			var res = false;
+
+			var bFast = false;
+			var bIsSingleUser = false;
+			if(this.Api.collaborativeEditing)
+			{
+				bFast = this.Api.collaborativeEditing.m_bFast;
+				bIsSingleUser = !this.Api.collaborativeEditing.getCollaborativeEditing();
+			}
+			else
+			{
+				bFast = AscCommon.CollaborativeEditing.m_bFast;
+				bIsSingleUser = AscCommon.CollaborativeEditing.Is_SingleUser();
+			}
+
+			if(bFast && !bIsSingleUser)
+			{
+				res = true;
+			}
+
+			return res;
+		},
+
+		CleanButtonInfo: function()
+		{
+			this.buttonInfo.clean();
+		},
+
+		GetPastedData: function(bText) {
+			if(bText && this.specialPasteData.text_data) {
+				return this.specialPasteData.text_data;
+			}
+			return this.specialPasteData.data1;
 		}
 	};
 
 	var g_clipboardBase = new CClipboardBase();
 	window['AscCommon'] = window['AscCommon'] || {};
 	window['AscCommon'].g_clipboardBase = g_clipboardBase;
+
+	var g_specialPasteHelper = new CSpecialPasteHelper();
+	window['AscCommon'].g_specialPasteHelper = g_specialPasteHelper;
 })(window);
 
 // copy/paste focus error!!!

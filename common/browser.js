@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2019
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -12,8 +12,8 @@
  * warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR  PURPOSE. For
  * details, see the GNU AGPL at: http://www.gnu.org/licenses/agpl-3.0.html
  *
- * You can contact Ascensio System SIA at Lubanas st. 125a-25, Riga, Latvia,
- * EU, LV-1021.
+ * You can contact Ascensio System SIA at 20A-12 Ernesta Birznieka-Upisha
+ * street, Riga, Latvia, EU, LV-1050.
  *
  * The  interactive user interfaces in modified source and object code versions
  * of the Program must display Appropriate Legal Notices, as required under
@@ -45,17 +45,21 @@ var AscBrowser = {
     isAppleDevices : false,
     isAndroid : false,
     isMobile : false,
-	isMobileVersion : false,
     isGecko : false,
     isChrome : false,
     isOpera : false,
+	isOperaOld : false,
     isWebkit : false,
     isSafari : false,
     isArm : false,
     isMozilla : false,
 	isRetina : false,
     isLinuxOS : false,
-	retinaPixelRatio : 1
+	retinaPixelRatio : 1,
+	isVivaldiLinux : false,
+    isSailfish : false,
+    isEmulateDevicePixelRatio : false,
+    isNeedEmulateUpload : false
 };
 
 // user agent lower case
@@ -99,6 +103,7 @@ AscBrowser.isGecko = (AscBrowser.userAgent.indexOf("gecko/") > -1);
 
 // opera detect
 AscBrowser.isOpera = (!!window.opera || AscBrowser.userAgent.indexOf("opr/") > -1);
+AscBrowser.isOperaOld = (!!window.opera);
 
 // webkit detect
 AscBrowser.isWebkit = !AscBrowser.isIE && (AscBrowser.userAgent.indexOf("webkit") > -1);
@@ -110,10 +115,37 @@ AscBrowser.isMozilla = !AscBrowser.isIE && (AscBrowser.userAgent.indexOf("firefo
 
 AscBrowser.isLinuxOS = (AscBrowser.userAgent.indexOf(" linux ") > -1);
 
+AscBrowser.isVivaldiLinux = AscBrowser.isLinuxOS && (AscBrowser.userAgent.indexOf("vivaldi") > -1);
+
+AscBrowser.isSailfish = (AscBrowser.userAgent.indexOf("sailfish") > -1);
+
+AscBrowser.isEmulateDevicePixelRatio = (AscBrowser.userAgent.indexOf("emulatedevicepixelratio") > -1);
+
+AscBrowser.isNeedEmulateUpload = (AscBrowser.userAgent.indexOf("needemulateupload") > -1);
+
 AscBrowser.zoom = 1;
 
 AscBrowser.checkZoom = function()
 {
+    if (AscBrowser.isSailfish && AscBrowser.isEmulateDevicePixelRatio)
+    {
+        var scale = 1;
+        if (screen.width <= 540)
+            scale = 1.5;
+        else if (screen.width > 540 && screen.width <= 768)
+            scale = 2;
+        else if (screen.width > 768)
+            scale = 3;
+
+
+        //document.body.style.zoom = scale;
+        //AscBrowser.zoom = 1 / scale;
+        AscBrowser.isRetina = (scale >= 1.9);
+        AscBrowser.retinaPixelRatio = scale;
+        window.devicePixelRatio = scale;
+        return;
+    }
+
     if (AscBrowser.isAndroid)
 	{
 		AscBrowser.isRetina = (window.devicePixelRatio >= 1.9);
@@ -125,57 +157,55 @@ AscBrowser.checkZoom = function()
 	AscBrowser.isRetina = false;
 	AscBrowser.retinaPixelRatio = 1;
 
-    if (AscBrowser.isChrome && !AscBrowser.isOpera && !AscBrowser.isMobile && document && document.firstElementChild && document.body)
+	// пока отключаем мозиллу... хотя почти все работает
+    if ((/*AscBrowser.isMozilla || */AscBrowser.isChrome) && !AscBrowser.isOperaOld && !AscBrowser.isMobile && document && document.firstElementChild && document.body)
     {
-        if (false)
+        // делаем простую проверку
+        // считаем: 0 < window.devicePixelRatio < 2 => _devicePixelRatio = 1; zoom = window.devicePixelRatio / _devicePixelRatio;
+        // считаем: window.devicePixelRatio >= 2 => _devicePixelRatio = 2; zoom = window.devicePixelRatio / _devicePixelRatio;
+        if (window.devicePixelRatio > 0.1)
+        {
+            if (window.devicePixelRatio < 1.99)
+            {
+                var _devicePixelRatio = 1;
+                AscBrowser.zoom = window.devicePixelRatio / _devicePixelRatio;
+            }
+            else
+            {
+                var _devicePixelRatio = 2;
+                AscBrowser.zoom = window.devicePixelRatio / _devicePixelRatio;
+                AscBrowser.isRetina = true;
+            }
+        }
+
+        var firstElemStyle = document.firstElementChild.style;
+        if (AscBrowser.isMozilla)
 		{
-			// этот код - рабочий, но только если этот ифрейм открыт на весь размер браузера
-            // (window.outerWidth и window.innerWidth зависимы)
-			if (window.innerWidth > 300)
-				AscBrowser.zoom = window.outerWidth / window.innerWidth;
-
-			if (Math.abs(AscBrowser.zoom - 1) < 0.1)
-				AscBrowser.zoom = 1;
-
-			AscBrowser.zoom = window.outerWidth / window.innerWidth;
-
-			var _devicePixelRatio = window.devicePixelRatio / AscBrowser.zoom;
-
-			// device pixel ratio: кратно 0.5
-			_devicePixelRatio = (5 * (((2.5 + 10 * _devicePixelRatio) / 5) >> 0)) / 10;
-
-			AscBrowser.zoom = window.devicePixelRatio / _devicePixelRatio;
-			if (2 == _devicePixelRatio)
-				AscBrowser.isRetina = true;
-
-			// chrome 54.x: zoom = "reset" - clear retina zoom (windows)
-			//document.firstElementChild.style.zoom = "reset";
-			document.firstElementChild.style.zoom = 1.0 / AscBrowser.zoom;
+            if (window.devicePixelRatio > 0.1)
+            {
+                firstElemStyle.transformOrigin = "0 0";
+                firstElemStyle.transform = ("scale(" + (1 / AscBrowser.zoom) + ")");
+                firstElemStyle.width = ((AscBrowser.zoom * 100) + "%");
+                firstElemStyle.height = ((AscBrowser.zoom * 100) + "%");
+            }
+            else
+			{
+                firstElemStyle.transformOrigin = "0 0";
+                firstElemStyle.transform = "scale(1)";
+                firstElemStyle.width = "100%";
+                firstElemStyle.height = "100%";
+			}
 		}
 		else
         {
-            // делаем простую проверку
-            // считаем: 0 < window.devicePixelRatio < 2 => _devicePixelRatio = 1; zoom = window.devicePixelRatio / _devicePixelRatio;
-			// считаем: window.devicePixelRatio >= 2 => _devicePixelRatio = 2; zoom = window.devicePixelRatio / _devicePixelRatio;
             if (window.devicePixelRatio > 0.1)
 			{
-				if (window.devicePixelRatio < 1.99)
-				{
-					var _devicePixelRatio = 1;
-					AscBrowser.zoom = window.devicePixelRatio / _devicePixelRatio;
-				}
-				else
-				{
-					var _devicePixelRatio = 2;
-					AscBrowser.zoom = window.devicePixelRatio / _devicePixelRatio;
-					AscBrowser.isRetina = true;
-				}
 				// chrome 54.x: zoom = "reset" - clear retina zoom (windows)
 				//document.firstElementChild.style.zoom = "reset";
-				document.firstElementChild.style.zoom = 1.0 / AscBrowser.zoom;
+                firstElemStyle.zoom = 1.0 / AscBrowser.zoom;
 			}
 			else
-				document.firstElementChild.style.zoom = "normal";
+                firstElemStyle.zoom = "normal";
         }
 
         if (AscBrowser.isRetina)
@@ -207,5 +237,5 @@ AscBrowser.convertToRetinaValue = function(value, isScale)
 
     //--------------------------------------------------------export----------------------------------------------------
     window['AscCommon'] = window['AscCommon'] || {};
-    window['AscCommon'].AscBrowser = AscBrowser; // ToDo убрать window['AscBrowser']
+    window['AscCommon'].AscBrowser = AscBrowser;
 })(window);

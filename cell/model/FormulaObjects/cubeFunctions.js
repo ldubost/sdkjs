@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2019
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -12,8 +12,8 @@
  * warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR  PURPOSE. For
  * details, see the GNU AGPL at: http://www.gnu.org/licenses/agpl-3.0.html
  *
- * You can contact Ascensio System SIA at Lubanas st. 125a-25, Riga, Latvia,
- * EU, LV-1021.
+ * You can contact Ascensio System SIA at 20A-12 Ernesta Birznieka-Upisha
+ * street, Riga, Latvia, EU, LV-1050.
  *
  * The  interactive user interfaces in modified source and object code versions
  * of the Program must display Appropriate Legal Notices, as required under
@@ -44,94 +44,84 @@
 	cFormulaFunctionGroup['Cube'].push(cCUBEKPIMEMBER, cCUBEMEMBER, cCUBEMEMBERPROPERTY, cCUBERANKEDMEMBER, cCUBESET,
 		cCUBESETCOUNT, cCUBEVALUE);
 
+	cFormulaFunctionGroup['NotRealised'] = cFormulaFunctionGroup['NotRealised'] || [];
+	cFormulaFunctionGroup['NotRealised'].push(cCUBEKPIMEMBER, cCUBEMEMBER, cCUBEMEMBERPROPERTY, cCUBERANKEDMEMBER,
+		cCUBESET, cCUBESETCOUNT, cCUBEVALUE);
+
 	/**
 	 * @constructor
 	 * @extends {AscCommonExcel.cBaseFunction}
 	 */
 	function cCUBEKPIMEMBER() {
-		this.name = "CUBEKPIMEMBER";
-		this.value = null;
-		this.argumentsCurrent = 0;
 	}
 
 	cCUBEKPIMEMBER.prototype = Object.create(cBaseFunction.prototype);
 	cCUBEKPIMEMBER.prototype.constructor = cCUBEKPIMEMBER;
+	cCUBEKPIMEMBER.prototype.name = 'CUBEKPIMEMBER';
 
 	/**
 	 * @constructor
 	 * @extends {AscCommonExcel.cBaseFunction}
 	 */
 	function cCUBEMEMBER() {
-		this.name = "CUBEMEMBER";
-		this.value = null;
-		this.argumentsCurrent = 0;
 	}
 
 	cCUBEMEMBER.prototype = Object.create(cBaseFunction.prototype);
 	cCUBEMEMBER.prototype.constructor = cCUBEMEMBER;
+	cCUBEMEMBER.prototype.name = 'CUBEMEMBER';
 
 	/**
 	 * @constructor
 	 * @extends {AscCommonExcel.cBaseFunction}
 	 */
 	function cCUBEMEMBERPROPERTY() {
-		this.name = "CUBEMEMBERPROPERTY";
-		this.value = null;
-		this.argumentsCurrent = 0;
 	}
 
 	cCUBEMEMBERPROPERTY.prototype = Object.create(cBaseFunction.prototype);
 	cCUBEMEMBERPROPERTY.prototype.constructor = cCUBEMEMBERPROPERTY;
+	cCUBEMEMBERPROPERTY.prototype.name = 'CUBEMEMBERPROPERTY';
 
 	/**
 	 * @constructor
 	 * @extends {AscCommonExcel.cBaseFunction}
 	 */
 	function cCUBERANKEDMEMBER() {
-		this.name = "CUBERANKEDMEMBER";
-		this.value = null;
-		this.argumentsCurrent = 0;
 	}
 
 	cCUBERANKEDMEMBER.prototype = Object.create(cBaseFunction.prototype);
 	cCUBERANKEDMEMBER.prototype.constructor = cCUBERANKEDMEMBER;
+	cCUBERANKEDMEMBER.prototype.name = 'CUBERANKEDMEMBER';
 
 	/**
 	 * @constructor
 	 * @extends {AscCommonExcel.cBaseFunction}
 	 */
 	function cCUBESET() {
-		this.name = "CUBESET";
-		this.value = null;
-		this.argumentsCurrent = 0;
 	}
 
 	cCUBESET.prototype = Object.create(cBaseFunction.prototype);
 	cCUBESET.prototype.constructor = cCUBESET;
+	cCUBESET.prototype.name = 'CUBESET';
 
 	/**
 	 * @constructor
 	 * @extends {AscCommonExcel.cBaseFunction}
 	 */
 	function cCUBESETCOUNT() {
-		this.name = "CUBESETCOUNT";
-		this.value = null;
-		this.argumentsCurrent = 0;
 	}
 
 	cCUBESETCOUNT.prototype = Object.create(cBaseFunction.prototype);
 	cCUBESETCOUNT.prototype.constructor = cCUBESETCOUNT;
+	cCUBESETCOUNT.prototype.name = 'CUBESETCOUNT';
 
 	/**
 	 * @constructor
 	 * @extends {AscCommonExcel.cBaseFunction}
 	 */
 	function cCUBEVALUE() {
-		this.name = "CUBEVALUE";
-		this.value = null;
-		this.argumentsCurrent = 0;
 	}
 
 	cCUBEVALUE.prototype = Object.create(cBaseFunction.prototype);
 	cCUBEVALUE.prototype.constructor = cCUBEVALUE;
+	cCUBEVALUE.prototype.name = 'CUBEVALUE';
 })(window);

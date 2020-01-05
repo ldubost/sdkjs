@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2019
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -12,8 +12,8 @@
  * warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR  PURPOSE. For
  * details, see the GNU AGPL at: http://www.gnu.org/licenses/agpl-3.0.html
  *
- * You can contact Ascensio System SIA at Lubanas st. 125a-25, Riga, Latvia,
- * EU, LV-1021.
+ * You can contact Ascensio System SIA at 20A-12 Ernesta Birznieka-Upisha
+ * street, Riga, Latvia, EU, LV-1050.
  *
  * The  interactive user interfaces in modified source and object code versions
  * of the Program must display Appropriate Legal Notices, as required under
@@ -167,12 +167,18 @@ CTextBody.prototype =
 
     Get_Theme : function()
     {
-        return this.parent.Get_Theme();
+        if(this.parent){
+            return this.parent.Get_Theme();
+        }
+        return null;
     },
 
     Get_ColorMap: function()
     {
-        return this.parent.Get_ColorMap();
+        if(this.parent){
+            return this.parent.Get_ColorMap();
+        }
+        return null;
     },
 
     setParent: function(pr)
@@ -200,7 +206,7 @@ CTextBody.prototype =
         if(this.parent && this.parent.parent && this.parent.parent.parent && this.parent.parent.parent.parent
             && this.parent.parent.parent.parent.parent && this.parent.parent.parent.parent.parent.handleUpdateInternalChart && History.Is_On())
         {
-            this.parent.parent.parent.parent.parent.handleUpdateInternalChart();
+            this.parent.parent.parent.parent.parent.handleUpdateInternalChart(false);
         }
     },
 
@@ -374,7 +380,7 @@ CTextBody.prototype =
                     else
                     {
                         item.Set_FontSize(paragrRedFontSize);
-                }
+                    }
                     break;
                 }
                 case para_Hyperlink:
@@ -382,6 +388,18 @@ CTextBody.prototype =
                     this.checkParagraphContent(item, fontScale, false, paragrRedFontSize);
                     break;
                 }
+            }
+        }
+
+        if(parg.TextPr && parg.TextPr.Value)
+        {
+            if(AscFormat.isRealNumber(parg.TextPr.Value.FontSize))
+            {
+                parg.TextPr.Set_FontSize(Math.round(parg.TextPr.Value.FontSize*fontScale));
+            }
+            else
+            {
+                parg.TextPr.Set_FontSize(paragrRedFontSize);
             }
         }
     },
@@ -399,7 +417,9 @@ CTextBody.prototype =
             this.parent.recalcInfo.recalcTransformText = true;
 
             this.parent.recalcInfo.recalculateContent = true;
+            this.parent.recalcInfo.recalculateContent2 = true;
             this.parent.recalcInfo.recalculateTransformText = true;
+
             if(this.parent.addToRecalculate)
             {
                 this.parent.addToRecalculate();
@@ -413,7 +433,12 @@ CTextBody.prototype =
     },
 
     OnContentReDraw: function()
-    {},
+    {
+        if(this.parent && this.parent.OnContentReDraw)
+        {
+            this.parent.OnContentReDraw();
+        }
+    },
 
     Get_StartPage_Absolute: function()
     {
@@ -439,10 +464,21 @@ CTextBody.prototype =
         return undefined;
     },
 
-    Is_HdrFtr: function()
+    IsHdrFtr: function(bReturnHdrFtr)
     {
+    	if (bReturnHdrFtr)
+    		return null;
+
         return false;
     },
+
+	IsFootnote : function(bReturnFootnote)
+	{
+		if (bReturnFootnote)
+			return null;
+
+		return false;
+	},
 
     Get_PageContentStartPos: function(pageNum)
     {
@@ -479,12 +515,20 @@ CTextBody.prototype =
 
     getSummaryHeight: function()
     {
-        return this.content.Get_SummaryHeight();
+        return this.content.GetSummaryHeight();
     },
 
     getSummaryHeight2: function()
     {
-        return this.content2 ? this.content2.Get_SummaryHeight() : 0;
+        return this.content2 ? this.content2.GetSummaryHeight() : 0;
+    },
+
+    getSummaryHeight3: function()
+    {
+        if(this.content && this.content.GetSummaryHeight_){
+            return this.content.GetSummaryHeight_();
+        }
+        return 0;
     },
 
     getCompiledBodyPr: function()
@@ -505,14 +549,14 @@ CTextBody.prototype =
 
     draw: function(graphics)
     {
-        if((!this.content || this.content.Is_Empty()) && this.parent.isEmptyPlaceholder() && !this.checkCurrentPlaceholder() )
+        if((!this.content || this.content.Is_Empty()) && !AscCommon.IsShapeToImageConverter && this.parent.isEmptyPlaceholder() && !this.checkCurrentPlaceholder() )
         {
             if (graphics.IsNoDrawingEmptyPlaceholder !== true && graphics.IsNoDrawingEmptyPlaceholderText !== true && this.content2)
             {
                 if(graphics.IsNoSupportTextDraw)
                 {
                     var _w2 = this.content2.XLimit;
-                    var _h2 = this.content2.Get_SummaryHeight();
+                    var _h2 = this.content2.GetSummaryHeight();
                     graphics.rect(this.content2.X, this.content2.Y, _w2, _h2);
                 }
 
@@ -524,8 +568,9 @@ CTextBody.prototype =
         {
             if(graphics.IsNoSupportTextDraw)
             {
-                var _w = this.content.XLimit;
-                var _h = this.content.Get_SummaryHeight();
+                var bEmpty = this.content.IsEmpty();
+                var _w = bEmpty ? 0.1 : this.content.XLimit;
+                var _h = this.content.GetSummaryHeight();
                 graphics.rect(this.content.X, this.content.Y, _w, _h);
             }
             var old_start_page = this.content.StartPage;
@@ -537,21 +582,24 @@ CTextBody.prototype =
 
     Get_Styles: function(level)
     {
-        if(this.parent)
+        if(this.parent && this.parent.getStyles)
         {
             return this.parent.getStyles(level);
         }
         return AscFormat.ExecuteNoHistory(function(){
             var oStyles = new CStyles(false);
             var Style_Para_Def = new CStyle( "Normal", null, null, styletype_Paragraph );
-            Style_Para_Def.Create_Default_Paragraph();
+            Style_Para_Def.CreateNormal();
             oStyles.Default.Paragraph = oStyles.Add( Style_Para_Def );
             return {styles: oStyles, lastId: oStyles.Default.Paragraph};
         }, this, []);
     },
 
-    Is_Cell: function()
+    IsCell: function(isReturnCell)
     {
+    	if (true === isReturnCell)
+    		return null;
+
         return false;
     },
 
@@ -607,30 +655,29 @@ CTextBody.prototype =
 
     getContentOneStringSizes: function()
     {
-        //TODO: потом переделать
-        this.content.Reset(0, 0, 20000, 20000);//выставляем большую ширину чтобы текст расчитался в одну строку.
-        this.content.Recalculate_Page(0, true);
-        return {w: this.content.Content[0].Lines[0].Ranges[0].W+0.1, h: this.content.Get_SummaryHeight()+0.1};
+        return GetContentOneStringSizes(this.content);
     },
 
     recalculateByMaxWord: function()
     {
-        var max_content = this.content.Recalculate_MinMaxContentWidth().Max;
+        var max_content = this.content.RecalculateMinMaxContentWidth().Max;
         this.content.Set_ApplyToAll(true);
-        this.content.Set_ParagraphAlign(AscCommon.align_Center);
+        this.content.SetParagraphAlign(AscCommon.align_Center);
         this.content.Set_ApplyToAll(false);
         this.content.Reset(0, 0,max_content, 20000);
         this.content.Recalculate_Page(0, true);
-        return {w: max_content, h: this.content.Get_SummaryHeight()};
+        return {w: max_content, h: this.content.GetSummaryHeight()};
     },
 
-    Get_FirstParagraphNextCell: function(){
-        return null;
-    },
+	GetFirstElementInNextCell : function()
+	{
+		return null;
+	},
 
-    Get_LastParagraphPrevCell: function(){
-        return null;
-    },
+	GetLastElementInPrevCell : function()
+	{
+		return null;
+	},
 
     getRectWidth: function(maxWidth)
     {
@@ -661,7 +708,7 @@ CTextBody.prototype =
         if(bLeft)
         {
             this.content.Set_ApplyToAll(true);
-            this.content.Set_ParagraphAlign(AscCommon.align_Left);
+            this.content.SetParagraphAlign(AscCommon.align_Left);
             this.content.Set_ApplyToAll(false);
         }
         this.content.Recalculate_Page(0, true);
@@ -678,7 +725,7 @@ CTextBody.prototype =
         return max_width + 0.01;
     },
 
-    Get_PrevElementEndInfo : function(CurElement)
+	GetPrevElementEndInfo : function(CurElement)
     {
         return null;
     },
@@ -706,10 +753,24 @@ CTextBody.prototype =
             return this.parent.transformText.CreateDublicate();
         }
         return null;
+    },
+
+    Is_ThisElementCurrent: function () {
+        if(this.parent && this.parent.Is_ThisElementCurrent)
+        {
+            return this.parent.Is_ThisElementCurrent();
+        }
+        return false;
     }
 };
 
+    function GetContentOneStringSizes(oContent) {
+        oContent.Reset(0, 0, 20000, 20000);
+        oContent.Recalculate_Page(0, true);
+        return {w: oContent.Content[0].Lines[0].Ranges[0].W+0.1, h: oContent.GetSummaryHeight() + 0.1};
+    }
     //--------------------------------------------------------export----------------------------------------------------
     window['AscFormat'] = window['AscFormat'] || {};
+    window['AscFormat'].GetContentOneStringSizes = GetContentOneStringSizes;
     window['AscFormat'].CTextBody = CTextBody;
 })(window);

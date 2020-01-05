@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2019
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -12,8 +12,8 @@
  * warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR  PURPOSE. For
  * details, see the GNU AGPL at: http://www.gnu.org/licenses/agpl-3.0.html
  *
- * You can contact Ascensio System SIA at Lubanas st. 125a-25, Riga, Latvia,
- * EU, LV-1021.
+ * You can contact Ascensio System SIA at 20A-12 Ernesta Birznieka-Upisha
+ * street, Riga, Latvia, EU, LV-1050.
  *
  * The  interactive user interfaces in modified source and object code versions
  * of the Program must display Appropriate Legal Notices, as required under
@@ -177,7 +177,7 @@ function CMathBase(bInside)
     this.ReviewInfo = new CReviewInfo();
 
     var Api = editor;
-    if (Api && !Api.isPresentationEditor && Api.WordControl && Api.WordControl.m_oLogicDocument && true === Api.WordControl.m_oLogicDocument.Is_TrackRevisions())
+    if (Api && !Api.isPresentationEditor && Api.WordControl && Api.WordControl.m_oLogicDocument && true === Api.WordControl.m_oLogicDocument.IsTrackRevisions())
     {
         this.ReviewType = reviewtype_Add;
         this.ReviewInfo.Update();
@@ -988,6 +988,9 @@ CMathBase.prototype.Apply_TextPrToCtrPr = function(TextPr, IncFontSize, ApplyToA
     }
     else
     {
+    	if (undefined !== TextPr.Bold)
+    		this.Set_Bold(TextPr.Bold);
+
         if(TextPr.AscFill || TextPr.AscLine || TextPr.AscUnifill)
         {
             var oCompiledPr = this.Get_CompiledCtrPrp();
@@ -1399,7 +1402,7 @@ CMathBase.prototype.Get_Width = function(_CurLine, _CurRange)
 
     return this.Bounds.Get_Width(CurLine, CurRange);
 };
-CMathBase.prototype.Save_RecalculateObject = function(Copy)
+CMathBase.prototype.SaveRecalculateObject = function(Copy)
 {
     var RecalcObj;
     if(this.bOneLine)
@@ -1418,7 +1421,7 @@ CMathBase.prototype.Save_RecalculateObject = function(Copy)
         {
             if(Pos == Num)
             {
-                RecalcObj.Content[Pos] = this.Content[Pos].Save_RecalculateObject(Copy);
+                RecalcObj.Content[Pos] = this.Content[Pos].SaveRecalculateObject(Copy);
             }
             else
             {
@@ -1429,10 +1432,10 @@ CMathBase.prototype.Save_RecalculateObject = function(Copy)
 
     return RecalcObj;
 };
-CMathBase.prototype.Load_RecalculateObject = function(RecalcObj)
+CMathBase.prototype.LoadRecalculateObject = function(RecalcObj)
 {
-    if(this.bOneLine == false)
-        CParagraphContentWithParagraphLikeContent.prototype.Load_RecalculateObject.call(this, RecalcObj);
+	if (this.bOneLine == false)
+		CParagraphContentWithParagraphLikeContent.prototype.LoadRecalculateObject.call(this, RecalcObj);
 
 };
 CMathBase.prototype.Fill_LogicalContent = function(nCount)
@@ -1715,12 +1718,12 @@ CMathBase.prototype.Set_ParaContentPos = function(ContentPos, Depth)
     if (undefined === CurPos || this.CurPos < 0)
     {
         this.CurPos = 0;
-        this.Content[this.CurPos].Cursor_MoveToStartPos();
+        this.Content[this.CurPos].MoveCursorToStartPos();
     }
     else if (CurPos > this.Content.length - 1)
     {
         this.CurPos = this.Content.length - 1;
-        this.Content[this.CurPos].Cursor_MoveToEndPos(false);
+        this.Content[this.CurPos].MoveCursorToEndPos(false);
     }
     else
     {
@@ -1773,13 +1776,13 @@ CMathBase.prototype.Selection_DrawRange = function(_CurLine, _CurRange, Selectio
     }
 
 };
-CMathBase.prototype.Selection_IsEmpty = function()
+CMathBase.prototype.IsSelectionEmpty = function()
 {
     if (true !== this.Selection.Use)
         return true;
 
     if (this.Selection.StartPos === this.Selection.EndPos)
-        return this.Content[this.Selection.StartPos].Selection_IsEmpty();
+        return this.Content[this.Selection.StartPos].IsSelectionEmpty();
 
     return false;
 };
@@ -1869,7 +1872,7 @@ CMathBase.prototype.Draw_Lines = function(PDSL)
     var aStrikeout  = PDSL.Strikeout;
     var aDStrikeout = PDSL.DStrikeout;
 
-    var ReviewType = this.Get_ReviewType();
+    var ReviewType = this.GetReviewType();
     var bAddReview = reviewtype_Add === ReviewType ? true : false;
     var bRemReview = reviewtype_Remove === ReviewType ? true : false;
     var ReviewColor = null;
@@ -2000,9 +2003,9 @@ CMathBase.prototype.Make_ShdColor = function(PDSE, CurTextPr)
         }
     }
 
-    if (reviewtype_Common !== this.Get_ReviewType())
+    if (reviewtype_Common !== this.GetReviewType())
     {
-        var ReviewColor = this.Get_ReviewColor();
+        var ReviewColor = this.GetReviewColor();
         pGraphics.p_color(ReviewColor.r, ReviewColor.g, ReviewColor.b, 255);
         pGraphics.b_color1(ReviewColor.r, ReviewColor.g, ReviewColor.b, 255);
     }
@@ -2036,14 +2039,21 @@ CMathBase.prototype.protected_RemoveItems = function(Pos, Items, bUpdatePosition
 };
 CMathBase.prototype.raw_AddToContent = function(Pos, Items, bUpdatePosition)
 {
-    for(var Index = 0, Count = Items.length; Index < Count; Index++)
-    {
-        var Item = Items[Index];
-        this.Content.splice(Pos + Index, 0, Item);
-        Item.ParentElement = this;
-    }
+	for (var Index = 0, Count = Items.length; Index < Count; Index++)
+	{
+		var Item = Items[Index];
+		this.Content.splice(Pos + Index, 0, Item);
 
-    this.fillContent();
+		if (Item.Set_ParaMath)
+			Item.Set_ParaMath(this.ParaMath);
+
+		if (Item.SetParagraph)
+			Item.SetParagraph(this.Paragraph);
+
+		Item.ParentElement = this;
+	}
+
+	this.fillContent();
 };
 CMathBase.prototype.raw_RemoveFromContent = function(Pos, Count)
 {
@@ -2202,7 +2212,7 @@ CMathBase.prototype.Recalculate_Range = function(PRS, ParaPr, Depth)
 
     return Wrap;
 };*/
-CMathBase.prototype.Recalculate_MinMaxContentWidth = function(MinMax)
+CMathBase.prototype.RecalculateMinMaxContentWidth = function(MinMax)
 {
     var bOneLine = MinMax.bMath_OneLine;
 
@@ -2228,7 +2238,7 @@ CMathBase.prototype.Recalculate_MinMaxContentWidth = function(MinMax)
                 }
                 else
                 {
-                    Item.Recalculate_MinMaxContentWidth(MinMax);
+                    Item.RecalculateMinMaxContentWidth(MinMax);
                 }
             }
         }
@@ -2274,7 +2284,7 @@ CMathBase.prototype.Recalculate_MinMaxContentWidth = function(MinMax)
             var Item = this.Content[Pos];
 
             MinMax.bMath_OneLine = Pos !== Numb;
-            Item.Recalculate_MinMaxContentWidth(MinMax);
+            Item.RecalculateMinMaxContentWidth(MinMax);
 
             if(Pos !== Numb)
             {
@@ -2376,21 +2386,12 @@ CMathBase.prototype.Recalculate_LineMetrics = function(PRS, ParaPr, _CurLine, _C
         }
     }
 };
-CMathBase.prototype.IsEmptyRange = function(_CurLine, _CurRange)
+CMathBase.prototype.IsEmptyRange = function(nCurLine, nCurRange)
 {
-    var bEmpty = false;
-    var Numb = this.NumBreakContent;
+	if (!this.bOneLine)
+		return this.Content[this.NumBreakContent].IsEmptyRange(nCurLine, nCurRange);
 
-    if(this.bOneLine == false)
-    {
-        bEmpty = this.Content[Numb].IsEmptyRange(_CurLine, _CurRange);
-    }
-
-    return bEmpty;
-};
-CMathBase.prototype.Is_EmptyRange = function(_CurLine, _CurRange)
-{
-    return this.bOneLine == true ? false : this.Content[this.NumBreakContent].Is_EmptyRange(_CurLine, _CurRange);
+	return false;
 };
 CMathBase.prototype.Get_LineBound = function(_CurLine, _CurRange)
 {
@@ -2503,6 +2504,9 @@ CMathBase.prototype.Get_Range_VisibleWidth = function(RangeW, _CurLine, _CurRang
 };
 CMathBase.prototype.Displace_BreakOperator = function(isForward, bBrkBefore, CountOperators)
 {
+	if (!this.Content[this.NumBreakContent])
+		return;
+
     this.Content[this.NumBreakContent].Displace_BreakOperator(isForward, bBrkBefore, CountOperators);
 };
 CMathBase.prototype.Get_AlignBrk = function(_CurLine, bBrkBefore)
@@ -2515,16 +2519,29 @@ CMathBase.prototype.raw_SetReviewType = function(Type, Info)
     this.ReviewInfo = Info;
     this.private_UpdateTrackRevisions();
 };
-CMathBase.prototype.Get_ReviewType = function()
+CMathBase.prototype.GetReviewType = function()
 {
     if (this.Id)
         return this.ReviewType;
-    else if (this.Parent && this.Parent.Get_ReviewType)
-        return this.Parent.Get_ReviewType();
+    else if (this.Parent && this.Parent.GetReviewType)
+        return this.Parent.GetReviewType();
 
     return reviewtype_Common;
 };
-CMathBase.prototype.Get_ReviewColor = function()
+CMathBase.prototype.GetReviewInfo = function()
+{
+	if (this.Id)
+		return this.ReviewInfo;
+	else if (this.Parent && this.Parent.GetReviewInfo)
+		return this.Parent.GetReviewInfo();
+
+	return new CReviewInfo();
+};
+CMathBase.prototype.GetReviewMoveType = function()
+{
+	return this.GetReviewInfo().MoveType;
+};
+CMathBase.prototype.GetReviewColor = function()
 {
     if (this.Id)
     {
@@ -2533,20 +2550,20 @@ CMathBase.prototype.Get_ReviewColor = function()
         else
             return new CDocumentColor(255, 0, 0);
     }
-    else if (this.Parent && this.Parent.Get_ReviewColor)
+    else if (this.Parent && this.Parent.GetReviewColor)
     {
-        return this.Parent.Get_ReviewColor();
+        return this.Parent.GetReviewColor();
     }
 
     return REVIEW_COLOR;
 };
-CMathBase.prototype.Set_ReviewType = function(Type, isSetToContent)
+CMathBase.prototype.SetReviewType = function(Type, isSetToContent)
 {
 	if (!this.Id)
 		return;
 
 	if (false !== isSetToContent)
-		CParagraphContentWithParagraphLikeContent.prototype.Set_ReviewType.apply(this, arguments);
+		CParagraphContentWithParagraphLikeContent.prototype.SetReviewType.apply(this, arguments);
 
 	if (Type !== this.ReviewType)
 	{
@@ -2557,31 +2574,31 @@ CMathBase.prototype.Set_ReviewType = function(Type, isSetToContent)
 		this.raw_SetReviewType(Type, NewInfo);
 	}
 };
-CMathBase.prototype.Set_ReviewTypeWithInfo = function(ReviewType, ReviewInfo)
+CMathBase.prototype.SetReviewTypeWithInfo = function(ReviewType, ReviewInfo)
 {
 	if (!this.Id)
 		return;
 
-	CParagraphContentWithParagraphLikeContent.prototype.Set_ReviewTypeWithInfo.apply(this, arguments);
+	CParagraphContentWithParagraphLikeContent.prototype.SetReviewTypeWithInfo.apply(this, arguments);
 
 	History.Add(new CChangesMathBaseReviewType(this, {Type : this.ReviewType, Info : this.ReviewInfo}, {Type : ReviewType, Info : ReviewInfo}));
 	this.raw_SetReviewType(ReviewType, ReviewInfo);
 };
-CMathBase.prototype.Check_RevisionsChanges = function(Checker, ContentPos, Depth)
+CMathBase.prototype.CheckRevisionsChanges = function(Checker, ContentPos, Depth)
 {
-    var ReviewType = this.Get_ReviewType();
+    var ReviewType = this.GetReviewType();
 
     if (true !== Checker.Is_CheckOnlyTextPr())
     {
-        if (ReviewType !== Checker.Get_AddRemoveType() || (reviewtype_Common !== ReviewType && this.ReviewInfo.Get_UserId() !== Checker.Get_AddRemoveUserId()))
+        if (ReviewType !== Checker.GetAddRemoveType() || (reviewtype_Common !== ReviewType && (this.ReviewInfo.GetUserId() !== Checker.Get_AddRemoveUserId() || this.GetReviewMoveType() !== Checker.GetAddRemoveMoveType())))
         {
-            Checker.Flush_AddRemoveChange();
+            Checker.FlushAddRemoveChange();
             ContentPos.Update(0, Depth);
 
             if (reviewtype_Add === ReviewType || reviewtype_Remove === ReviewType)
             {
                 this.Get_StartPos(ContentPos, Depth);
-                Checker.Start_AddRemove(ReviewType, ContentPos);
+                Checker.StartAddRemove(ReviewType, ContentPos, this.GetReviewMoveType());
             }
         }
 
@@ -2615,17 +2632,17 @@ CMathBase.prototype.Check_RevisionsChanges = function(Checker, ContentPos, Depth
     if (reviewtype_Common !== ReviewType)
         Checker.Begin_CheckOnlyTextPr();
 
-    CParagraphContentWithParagraphLikeContent.prototype.Check_RevisionsChanges.apply(this, arguments);
+    CParagraphContentWithParagraphLikeContent.prototype.CheckRevisionsChanges.apply(this, arguments);
 
     if (reviewtype_Common !== ReviewType)
         Checker.End_CheckOnlyTextPr();
 };
-CMathBase.prototype.Accept_RevisionChanges = function(Type, bAll)
+CMathBase.prototype.AcceptRevisionChanges = function(Type, bAll)
 {
     var ReviewType = this.ReviewType;
     if (reviewtype_Add === ReviewType && (undefined === Type || c_oAscRevisionsChangeType.TextAdd === Type))
     {
-        this.Set_ReviewType(reviewtype_Common, false);
+        this.SetReviewType(reviewtype_Common, false);
     }
     else if (reviewtype_Remove === ReviewType && (undefined === Type || c_oAscRevisionsChangeType.TextRem === Type))
     {
@@ -2634,7 +2651,7 @@ CMathBase.prototype.Accept_RevisionChanges = function(Type, bAll)
 
         if (!Parent || -1 === PosInParent)
         {
-            this.Set_ReviewType(reviewtype_Common, false);
+            this.SetReviewType(reviewtype_Common, false);
         }
         else
         {
@@ -2643,14 +2660,14 @@ CMathBase.prototype.Accept_RevisionChanges = function(Type, bAll)
         }
     }
 
-    CParagraphContentWithParagraphLikeContent.prototype.Accept_RevisionChanges.apply(this, arguments);
+    CParagraphContentWithParagraphLikeContent.prototype.AcceptRevisionChanges.apply(this, arguments);
 };
-CMathBase.prototype.Reject_RevisionChanges = function(Type, bAll)
+CMathBase.prototype.RejectRevisionChanges = function(Type, bAll)
 {
     var ReviewType = this.ReviewType;
     if (reviewtype_Remove === ReviewType && (undefined === Type || c_oAscRevisionsChangeType.TextRem === Type))
     {
-        this.Set_ReviewType(reviewtype_Common, false);
+        this.SetReviewType(reviewtype_Common, false);
     }
     else if (reviewtype_Add === ReviewType && (undefined === Type || c_oAscRevisionsChangeType.TextAdd === Type))
     {
@@ -2659,7 +2676,7 @@ CMathBase.prototype.Reject_RevisionChanges = function(Type, bAll)
 
         if (!Parent || -1 === PosInParent)
         {
-            this.Set_ReviewType(reviewtype_Common, false);
+            this.SetReviewType(reviewtype_Common, false);
         }
         else
         {
@@ -2668,7 +2685,7 @@ CMathBase.prototype.Reject_RevisionChanges = function(Type, bAll)
         }
     }
 
-    CParagraphContentWithParagraphLikeContent.prototype.Reject_RevisionChanges.apply(this, arguments);
+    CParagraphContentWithParagraphLikeContent.prototype.RejectRevisionChanges.apply(this, arguments);
 };
 CMathBase.prototype.Set_MenuProps = function(Props)
 {
@@ -2814,13 +2831,13 @@ CMathBase.prototype.private_CorrectCurPos = function()
     if (this.CurPos > this.Content.length - 1)
     {
         this.CurPos = this.Content.length - 1;
-        this.Content[this.CurPos].Cursor_MoveToEndPos(false);
+        this.Content[this.CurPos].MoveCursorToEndPos(false);
     }
 
     if (this.CurPos < 0)
     {
         this.CurPos = this.Content.length - 1;
-        this.Content[this.CurPos].Cursor_MoveToStartPos();
+        this.Content[this.CurPos].MoveCursorToStartPos();
     }
 };
 CMathBase.prototype.Selection_CheckParaContentPos = function(ContentPos, Depth, bStart, bEnd)
@@ -2849,9 +2866,9 @@ CMathBase.prototype.Is_ContentUse = function(MathContent)
 
     return false;
 };
-CMathBase.prototype.Is_FromDocument = function(MathContent)
+CMathBase.prototype.Is_FromDocument = function()
 {
-	return this.Paragraph && this.Paragraph.bFromDocument
+	return (this.ParaMath && this.ParaMath.Paragraph && this.ParaMath.Paragraph.bFromDocument);
 };
 CMathBase.prototype.Clear_ContentChanges = function()
 {

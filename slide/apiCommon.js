@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2019
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -12,8 +12,8 @@
  * warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR  PURPOSE. For
  * details, see the GNU AGPL at: http://www.gnu.org/licenses/agpl-3.0.html
  *
- * You can contact Ascensio System SIA at Lubanas st. 125a-25, Riga, Latvia,
- * EU, LV-1021.
+ * You can contact Ascensio System SIA at 20A-12 Ernesta Birznieka-Upisha
+ * street, Riga, Latvia, EU, LV-1050.
  *
  * The  interactive user interfaces in modified source and object code versions
  * of the Program must display Appropriate Legal Notices, as required under
@@ -134,6 +134,18 @@ CAscSlideTiming.prototype.setDefaultParams = function()
     this.SlideAdvanceDuration       = 10000;
     this.ShowLoop                   = true;
 };
+CAscSlideTiming.prototype.setDefaultParams = function()
+{
+    this.TransitionType     = c_oAscSlideTransitionTypes.None;
+    this.TransitionOption   = -1;
+    this.TransitionDuration = 2000;
+
+    this.SlideAdvanceOnMouseClick   = true;
+    this.SlideAdvanceAfter          = false;
+    this.SlideAdvanceDuration       = 10000;
+    this.ShowLoop                   = true;
+};
+
 
 CAscSlideTiming.prototype.Write_ToBinary = function(w)
 {
@@ -190,6 +202,20 @@ CAscSlideTiming.prototype.Read_FromBinary = function(r)
     this.ShowLoop = AscFormat.readBool(r);
 };
 
+CAscSlideTiming.prototype.ToArray = function()
+{
+    var _ret = [];
+    _ret.push(this.TransitionType);
+    _ret.push(this.TransitionOption);
+    _ret.push(this.TransitionDuration);
+
+    _ret.push(this.SlideAdvanceOnMouseClick);
+    _ret.push(this.SlideAdvanceAfter);
+    _ret.push(this.SlideAdvanceDuration);
+    _ret.push(this.ShowLoop);
+    return _ret;
+};
+
 AscDFH.drawingsConstructorsMap[AscDFH.historyitem_SlideSetTiming            ] = CAscSlideTiming;
 
 
@@ -223,34 +249,215 @@ CLayoutThumbnail.prototype.get_Name = function() { return this.Name; };
 CLayoutThumbnail.prototype.get_Width = function() { return this.Width; };
 CLayoutThumbnail.prototype.get_Height = function() { return this.Height; };
 
-function CHyperlinkProperty( obj )
-{
-    if( obj )
-    {
-        this.Text    = (undefined != obj.Text   ) ? obj.Text    : null;
-        this.Value   = (undefined != obj.Value  ) ? obj.Value   : "";
-        this.ToolTip = (undefined != obj.ToolTip) ? obj.ToolTip : null;
+
+function CompareTiming(timing1, timing2){
+    if(!timing1 || !timing2){
+        return null;
     }
-    else
-    {
-        this.Text    = null;
-        this.Value   = "";
-        this.ToolTip = null;
+    var ret = new CAscSlideTiming();
+    if(timing1.TransitionType === timing2.TransitionType){
+        ret.TransitionType = timing1.TransitionType;
     }
+    if(timing1.TransitionOption === timing2.TransitionOption){
+        ret.TransitionOption = timing1.TransitionOption;
+    }
+    if(timing1.TransitionDuration === timing2.TransitionDuration){
+        ret.TransitionDuration = timing1.TransitionDuration;
+    }
+    if(timing1.SlideAdvanceOnMouseClick === timing2.SlideAdvanceOnMouseClick){
+        ret.SlideAdvanceOnMouseClick = timing1.SlideAdvanceOnMouseClick;
+    }
+    if(timing1.SlideAdvanceAfter === timing2.SlideAdvanceAfter){
+        ret.SlideAdvanceAfter = timing1.SlideAdvanceAfter;
+    }
+    if(timing1.SlideAdvanceDuration === timing2.SlideAdvanceDuration){
+        ret.SlideAdvanceDuration = timing1.SlideAdvanceDuration;
+    }
+    if(timing1.ShowLoop === timing2.ShowLoop){
+        ret.ShowLoop = timing1.ShowLoop;
+    }
+    return ret;
 }
 
-CHyperlinkProperty.prototype.get_Value   = function()  { return this.Value; };
-CHyperlinkProperty.prototype.put_Value   = function(v) { this.Value = v; };
-CHyperlinkProperty.prototype.get_ToolTip = function()  { return this.ToolTip; };
-CHyperlinkProperty.prototype.put_ToolTip = function(v) { this.ToolTip = v; };
-CHyperlinkProperty.prototype.get_Text    = function()  { return this.Text; };
-CHyperlinkProperty.prototype.put_Text    = function(v) { this.Text = v; };
+function CAscDateTime() {
+    this.DateTime = null;
+    this.CustomDateTime = null;
+    this.Lang = null;
+}
 
+CAscDateTime.prototype['get_DateTime'] = CAscDateTime.prototype.get_DateTime = function(){return this.DateTime;};
+CAscDateTime.prototype['put_DateTime'] = CAscDateTime.prototype.put_DateTime = function(v){this.DateTime = v;};
+CAscDateTime.prototype['get_CustomDateTime']  = CAscDateTime.prototype.get_CustomDateTime = function(){return this.CustomDateTime;};
+CAscDateTime.prototype['put_CustomDateTime']  = CAscDateTime.prototype.put_CustomDateTime = function(v){this.CustomDateTime = v;};
+CAscDateTime.prototype['get_Lang'] = CAscDateTime.prototype.get_Lang = function(){return this.Lang;};
+CAscDateTime.prototype['put_Lang'] = CAscDateTime.prototype.put_Lang = function(v){this.Lang = v;};
+CAscDateTime.prototype['get_DateTimeExamples'] = CAscDateTime.prototype.get_DateTimeExamples = function(){
+    var oMap = {
+        "datetime1": null,
+        "datetime2": null,
+        "datetime3": null,
+        "datetime4": null,
+        "datetime5": null,
+        "datetime6": null,
+        "datetime7": null,
+        "datetime8": null,
+        "datetime9": null,
+        "datetime10": null,
+        "datetime11": null,
+        "datetime12": null,
+        "datetime13": null
+    };
+    AscFormat.ExecuteNoHistory(function () {
+        var oParaField = new AscCommonWord.CPresentationField();
+        oParaField.RecalcInfo.TextPr = false;
+        oParaField.CompiledPr = new CTextPr();
+        oParaField.CompiledPr.Init_Default();
+        oParaField.CompiledPr.Lang.Val = this.Lang;
+        for(var key in oMap) {
+            if(oMap.hasOwnProperty(key)) {
+                oParaField.FieldType = key;
+                oMap[key] = oParaField.private_GetString();
+            }
+        }
+    }, this, []);
+    return oMap;
+
+};
+
+function CAscHFProps() {
+    this.Footer = null;
+    this.Header = null;
+    this.DateTime = null;
+
+    this.ShowDateTime = null;
+    this.ShowSlideNum = null;
+    this.ShowFooter = null;
+    this.ShowHeader = null;
+
+    this.ShowOnTitleSlide = null;
+
+
+    this.api = null;
+    this.DivId = null;
+    this.slide = null;
+    this.notes = null;
+}
+
+CAscHFProps.prototype['get_Footer'] = CAscHFProps.prototype.get_Footer = function(){return this.Footer;};
+CAscHFProps.prototype['get_Header'] = CAscHFProps.prototype.get_Header = function(){return this.Header;};
+CAscHFProps.prototype['get_DateTime'] = CAscHFProps.prototype.get_DateTime = function(){return this.DateTime;};
+CAscHFProps.prototype['get_ShowSlideNum'] = CAscHFProps.prototype.get_ShowSlideNum = function(){return this.ShowSlideNum;};
+CAscHFProps.prototype['get_ShowOnTitleSlide'] = CAscHFProps.prototype.get_ShowOnTitleSlide = function(){return this.ShowOnTitleSlide;};
+CAscHFProps.prototype['get_ShowFooter'] = CAscHFProps.prototype.get_ShowFooter = function(){return this.ShowFooter;};
+CAscHFProps.prototype['get_ShowHeader'] = CAscHFProps.prototype.get_ShowHeader = function(){return this.ShowHeader;};
+CAscHFProps.prototype['get_ShowDateTime'] = CAscHFProps.prototype.get_ShowDateTime = function(){return this.ShowDateTime;};
+
+CAscHFProps.prototype['put_ShowOnTitleSlide'] = CAscHFProps.prototype.put_ShowOnTitleSlide = function(v){this.ShowOnTitleSlide = v;};
+CAscHFProps.prototype['put_Footer'] = CAscHFProps.prototype.put_Footer = function(v){this.Footer = v;};
+CAscHFProps.prototype['put_Header'] = CAscHFProps.prototype.put_Header = function(v){this.Header = v;};
+CAscHFProps.prototype['put_DateTime'] = CAscHFProps.prototype.put_DateTime = function(v){this.DateTime = v;};
+CAscHFProps.prototype['put_ShowSlideNum'] = CAscHFProps.prototype.put_ShowSlideNum = function(v){this.ShowSlideNum = v;};
+CAscHFProps.prototype['put_ShowFooter'] = CAscHFProps.prototype.put_ShowFooter = function(v){this.ShowFooter = v;};
+CAscHFProps.prototype['put_ShowHeader'] = CAscHFProps.prototype.put_ShowHeader = function(v){this.ShowHeader = v;};
+CAscHFProps.prototype['put_ShowDateTime'] = CAscHFProps.prototype.put_ShowDateTime = function(v){this.ShowDateTime = v;};
+
+CAscHFProps.prototype['put_DivId'] = CAscHFProps.prototype.put_DivId = function(v){this.DivId = v;};
+CAscHFProps.prototype['updateView'] = CAscHFProps.prototype.updateView = function(){
+    var oDiv = document.getElementById(this.DivId);
+    if(!oDiv){
+        return;
+    }
+    var aChildren = oDiv.children;
+    var oCanvas = null, i;
+    for(i = 0; i < aChildren.length; ++i){
+        if(aChildren[i].nodeName && aChildren[i].nodeName.toUpperCase() === 'CANVAS'){
+            oCanvas = aChildren[i];
+            break;
+        }
+    }
+    var nWidth = oDiv.clientWidth;
+    var nHeight = oDiv.clientHeight;
+    if(null === oCanvas){
+        oCanvas = document.createElement('canvas');
+        oCanvas.width = parseInt(nWidth);
+        oCanvas.height = parseInt(nHeight);
+        oDiv.appendChild(oCanvas);
+    }
+    var oContext = oCanvas.getContext('2d');
+    oContext.clearRect(0, 0, oCanvas.width, oCanvas.height);
+    var oSp, nPhType, aSpTree, oSlideObject = null, l, t, r, b;
+    if(this.slide) {
+        oSlideObject = this.slide.Layout;
+    }
+    else if(this.notes) {
+        oSlideObject = this.notes.Master;
+    }
+    if(oSlideObject) {
+        aSpTree = oSlideObject.cSld.spTree;
+
+        oContext.fillStyle = "#FFFFFF";
+        oContext.fillRect(0, 0, oCanvas.width, oCanvas.height);
+        oContext.fillStyle = "#000000";
+        if(Array.isArray(aSpTree)) {
+            for(i = 0; i < aSpTree.length; ++i) {
+                oSp = aSpTree[i];
+                if(oSp.isPlaceholder()) {
+                    oSp.recalculate();
+                    l = ((oSp.x / oSlideObject.Width * oCanvas.width) >> 0) + 1;
+                    t = ((oSp.y / oSlideObject.Height * oCanvas.height) >> 0) + 1;
+                    r = (((oSp.x + oSp.extX)/ oSlideObject.Width * oCanvas.width) >> 0);
+                    b = (((oSp.y + oSp.extY)/ oSlideObject.Height * oCanvas.height) >> 0);
+                    nPhType = oSp.getPhType();
+                    oContext.beginPath();
+                    if(nPhType === AscFormat.phType_dt ||
+                    nPhType === AscFormat.phType_ftr ||
+                    nPhType === AscFormat.phType_hdr ||
+                    nPhType === AscFormat.phType_sldNum) {
+                        editor.WordControl.m_oDrawingDocument.AutoShapesTrack.AddRect(oContext, l, t, r, b, true);
+                        oContext.closePath();
+                        oContext.stroke();
+                        if(nPhType === AscFormat.phType_dt && this.ShowDateTime
+                            || nPhType === AscFormat.phType_ftr && this.ShowFooter
+                            || nPhType === AscFormat.phType_hdr && this.ShowHeader
+                            || nPhType === AscFormat.phType_sldNum && this.ShowSlideNum) {
+                            oContext.fill();
+                        }
+                    }
+                    else {
+                        editor.WordControl.m_oDrawingDocument.AutoShapesTrack.AddRectDashClever(oContext, l, t, r, b, 3, 3, true);
+                        oContext.closePath();
+                    }
+                }
+            }
+        }
+    }
+    //return oCanvas.toDataURL("image/png");
+};
+CAscHFProps.prototype['put_Api'] = CAscHFProps.prototype.put_Api = function(v){this.api = v;};
+
+
+function CAscHF() {
+    this.Slide = null;
+    this.Notes = null;
+}
+
+CAscHF.prototype['put_Slide'] = CAscHF.prototype.put_Slide = function(v){this.Slide = v;};
+CAscHF.prototype['get_Slide'] = CAscHF.prototype.get_Slide = function(){return this.Slide;};
+CAscHF.prototype['put_Notes'] = CAscHF.prototype.put_Notes = function(v){this.Notes = v;};
+CAscHF.prototype['get_Notes'] = CAscHF.prototype.get_Notes = function(){return this.Notes;};
 
 //------------------------------------------------------------export----------------------------------------------------
 window['Asc'] = window['Asc'] || {};
 window['AscCommonSlide'] = window['AscCommonSlide'] || {};
+
+
+
+window['AscCommonSlide']['CAscDateTime'] = window['AscCommonSlide'].CAscDateTime = CAscDateTime;
+window['AscCommonSlide']['CAscHFProps'] = window['AscCommonSlide'].CAscHFProps = CAscHFProps;
+window['AscCommonSlide']['CAscHF'] = window['AscCommonSlide'].CAscHF = CAscHF;
+
 window['Asc']['CAscSlideTiming'] = CAscSlideTiming;
+window['AscCommonSlide'].CompareTiming = CompareTiming;
 CAscSlideTiming.prototype['put_TransitionType'] = CAscSlideTiming.prototype.put_TransitionType;
 CAscSlideTiming.prototype['get_TransitionType'] = CAscSlideTiming.prototype.get_TransitionType;
 CAscSlideTiming.prototype['put_TransitionOption'] = CAscSlideTiming.prototype.put_TransitionOption;

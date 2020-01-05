@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2019
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -12,8 +12,8 @@
  * warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR  PURPOSE. For
  * details, see the GNU AGPL at: http://www.gnu.org/licenses/agpl-3.0.html
  *
- * You can contact Ascensio System SIA at Lubanas st. 125a-25, Riga, Latvia,
- * EU, LV-1021.
+ * You can contact Ascensio System SIA at 20A-12 Ernesta Birznieka-Upisha
+ * street, Riga, Latvia, EU, LV-1050.
  *
  * The  interactive user interfaces in modified source and object code versions
  * of the Program must display Appropriate Legal Notices, as required under
@@ -36,12 +36,6 @@
 var CShape = AscFormat.CShape;
 var CChartSpace = AscFormat.CChartSpace;
 var CreateUnifillSolidFillSchemeColor = AscFormat.CreateUnifillSolidFillSchemeColor;
-
-function getChartTranslateManager()
-{
-    return editor.chartTranslate;
-}
-
 
 CChartSpace.prototype.addToDrawingObjects =  CShape.prototype.addToDrawingObjects;
 CChartSpace.prototype.setDrawingObjects = CShape.prototype.setDrawingObjects;
@@ -95,7 +89,7 @@ CChartSpace.prototype.recalculatePlotAreaChartBrush = function()
             default_brush.merge(plot_area.spPr.Fill);
         }
         var parents = this.getParentObjects();
-        default_brush.calculate(parents.theme, parents.slide, parents.layout, parents.master, {R: 0, G: 0, B: 0, A: 255});
+        default_brush.calculate(parents.theme, parents.slide, parents.layout, parents.master, {R: 0, G: 0, B: 0, A: 255}, this.clrMapOvr);
         plot_area.brush = default_brush;
     }
 };
@@ -126,7 +120,7 @@ CChartSpace.prototype.recalculateChartBrush = function()
         default_brush.merge(this.spPr.Fill);
     }
     var parents = this.getParentObjects();
-    default_brush.calculate(parents.theme, parents.slide, parents.layout, parents.master, {R: 0, G: 0, B: 0, A: 255});
+    default_brush.calculate(parents.theme, parents.slide, parents.layout, parents.master, {R: 0, G: 0, B: 0, A: 255}, this.clrMapOvr);
     this.brush = default_brush;
 
 };
@@ -162,7 +156,7 @@ CChartSpace.prototype.recalculateChartPen = function()
     if(this.spPr && this.spPr.ln)
         default_line.merge(this.spPr.ln);
     var parents = this.getParentObjects();
-    default_line.calculate(parents.theme, parents.slide, parents.layout, parents.master, {R: 0, G: 0, B: 0, A: 255});
+    default_line.calculate(parents.theme, parents.slide, parents.layout, parents.master, {R: 0, G: 0, B: 0, A: 255}, this.clrMapOvr);
     this.pen = default_line;
     AscFormat.checkBlackUnifill(this.pen.Fill, true);
 };
@@ -170,7 +164,7 @@ CChartSpace.prototype.recalcText = function()
 {
     this.recalcInfo.recalculateAxisLabels = true;
     this.recalcTitles2();
-    this.handleUpdateInternalChart();
+    this.handleUpdateInternalChart(false);
 };
 
 CChartSpace.prototype.recalculateBounds = CShape.prototype.recalculateBounds;
@@ -182,16 +176,12 @@ CChartSpace.prototype.getInvertTransform = CShape.prototype.getInvertTransform;
 CChartSpace.prototype.hit = CShape.prototype.hit;
 CChartSpace.prototype.hitInInnerArea = CShape.prototype.hitInInnerArea;
 CChartSpace.prototype.hitInPath = CShape.prototype.hitInPath;
-CChartSpace.prototype.getNumByCardDirection = CShape.prototype.getNumByCardDirection;
-CChartSpace.prototype.getCardDirectionByNum = CShape.prototype.getCardDirectionByNum;
-CChartSpace.prototype.getResizeCoefficients = CShape.prototype.getResizeCoefficients;
 CChartSpace.prototype.check_bounds = CShape.prototype.check_bounds;
-CChartSpace.prototype.getFullFlipH = CShape.prototype.getFullFlipH;
-CChartSpace.prototype.getFullFlipV = CShape.prototype.getFullFlipV;
 CChartSpace.prototype.setWorksheet = CShape.prototype.setWorksheet;
 CChartSpace.prototype.handleUpdateLn = function()
 {
     this.recalcInfo.recalculatePenBrush = true;
+    this.recalcInfo.recalculatePlotAreaPen = true;
     this.addToRecalculate();
 };
 CChartSpace.prototype.setRecalculateInfo = function()
@@ -203,7 +193,6 @@ CChartSpace.prototype.setRecalculateInfo = function()
         recalculateTransform: true,
         recalculateBounds:    true,
         recalculateChart:     true,
-        recalculateBaseColors: true,
         recalculateSeriesColors: true,
         recalculateMarkers: true,
         recalculateGridLines: true,
@@ -227,7 +216,6 @@ CChartSpace.prototype.setRecalculateInfo = function()
         recalculateTextPr : true,
         recalculateBBoxRange: true
     };
-    this.baseColors = [];
     this.chartObj = null;
     this.rectGeometry = AscFormat.ExecuteNoHistory(function(){return  AscFormat.CreateGeometry("rect");},  this, []);
     this.lockType = AscCommon.c_oAscLockTypes.kLockTypeNone;
@@ -244,13 +232,12 @@ CChartSpace.prototype.recalcChart = function()
 {
     this.recalcInfo.recalculateChart = true;
 };
-CChartSpace.prototype.recalcBaseColors = function()
-{
-    this.recalcInfo.recalculateBaseColors = true;
-};
 CChartSpace.prototype.recalcSeriesColors = function()
 {
     this.recalcInfo.recalculateSeriesColors = true;
+    this.recalcInfo.recalculatePenBrush = true;
+    this.recalcInfo.recalculatePlotAreaBrush = true;
+    this.recalcInfo.recalculateLegend = true;
 };
 
 CChartSpace.prototype.recalcDLbls = function()
@@ -264,17 +251,27 @@ CChartSpace.prototype.handleUpdatePosition = function()
 {
     this.recalcTransform();
     this.recalcBounds();
-    //  this.recalcDLbls();
-    //this.setRecalculateInfo();
+    for(var i = 0; i < this.userShapes.length; ++i)
+    {
+        if(this.userShapes[i].object && this.userShapes[i].object.handleUpdateExtents)
+        {
+            this.userShapes[i].object.handleUpdateExtents();
+        }
+    }
     this.addToRecalculate();
 };
-CChartSpace.prototype.handleUpdateExtents = function()
+CChartSpace.prototype.handleUpdateExtents = function(bExtX)
 {
-    this.recalcChart();
-    this.recalcBounds();
-    this.recalcTransform();
-    this.recalcTitles();
-    this.handleUpdateInternalChart();
+    var oXfrm = this.spPr && this.spPr.xfrm;
+    if(undefined === bExtX ||
+        !oXfrm || bExtX && !AscFormat.fApproxEqual(this.extX, oXfrm.extX, 0.01) || false === bExtX &&!AscFormat.fApproxEqual(this.extY, oXfrm.extY, 0.01))
+    {
+        this.recalcChart();
+        this.recalcBounds();
+        this.recalcTransform();
+        this.recalcTitles();
+        this.handleUpdateInternalChart(false);
+    }
 };
 CChartSpace.prototype.handleUpdateFlip = function()
 {
@@ -291,6 +288,7 @@ CChartSpace.prototype.handleUpdateChart = function()
 CChartSpace.prototype.handleUpdateStyle = function()
 {
     this.recalcInfo.recalculateSeriesColors = true;
+    this.recalcInfo.recalculatePenBrush = true;
     this.recalcInfo.recalculateLegend = true;
     this.recalcInfo.recalculatePlotAreaBrush = true;
     this.recalcInfo.recalculatePlotAreaPen = true;
@@ -306,15 +304,23 @@ CChartSpace.prototype.handleUpdateStyle = function()
 CChartSpace.prototype.handleUpdateFill = function()
 {
     this.recalcInfo.recalculatePenBrush = true;
+    this.recalcInfo.recalculatePlotAreaBrush = true;
     this.recalcInfo.recalculateBrush = true;
     this.recalcInfo.recalculateChart = true;
+    this.recalcInfo.recalculateSeriesColors = true;
+    this.recalcInfo.recalculateLegend = true;
+	this.recalcInfo.recalculateMarkers = true;
     this.addToRecalculate();
 };
 CChartSpace.prototype.handleUpdateLn = function()
 {
     this.recalcInfo.recalculatePenBrush = true;
+    this.recalcInfo.recalculatePlotAreaPen = true;
     this.recalcInfo.recalculatePen = true;
     this.recalcInfo.recalculateChart = true;
+    this.recalcInfo.recalculateSeriesColors = true;
+    this.recalcInfo.recalculateLegend = true;
+	this.recalcInfo.recalculateMarkers = true;
     this.addToRecalculate();
 };
 CChartSpace.prototype.canGroup = CShape.prototype.canGroup;
@@ -323,12 +329,6 @@ CChartSpace.prototype.getCanvasContext = CShape.prototype.getCanvasContext;
 CChartSpace.prototype.getHierarchy = CShape.prototype.getHierarchy;
 CChartSpace.prototype.getParentObjects = CShape.prototype.getParentObjects;
 CChartSpace.prototype.recalculateTransform = CShape.prototype.recalculateTransform;
-CChartSpace.prototype.recalculateChart = function()
-{
-    if(this.chartObj == null)
-        this.chartObj =  new AscFormat.CChartsDrawer();
-    this.chartObj.reCalculate(this);
-};
 CChartSpace.prototype.canResize = CShape.prototype.canResize;
 CChartSpace.prototype.canMove = CShape.prototype.canMove;
 CChartSpace.prototype.canRotate = function()
@@ -339,7 +339,6 @@ CChartSpace.prototype.canRotate = function()
 
 CChartSpace.prototype.createResizeTrack = CShape.prototype.createResizeTrack;
 CChartSpace.prototype.createMoveTrack = CShape.prototype.createMoveTrack;
-CChartSpace.prototype.getAspect = CShape.prototype.getAspect;
 CChartSpace.prototype.getRectBounds = CShape.prototype.getRectBounds;
 
 CChartSpace.prototype.recalculateBounds = function()
@@ -403,11 +402,6 @@ CChartSpace.prototype.recalculate = function()
             this.recalculateBBox();
             this.recalcInfo.recalculateBBox = false;
         }
-        if(this.recalcInfo.recalculateBaseColors)
-        {
-            this.recalculateBaseColors();
-            this.recalcInfo.recalculateBaseColors = false;
-        }
         if(this.recalcInfo.recalculateMarkers)
         {
             this.recalculateMarkers();
@@ -417,6 +411,8 @@ CChartSpace.prototype.recalculate = function()
         {
             this.recalculateSeriesColors();
             this.recalcInfo.recalculateSeriesColors = false;
+            this.recalcInfo.recalculateLegend = true;
+            this.recalcInfo.recalculatePenBrush = true;
         }
         if(this.recalcInfo.recalculateGridLines)
         {
@@ -469,14 +465,6 @@ CChartSpace.prototype.recalculate = function()
         }
 
 
-        var b_recalc_legend = false;
-        if(this.recalcInfo.recalculateLegend)
-        {
-            this.recalculateLegend();
-            this.recalcInfo.recalculateLegend = false;
-            b_recalc_legend = true;
-        }
-
         var b_recalc_labels = false;
         if(this.recalcInfo.recalculateAxisLabels)
         {
@@ -485,16 +473,26 @@ CChartSpace.prototype.recalculate = function()
             b_recalc_labels = true;
         }
 
-        if(this.recalcInfo.recalculateAxisVal)
+        var b_recalc_legend = false;
+        if(this.recalcInfo.recalculateLegend)
         {
-            bCheckLabels = true;
-
-            this.recalculateAxis();
-            this.recalcInfo.recalculateAxisVal = false;
+            this.recalculateLegend();
+            this.recalcInfo.recalculateLegend = false;
+            b_recalc_legend = true;
         }
 
-
-
+        if(this.recalcInfo.recalculateAxisVal)
+        {
+            if(AscFormat.CChartsDrawer.prototype._isSwitchCurrent3DChart(this)){
+                //old variant
+                this.recalculateAxis();
+            }
+            else{
+                this.recalculateAxes();
+            }
+            this.recalcInfo.recalculateAxisVal = false;
+            bCheckLabels = true;
+        }
         if(this.recalcInfo.recalculatePenBrush)
         {
             this.recalculatePenBrush();
@@ -510,11 +508,7 @@ CChartSpace.prototype.recalculate = function()
                 this.checkAxisLabelsTransform();
             }
         }
-
-
-
         this.calculateLabelsPositions(b_recalc_labels, b_recalc_legend);
-
         if(this.recalcInfo.recalculateBounds)
         {
             this.recalculateBounds();
@@ -526,6 +520,8 @@ CChartSpace.prototype.recalculate = function()
             this.recalculateTextPr();
             this.recalcInfo.recalculateTextPr = false;
         }
+
+        this.recalculateUserShapes();
         // if(b_transform)
         {
             this.updateChildLabelsTransform(this.transform.tx, this.transform.ty);
@@ -546,15 +542,15 @@ CChartSpace.prototype.recalculateLocalTransform = CShape.prototype.recalculateLo
 CChartSpace.prototype.Get_Theme = CShape.prototype.Get_Theme;
 CChartSpace.prototype.Get_ColorMap = CShape.prototype.Get_ColorMap;
 
-CTable.prototype.Get_TableOffsetCorrection = function()
+CTable.prototype.GetTableOffsetCorrection = function()
 {
     return 0;
 };
-CTable.prototype.Get_RightTableOffsetCorrection = function()
+CTable.prototype.GetRightTableOffsetCorrection = function()
 {
     return 0;
 };
-CTable.prototype.Selection_Draw_Page = function(CurPage)
+CTable.prototype.DrawSelectionOnPage = function(CurPage)
 {
     if (false === this.Selection.Use)
         return;
@@ -565,6 +561,7 @@ CTable.prototype.Selection_Draw_Page = function(CurPage)
     var Page    = this.Pages[CurPage];
     var PageAbs = this.private_GetAbsolutePageIndex(CurPage);
 
+    var H;
     switch (this.Selection.Type)
     {
         case table_Selection_Cell:
@@ -575,8 +572,6 @@ CTable.prototype.Selection_Draw_Page = function(CurPage)
                 var Row      = this.Content[Pos.Row];
                 var Cell     = Row.Get_Cell(Pos.Cell);
                 var CellInfo = Row.Get_CellInfo(Pos.Cell);
-                var CellMar  = Cell.Get_Margins();
-
                 var X_start = Page.X + CellInfo.X_cell_start;
                 var X_end   = Page.X + CellInfo.X_cell_end;
 
@@ -584,9 +579,6 @@ CTable.prototype.Selection_Draw_Page = function(CurPage)
                 var Cell_PageRel = CurPage - Cell.Content.Get_StartPage_Relative();
                 if (Cell_PageRel < 0 || Cell_PageRel >= Cell_Pages)
                     continue;
-
-                var Bounds   = Cell.Content_Get_PageBounds(Cell_PageRel);
-                var Y_offset = Cell.Temp.Y_VAlign_offset[Cell_PageRel];
 
                 if (0 != Cell_PageRel)
                 {
@@ -596,7 +588,23 @@ CTable.prototype.Selection_Draw_Page = function(CurPage)
                 }
                 else
                 {
-                    this.DrawingDocument.AddPageSelection(PageAbs, X_start, this.RowsInfo[Pos.Row].Y[CurPage] + this.RowsInfo[Pos.Row].TopDy[CurPage], X_end - X_start, this.RowsInfo[Pos.Row].H[CurPage] );
+                    H = this.RowsInfo[Pos.Row].H[CurPage];
+                    for(var i = Pos.Row + 1; i < this.Content.length; ++i){
+                        var Row2      = this.Content[i];
+                        var Cell2     = Row2.Get_Cell(Pos.Cell);
+
+                        if(!Cell2){
+                            break;
+                        }
+                        var VMerge = Cell2.GetVMerge();
+                        if (vmerge_Continue === VMerge){
+                            H += this.RowsInfo[i].H[CurPage];
+                        }
+                        else{
+                            break;
+                        }
+                    }
+                    this.DrawingDocument.AddPageSelection(PageAbs, X_start, this.RowsInfo[Pos.Row].Y[CurPage] + this.RowsInfo[Pos.Row].TopDy[CurPage], X_end - X_start, H );
                 }
 
 
@@ -607,11 +615,71 @@ CTable.prototype.Selection_Draw_Page = function(CurPage)
         {
             var Cell = this.Content[this.Selection.StartPos.Pos.Row].Get_Cell(this.Selection.StartPos.Pos.Cell);
             var Cell_PageRel = CurPage - Cell.Content.Get_StartPage_Relative();
-            Cell.Content.Selection_Draw_Page(Cell_PageRel);
+            Cell.Content_DrawSelectionOnPage(Cell_PageRel);
             break;
         }
     }
 };
+
+CTable.prototype.Internal_UpdateFlowPosition = function(X, Y)
+{
+    this.X_origin = 0.0;
+
+    this.X = 0.0;
+    this.Y = 0.0;
+    var oGraphicFrame = this.Parent;
+    if (oGraphicFrame.spPr && oGraphicFrame.spPr.xfrm && oGraphicFrame.spPr.xfrm.isNotNull()) {
+        var xfrm = oGraphicFrame.spPr.xfrm;
+        xfrm.setOffX(xfrm.offX + X);
+        xfrm.setOffY(xfrm.offY + Y);
+    }
+};
+
+CTableCell.prototype.Content_DrawSelectionOnPage = function(CurPage)
+{
+    var Transform       = this.private_GetTextDirectionTransform();
+    var DrawingDocument = this.Row.Table.DrawingDocument;
+    var OldTextMatrix = null;
+    if (null !== Transform && DrawingDocument){
+        if(DrawingDocument.TextMatrix)
+        {
+            OldTextMatrix = DrawingDocument.TextMatrix;
+            DrawingDocument.TextMatrix = DrawingDocument.TextMatrix.CreateDublicate();
+        }
+        DrawingDocument.MultiplyTargetTransform(Transform.CreateDublicate());
+
+    }
+
+    this.Content.DrawSelectionOnPage(CurPage);
+
+
+    if (null !== Transform && DrawingDocument){
+        DrawingDocument.TextMatrix = OldTextMatrix;
+    }
+};
+
+CTableCell.prototype.Content_RecalculateCurPos = function()
+{
+    var Transform = this.private_GetTextDirectionTransform();
+    var DrawingDocument = this.Row.Table.DrawingDocument;
+    var OldTextMatrix = null;
+    if (null !== Transform && DrawingDocument)
+    {
+        if(DrawingDocument.TextMatrix)
+        {
+            OldTextMatrix = DrawingDocument.TextMatrix;
+            DrawingDocument.TextMatrix = DrawingDocument.TextMatrix.CreateDublicate();
+        }
+        DrawingDocument.MultiplyTargetTransform(Transform.CreateDublicate());
+    }
+
+    var ret = this.Content.RecalculateCurPos();
+    if (null !== Transform && DrawingDocument){
+        DrawingDocument.TextMatrix = OldTextMatrix;
+    }
+    return ret;
+};
+
 CStyle.prototype.Create_NormalTable = function()
 {
     var TablePr =
@@ -676,7 +744,3 @@ CTablePr.prototype.Init_Default = function()
     this.TableW                = new CTableMeasurement(tblwidth_Auto, 0);
     this.TableLayout           = tbllayout_AutoFit;
 };
-
-//----------------------------------------------------------export----------------------------------------------------
-window['AscFormat'] = window['AscFormat'] || {};
-window['AscFormat'].getChartTranslateManager = getChartTranslateManager;

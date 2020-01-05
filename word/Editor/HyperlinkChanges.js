@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2019
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -12,8 +12,8 @@
  * warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR  PURPOSE. For
  * details, see the GNU AGPL at: http://www.gnu.org/licenses/agpl-3.0.html
  *
- * You can contact Ascensio System SIA at Lubanas st. 125a-25, Riga, Latvia,
- * EU, LV-1021.
+ * You can contact Ascensio System SIA at 20A-12 Ernesta Birznieka-Upisha
+ * street, Riga, Latvia, EU, LV-1050.
  *
  * The  interactive user interfaces in modified source and object code versions
  * of the Program must display Appropriate Legal Notices, as required under
@@ -41,6 +41,7 @@ AscDFH.changesFactory[AscDFH.historyitem_Hyperlink_Value]      = CChangesHyperli
 AscDFH.changesFactory[AscDFH.historyitem_Hyperlink_ToolTip]    = CChangesHyperlinkToolTip;
 AscDFH.changesFactory[AscDFH.historyitem_Hyperlink_AddItem]    = CChangesHyperlinkAddItem;
 AscDFH.changesFactory[AscDFH.historyitem_Hyperlink_RemoveItem] = CChangesHyperlinkRemoveItem;
+AscDFH.changesFactory[AscDFH.historyitem_Hyperlink_Anchor]     = CChangesHyperlinkAnchor;
 
 //----------------------------------------------------------------------------------------------------------------------
 // Карта зависимости изменений
@@ -55,6 +56,7 @@ AscDFH.changesRelationMap[AscDFH.historyitem_Hyperlink_RemoveItem] = [
 	AscDFH.historyitem_Hyperlink_AddItem,
 	AscDFH.historyitem_Hyperlink_RemoveItem
 ];
+AscDFH.changesRelationMap[AscDFH.historyitem_Hyperlink_Anchor]     = [AscDFH.historyitem_Hyperlink_Anchor];
 //----------------------------------------------------------------------------------------------------------------------
 
 /**
@@ -103,7 +105,8 @@ CChangesHyperlinkAddItem.prototype.Undo = function()
 	var oHyperlink = this.Class;
 	oHyperlink.Content.splice(this.Pos, this.Items.length);
 	oHyperlink.private_UpdateTrackRevisions();
-	oHyperlink.protected_UpdateSpellChecking();
+	oHyperlink.private_CheckUpdateBookmarks(this.Items);
+	oHyperlink.private_UpdateSpellChecking();
 };
 CChangesHyperlinkAddItem.prototype.Redo = function()
 {
@@ -113,7 +116,8 @@ CChangesHyperlinkAddItem.prototype.Redo = function()
 
 	oHyperlink.Content = Array_start.concat(this.Items, Array_end);
 	oHyperlink.private_UpdateTrackRevisions();
-	oHyperlink.protected_UpdateSpellChecking();
+	oHyperlink.private_CheckUpdateBookmarks(this.Items);
+	oHyperlink.private_UpdateSpellChecking();
 };
 CChangesHyperlinkAddItem.prototype.private_WriteItem = function(Writer, Item)
 {
@@ -139,7 +143,8 @@ CChangesHyperlinkAddItem.prototype.Load = function(Color)
 	}
 
 	oHyperlink.private_UpdateTrackRevisions();
-	oHyperlink.protected_UpdateSpellChecking();
+	oHyperlink.private_CheckUpdateBookmarks(this.Items);
+	oHyperlink.private_UpdateSpellChecking();
 };
 CChangesHyperlinkAddItem.prototype.IsRelated = function(oChanges)
 {
@@ -171,14 +176,16 @@ CChangesHyperlinkRemoveItem.prototype.Undo = function()
 
 	oHyperlink.Content = Array_start.concat(this.Items, Array_end);
 	oHyperlink.private_UpdateTrackRevisions();
-	oHyperlink.protected_UpdateSpellChecking();
+	oHyperlink.private_CheckUpdateBookmarks(this.Items);
+	oHyperlink.private_UpdateSpellChecking();
 };
 CChangesHyperlinkRemoveItem.prototype.Redo = function()
 {
 	var oHyperlink  = this.Class;
 	oHyperlink.Content.splice(this.Pos, this.Items.length);
 	oHyperlink.private_UpdateTrackRevisions();
-	oHyperlink.protected_UpdateSpellChecking();
+	oHyperlink.private_CheckUpdateBookmarks(this.Items);
+	oHyperlink.private_UpdateSpellChecking();
 };
 CChangesHyperlinkRemoveItem.prototype.private_WriteItem = function(Writer, Item)
 {
@@ -202,7 +209,8 @@ CChangesHyperlinkRemoveItem.prototype.Load = function(Color)
 		AscCommon.CollaborativeEditing.Update_DocumentPositionsOnRemove(oHyperlink, ChangesPos, 1);
 	}
 	oHyperlink.private_UpdateTrackRevisions();
-	oHyperlink.protected_UpdateSpellChecking();
+	oHyperlink.private_CheckUpdateBookmarks(this.Items);
+	oHyperlink.private_UpdateSpellChecking();
 };
 CChangesHyperlinkRemoveItem.prototype.IsRelated = function(oChanges)
 {
@@ -214,4 +222,19 @@ CChangesHyperlinkRemoveItem.prototype.IsRelated = function(oChanges)
 CChangesHyperlinkRemoveItem.prototype.CreateReverseChange = function()
 {
 	return this.private_CreateReverseChange(CChangesHyperlinkAddItem);
+};
+/**
+ * @constructor
+ * @extends {AscDFH.CChangesBaseStringValue}
+ */
+function CChangesHyperlinkAnchor(Class, Old, New, Color)
+{
+	AscDFH.CChangesBaseStringValue.call(this, Class, Old, New, Color);
+}
+CChangesHyperlinkAnchor.prototype = Object.create(AscDFH.CChangesBaseStringValue.prototype);
+CChangesHyperlinkAnchor.prototype.constructor = CChangesHyperlinkAnchor;
+CChangesHyperlinkAnchor.prototype.Type = AscDFH.historyitem_Hyperlink_Anchor;
+CChangesHyperlinkAnchor.prototype.private_SetValue = function(Value)
+{
+	this.Class.Anchor = Value;
 };

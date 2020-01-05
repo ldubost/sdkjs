@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2019
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -12,8 +12,8 @@
  * warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR  PURPOSE. For
  * details, see the GNU AGPL at: http://www.gnu.org/licenses/agpl-3.0.html
  *
- * You can contact Ascensio System SIA at Lubanas st. 125a-25, Riga, Latvia,
- * EU, LV-1021.
+ * You can contact Ascensio System SIA at 20A-12 Ernesta Birznieka-Upisha
+ * street, Riga, Latvia, EU, LV-1050.
  *
  * The  interactive user interfaces in modified source and object code versions
  * of the Program must display Appropriate Legal Notices, as required under
@@ -42,18 +42,24 @@ var History = AscCommon.History;
 
 DrawingObjectsController.prototype.getTheme = function()
 {
-    return this.drawingObjects.Layout.Master.Theme;
+    return this.drawingObjects.getTheme();
 };
 
 DrawingObjectsController.prototype.getDrawingArray = function()
 {
-    return this.drawingObjects.cSld.spTree;
+    return this.drawingObjects.getDrawingsForController();
 };
 
-DrawingObjectsController.prototype.recalculateCurPos = function(){
+
+DrawingObjectsController.prototype.isViewMode = function()
+{
+    return this.drawingObjects.isViewerMode();
+};
+
+DrawingObjectsController.prototype.recalculateCurPos = function(bUpdateX, bUpdateY){
     var oTargetDocContent = this.getTargetDocContent(undefined, true);
     if(oTargetDocContent){
-        oTargetDocContent.RecalculateCurPos();
+        oTargetDocContent.RecalculateCurPos(bUpdateX, bUpdateY);
         editor.WordControl.m_oLogicDocument.NeedUpdateTargetForCollaboration = true;
     }
 };
@@ -81,6 +87,13 @@ DrawingObjectsController.prototype.getColorMap = function()
                 }
             }
         }
+        else if(this.drawingObjects.Master )
+        {
+            if(this.drawingObjects.Master.clrMap)
+            {
+                return this.drawingObjects.Master.clrMap;
+            }
+        }
     }
     return AscFormat.G_O_DEFAULT_COLOR_MAP;
 };
@@ -90,7 +103,7 @@ DrawingObjectsController.prototype.getColorMap = function()
 DrawingObjectsController.prototype.handleOleObjectDoubleClick = function(drawing, oleObject, e, x, y, pageIndex)
 {
     var oPresentation = editor && editor.WordControl && editor.WordControl.m_oLogicDocument;
-    if(oPresentation && false === editor.WordControl.m_oLogicDocument.Document_Is_SelectionLocked(AscCommon.changestype_Drawing_Props))
+    if(oPresentation && (false === oPresentation.Document_Is_SelectionLocked(AscCommon.changestype_Drawing_Props) || !oPresentation.CanEdit()))
     {
         var pluginData = new Asc.CPluginData();
         pluginData.setAttribute("data", oleObject.m_sData);
@@ -108,7 +121,7 @@ DrawingObjectsController.prototype.handleOleObjectDoubleClick = function(drawing
     oPresentation.OnMouseUp(e, x, y, pageIndex);
 };
 
-DrawingObjectsController.prototype.checkSelectedObjectsAndCallback = function(callback, args, bNoSendProps, nHistoryPointType)
+DrawingObjectsController.prototype.checkSelectedObjectsAndCallback = function(callback, args, bNoSendProps, nHistoryPointType, aAdditionaObjects)
 {
     var check_type = AscCommon.changestype_Drawing_Props, comment;
     if(this.drawingObjects.slideComments)
@@ -120,7 +133,7 @@ DrawingObjectsController.prototype.checkSelectedObjectsAndCallback = function(ca
             comment = comment.Get_Id();
         }
     }
-    if(editor.WordControl.m_oLogicDocument.Document_Is_SelectionLocked(check_type, comment) === false)
+    if(editor.WordControl.m_oLogicDocument.Document_Is_SelectionLocked(check_type, comment, undefined, aAdditionaObjects) === false)
     {
         var nPointType = AscFormat.isRealNumber(nHistoryPointType) ? nHistoryPointType : AscDFH.historydescription_CommonControllerCheckSelected;
         History.Create_NewPoint(nPointType);
@@ -144,24 +157,19 @@ DrawingObjectsController.prototype.paragraphFormatPaste = function( CopyTextPr, 
     var _this = this;
     this.checkSelectedObjectsAndCallback(function()
     {
-        this.applyTextFunction(CDocumentContent.prototype.Paragraph_Format_Paste, CTable.prototype.Paragraph_Format_Paste, [CopyTextPr, CopyParaPr, Bool]);
+        this.applyTextFunction(CDocumentContent.prototype.PasteFormatting, CTable.prototype.PasteFormatting, [CopyTextPr, CopyParaPr, Bool]);
     }, [CopyTextPr, CopyParaPr, Bool], false, AscDFH.historydescription_Presentation_ParaFormatPaste);
 };
 
 
 DrawingObjectsController.prototype.paragraphFormatPaste2 = function()
 {
-    return this.paragraphFormatPaste(editor.WordControl.m_oLogicDocument.CopyTextPr, editor.WordControl.m_oLogicDocument.CopyParaPr, true);
+    return this.paragraphFormatPaste(editor.WordControl.m_oLogicDocument.CopyTextPr, null, true);
 };
 DrawingObjectsController.prototype.getDrawingDocument = function()
 {
     return editor.WordControl.m_oDrawingDocument;
 };
-DrawingObjectsController.prototype.getTheme = function()
-{
-    return this.drawingObjects.Layout.Master.Theme;
-};
-
 
 DrawingObjectsController.prototype.onMouseDown = function(e, x, y)
 {
@@ -274,7 +282,6 @@ DrawingObjectsController.prototype.editChart = function(binary)
                         this.selection.groupSelection.selectObject(chart_space, this.drawingObjects.num);
                     }
                     this.startRecalculate();
-                    this.sendGraphicObjectProps();
                     return;
                 }
             }
@@ -290,7 +297,6 @@ DrawingObjectsController.prototype.editChart = function(binary)
             this.resetSelection();
             this.selectObject(chart_space, this.drawingObjects.num);
             this.startRecalculate();
-            this.sendGraphicObjectProps();
             this.updateOverlay();
         }
     }
@@ -299,10 +305,18 @@ DrawingObjectsController.prototype.editChart = function(binary)
 DrawingObjectsController.prototype.handleSlideComments  =  function(e, x, y, pageIndex)
 {
 
+    if(!this.drawingObjects.slideComments){
+        return;
+    }
+    if(this.isSlideShow && this.isSlideShow())
+    {
+        return false;
+    }
     var comments = this.drawingObjects.slideComments.comments, i, index_selected = -1;
     var ret = {result: null, selectedIndex: -1};
     if(this.handleEventMode === HANDLE_EVENT_MODE_HANDLE)
     {
+
         editor.asc_hideComments();
         for(i = comments.length - 1; i > -1; --i)
         {
@@ -320,6 +334,7 @@ DrawingObjectsController.prototype.handleSlideComments  =  function(e, x, y, pag
         {
             if(this.handleEventMode === HANDLE_EVENT_MODE_HANDLE)
             {
+                this.resetSelection();
                 comments[i].selected = true;
                 this.addPreTrackObject(new AscFormat.MoveComment(comments[i]));
                 this.changeCurrentState(new PreMoveCommentState(this, x, y, comments[i]));
@@ -343,6 +358,10 @@ DrawingObjectsController.prototype.handleSlideComments  =  function(e, x, y, pag
     {
         ret.result = false;
         ret.selectedIndex = index_selected;
+        if(-1 !== index_selected)
+        {
+            this.drawingObjects.showDrawingObjects(true);
+        }
         return ret;
     }
     else
@@ -428,7 +447,7 @@ MoveCommentState.prototype =
 
     onMouseUp: function(e, x, y, pageIndex)
     {
-        if(!this.drawingObjects.isViewMode() && editor.WordControl.m_oLogicDocument.Document_Is_SelectionLocked(AscCommon.changestype_MoveComment, this.comment.Get_Id()) === false)
+        if(editor.WordControl.m_oLogicDocument.Document_Is_SelectionLocked(AscCommon.changestype_MoveComment, this.comment.Get_Id(), editor.WordControl.m_oLogicDocument.IsEditCommentsMode()) === false)
         {
             History.Create_NewPoint(AscDFH.historydescription_Presentation_MoveComments);
             var tracks = this.drawingObjects.arrTrackObjects;
@@ -437,6 +456,7 @@ MoveCommentState.prototype =
                 tracks[i].trackEnd();
             }
             this.drawingObjects.startRecalculate();
+            this.drawingObjects.drawingObjects.showDrawingObjects();
         }
         this.drawingObjects.clearTrackObjects();
         this.drawingObjects.updateOverlay();

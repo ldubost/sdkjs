@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2019
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -12,8 +12,8 @@
  * warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR  PURPOSE. For
  * details, see the GNU AGPL at: http://www.gnu.org/licenses/agpl-3.0.html
  *
- * You can contact Ascensio System SIA at Lubanas st. 125a-25, Riga, Latvia,
- * EU, LV-1021.
+ * You can contact Ascensio System SIA at 20A-12 Ernesta Birznieka-Upisha
+ * street, Riga, Latvia, EU, LV-1050.
  *
  * The  interactive user interfaces in modified source and object code versions
  * of the Program must display Appropriate Legal Notices, as required under
@@ -47,12 +47,19 @@ function CWordCollaborativeEditing()
     this.m_aForeignCursors       = {};
     this.m_aForeignCursorsXY     = {};
     this.m_aForeignCursorsToShow = {};
+
+    this.m_aSkipContentControlsOnCheckEditingLock = {};
 }
 
 CWordCollaborativeEditing.prototype = Object.create(AscCommon.CCollaborativeEditingBase.prototype);
 CWordCollaborativeEditing.prototype.constructor = CWordCollaborativeEditing;
 
-CWordCollaborativeEditing.prototype.Send_Changes = function(IsUserSave, AdditionalInfo, IsUpdateInterface)
+CWordCollaborativeEditing.prototype.Clear = function()
+{
+	AscCommon.CCollaborativeEditingBase.prototype.Clear.apply(this, arguments);
+	this.Remove_AllForeignCursors();
+};
+CWordCollaborativeEditing.prototype.Send_Changes = function(IsUserSave, AdditionalInfo, IsUpdateInterface, isAfterAskSave)
 {
     // Пересчитываем позиции
     this.Refresh_DCChanges();
@@ -100,30 +107,37 @@ CWordCollaborativeEditing.prototype.Send_Changes = function(IsUserSave, Addition
         }
     }
 
-    var UnlockCount = this.m_aNeedUnlock.length;
-    this.Release_Locks();
+    var UnlockCount = 0;
 
-    var UnlockCount2 = this.m_aNeedUnlock2.length;
-    for (var Index = 0; Index < UnlockCount2; Index++)
-    {
-        var Class = this.m_aNeedUnlock2[Index];
-        Class.Lock.Set_Type(AscCommon.locktype_None, false);
-        editor.CoAuthoringApi.releaseLocks(Class.Get_Id());
-    }
+    // Пока пользователь сидит один, мы не чистим его локи до тех пор пока не зайдет второй
+    var bCollaborative = this.getCollaborativeEditing();
+    if (bCollaborative)
+	{
+		UnlockCount = this.m_aNeedUnlock.length;
+		this.Release_Locks();
 
-    this.m_aNeedUnlock.length = 0;
-    this.m_aNeedUnlock2.length = 0;
+		var UnlockCount2 = this.m_aNeedUnlock2.length;
+		for (var Index = 0; Index < UnlockCount2; Index++)
+		{
+			var Class = this.m_aNeedUnlock2[Index];
+			Class.Lock.Set_Type(AscCommon.locktype_None, false);
+			editor.CoAuthoringApi.releaseLocks(Class.Get_Id());
+		}
+
+		this.m_aNeedUnlock.length  = 0;
+		this.m_aNeedUnlock2.length = 0;
+	}
 
 	var deleteIndex = ( null === AscCommon.History.SavedIndex ? null : SumIndex );
 	if (0 < aChanges.length || null !== deleteIndex)
 	{
 		this.private_OnSendOwnChanges(aChanges2, deleteIndex);
-		editor.CoAuthoringApi.saveChanges(aChanges, deleteIndex, AdditionalInfo, editor.canUnlockDocument2);
+		editor.CoAuthoringApi.saveChanges(aChanges, deleteIndex, AdditionalInfo, editor.canUnlockDocument2, bCollaborative);
 		AscCommon.History.CanNotAddChanges = true;
 	}
 	else
 	{
-		editor.CoAuthoringApi.unLockDocument(true, editor.canUnlockDocument2);
+		editor.CoAuthoringApi.unLockDocument(!!isAfterAskSave, editor.canUnlockDocument2, null, bCollaborative);
 	}
 	editor.canUnlockDocument2 = false;
 
@@ -184,6 +198,8 @@ CWordCollaborativeEditing.prototype.Release_Locks = function()
                 editor.sync_UnLockComment(this.m_aNeedUnlock[Index].Get_Id());
             else if (this.m_aNeedUnlock[Index] instanceof AscCommonWord.CGraphicObjects)
                 editor.sync_UnLockDocumentSchema();
+            else if (this.m_aNeedUnlock[Index] instanceof AscCommon.CCore)
+                editor.sendEvent("asc_onLockCore", false);
         }
         else if (AscCommon.locktype_Other3 === CurLockType)
         {
@@ -200,24 +216,7 @@ CWordCollaborativeEditing.prototype.OnEnd_Load_Objects = function()
     AscCommon.CollaborativeEditing.Set_GlobalLockSelection(false);
 
     // Запускаем полный пересчет документа
-    var LogicDocument = editor.WordControl.m_oLogicDocument;
-
-    var RecalculateData =
-    {
-        Inline   : { Pos : 0, PageNum : 0 },
-        Flow     : [],
-        HdrFtr   : [],
-        Drawings : {
-            All : true,
-            Map : {}
-        }
-    };
-
-    LogicDocument.Reset_RecalculateCache();
-
-    LogicDocument.Recalculate(false, false, RecalculateData);
-    LogicDocument.Document_UpdateSelectionState();
-    LogicDocument.Document_UpdateInterfaceState();
+    editor.WordControl.m_oLogicDocument.RecalculateFromStart(true);
 
     editor.sync_EndAction(Asc.c_oAscAsyncActionType.BlockInteraction, Asc.c_oAscAsyncAction.ApplyChanges);
 };
@@ -225,14 +224,6 @@ CWordCollaborativeEditing.prototype.Check_MergeData = function()
 {
     var LogicDocument = editor.WordControl.m_oLogicDocument;
     LogicDocument.Comments.Check_MergeData();
-};
-CWordCollaborativeEditing.prototype.OnStart_CheckLock = function()
-{
-    this.m_aCheckLocks.length = 0;
-};
-CWordCollaborativeEditing.prototype.Add_CheckLock = function(oItem)
-{
-    this.m_aCheckLocks.push(oItem);
 };
 CWordCollaborativeEditing.prototype.OnEnd_CheckLock = function(DontLockInFastMode)
 {
@@ -337,6 +328,35 @@ CWordCollaborativeEditing.prototype.OnCallback_AskLock = function(result)
         oEditor.isChartEditor = false;
     }
 };
+CWordCollaborativeEditing.prototype.AddContentControlForSkippingOnCheckEditingLock = function(oContentControl)
+{
+	this.m_aSkipContentControlsOnCheckEditingLock[oContentControl.GetId()] = oContentControl;
+};
+CWordCollaborativeEditing.prototype.RemoveContentControlForSkippingOnCheckEditingLock = function(oContentControl)
+{
+	delete this.m_aSkipContentControlsOnCheckEditingLock[oContentControl.GetId()];
+};
+CWordCollaborativeEditing.prototype.IsNeedToSkipContentControlOnCheckEditingLock = function(oContentControl)
+{
+	if (this.m_aSkipContentControlsOnCheckEditingLock[oContentControl.GetId()] === oContentControl)
+		return true;
+
+	return false;
+};
+CWordCollaborativeEditing.prototype.Start_CollaborationEditing = function()
+{
+	this.m_nUseType = -1;
+};
+CWordCollaborativeEditing.prototype.End_CollaborationEditing = function()
+{
+	if (this.m_nUseType <= 0)
+	{
+		if (this.m_oLogicDocument && !this.m_oLogicDocument.GetHistory().Have_Changes() && !this.Have_OtherChanges())
+			this.m_nUseType = 1;
+		else
+			this.m_nUseType = 0;
+	}
+};
 //----------------------------------------------------------------------------------------------------------------------
 // Функции для работы с сохраненными позициями документа.
 //----------------------------------------------------------------------------------------------------------------------
@@ -371,6 +391,11 @@ CWordCollaborativeEditing.prototype.Remove_AllForeignCursors = function()
     {
         this.Remove_ForeignCursor(UserId);
     }
+};
+CWordCollaborativeEditing.prototype.RemoveMyCursorFromOthers = function()
+{
+	// Удаляем свой курсор у других пользователей
+	this.m_oLogicDocument.Api.CoAuthoringApi.sendCursor("");
 };
 CWordCollaborativeEditing.prototype.Update_DocumentPositionsOnAdd = function(Class, Pos)
 {
@@ -419,7 +444,7 @@ CWordCollaborativeEditing.prototype.Update_ForeignCursorPosition = function(User
     if (!(Run instanceof AscCommonWord.ParaRun))
         return;
 
-    var Paragraph = Run.Get_Paragraph();
+    var Paragraph = Run.GetParagraph();
 
     if (!Paragraph)
     {
@@ -592,7 +617,7 @@ CWordCollaborativeEditing.prototype.Update_ForeignCursorLabelPosition = function
 
 
 CWordCollaborativeEditing.prototype.private_RecalculateDocument = function(oRecalcData){
-    this.m_oLogicDocument.Recalculate(false, false, oRecalcData);
+    this.m_oLogicDocument.RecalculateWithParams(oRecalcData);
 };
 
 

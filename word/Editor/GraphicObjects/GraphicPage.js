@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2019
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -12,8 +12,8 @@
  * warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR  PURPOSE. For
  * details, see the GNU AGPL at: http://www.gnu.org/licenses/agpl-3.0.html
  *
- * You can contact Ascensio System SIA at Lubanas st. 125a-25, Riga, Latvia,
- * EU, LV-1021.
+ * You can contact Ascensio System SIA at 20A-12 Ernesta Birznieka-Upisha
+ * street, Riga, Latvia, EU, LV-1050.
  *
  * The  interactive user interfaces in modified source and object code versions
  * of the Program must display Appropriate Legal Notices, as required under
@@ -51,7 +51,6 @@ function CGraphicPage(pageIndex, graphicObjects)
     //массивы для отрисовки
     this.inlineObjects = [];
     this.behindDocObjects = [];
-    this.wrappingObjects = [];
     this.beforeTextObjects = [];
     this.flowTables = [];
 
@@ -67,43 +66,38 @@ function CGraphicPage(pageIndex, graphicObjects)
 
 CGraphicPage.prototype =
 {
+    getCompatibilityMode: function () {
+        return editor.WordControl.m_oLogicDocument.GetCompatibilityMode();
+    },
+
     addFloatTable: function(table)
     {
         for(var i = 0; i < this.flowTables.length; ++i)
         {
-            if(this.flowTables[i] === table)
-                return;
+            if(this.flowTables[i].GetElement() === table.GetElement() && this.flowTables[i].GetPage() === table.GetPage())
+			{
+				this.flowTables[i] = table;
+				return;
+			}
         }
         this.flowTables.push(table);
     },
 
     addObject: function(object)
     {
-        var array_type = object.parent.getDrawingArrayType();
+
         var drawing_array, need_sort = true;
-        switch(array_type)
-        {
-            case DRAWING_ARRAY_TYPE_INLINE:
-            {
-                drawing_array = this.inlineObjects;
-                need_sort = false;
-                break;
-            }
-            case DRAWING_ARRAY_TYPE_BEHIND:
-            {
-                drawing_array  = this.behindDocObjects;
-                break;
-            }
-            case DRAWING_ARRAY_TYPE_BEFORE:
-            {
-                drawing_array = this.beforeTextObjects;
-                break;
-            }
-            case DRAWING_ARRAY_TYPE_WRAPPING:
-            {
-                drawing_array = this.wrappingObjects;
-                break;
-            }
+
+        var Type = object.parent.getDrawingArrayType();
+        if(Type === DRAWING_ARRAY_TYPE_INLINE){
+            drawing_array = this.inlineObjects;
+            need_sort = false;
+        }
+        else if(Type === DRAWING_ARRAY_TYPE_BEHIND){
+            drawing_array  = this.behindDocObjects;
+        }
+        else{
+            drawing_array = this.beforeTextObjects;
         }
         if(Array.isArray(drawing_array))
         {
@@ -125,28 +119,11 @@ CGraphicPage.prototype =
         }
     },
 
-    getAllBoundsRectOnPageForMath: function()
-    {
-        var aRet = [], i;
-        for(i = 0; i < this.wrappingObjects.length; ++i)
-        {
-            if(this.wrappingObjects[i].parent)
-            {
-                aRet.push(new CBoundsRectForMath(this.wrappingObjects[i].parent));
-            }
-        }
-        for(i = 0; i < this.flowTables.length; ++i)
-        {
-            aRet.push(new CBoundsRectForMath(this.flowTables[i]));
-        }
-        return aRet;
-    },
 
     concatPage: function(page)
     {
         this.inlineObjects = this.inlineObjects.concat(page.inlineObjects);
         this.behindDocObjects = this.behindDocObjects.concat(page.behindDocObjects);
-        this.wrappingObjects = this.wrappingObjects.concat(page.wrappingObjects);
         this.beforeTextObjects = this.beforeTextObjects.concat(page.beforeTextObjects);
         this.flowTables = this.flowTables.concat(page.flowTables);
     },
@@ -162,7 +139,6 @@ CGraphicPage.prototype =
             this.concatPage(page2);
         }
         this.behindDocObjects.sort(ComparisonByZIndexSimpleParent);
-        this.wrappingObjects.sort(ComparisonByZIndexSimpleParent);
         this.beforeTextObjects.sort(ComparisonByZIndexSimpleParent);
     },
 
@@ -170,7 +146,6 @@ CGraphicPage.prototype =
     {
         this.inlineObjects = [];
         this.behindDocObjects = [];
-        this.wrappingObjects = [];
         this.beforeTextObjects = [];
         this.flowTables = [];
     },
@@ -196,7 +171,7 @@ CGraphicPage.prototype =
 
     documentStatistics: function(Statistics)
     {
-        var cur_array = this.inlineObjects.concat(this.behindDocObjects).concat(this.wrappingObjects).concat(this.beforeTextObjects);
+        var cur_array = this.inlineObjects.concat(this.behindDocObjects).concat(this.beforeTextObjects);
         for(var i = 0; i < cur_array.length; ++i)
         {
             if(cur_array[i].documentStatistics)
@@ -215,62 +190,27 @@ CGraphicPage.prototype =
         return null;
     },
 
-    delObjectById: function(id, type)
+    delObjectById: function(id)
     {
-        if(!isNaN(type) && typeof type === "number")
-        {
+        var oDrawing = AscCommon.g_oTableId.Get_ById(id);
+        if(oDrawing){
             var drawing_array;
-            switch (type)
-            {
-                case DRAWING_ARRAY_TYPE_BEFORE:
-                {
-                    drawing_array = this.beforeTextObjects;
-                    break;
-                }
-                case DRAWING_ARRAY_TYPE_BEHIND:
-                {
-                    drawing_array = this.behindDocObjects;
-                    break;
-                }
-                case DRAWING_ARRAY_TYPE_INLINE:
-                {
-                    drawing_array = this.inlineObjects;
-                    break;
-                }
-                case DRAWING_ARRAY_TYPE_WRAPPING:
-                {
-                    drawing_array = this.wrappingObjects;
-                    break;
+
+            var Type = oDrawing.getDrawingArrayType();
+            if(Type === DRAWING_ARRAY_TYPE_INLINE){
+                drawing_array = this.inlineObjects;
+            }
+            else if(Type === DRAWING_ARRAY_TYPE_BEHIND){
+                drawing_array = this.behindDocObjects;
+            }
+            else{
+                drawing_array = this.beforeTextObjects;
+            }
+            for(var index = 0; index < drawing_array.length; ++index){
+                if(drawing_array[index].parent === oDrawing){
+                    return drawing_array.splice(index, 1);
                 }
             }
-            if(Array.isArray(drawing_array))
-            {
-                for(var index = 0; index < drawing_array.length; ++index)
-                    if(drawing_array[index].parent && drawing_array[index].parent.Get_Id() === id)
-                        return drawing_array.splice(index, 1);
-            }
-        }
-        else
-        {
-            drawing_array = this.beforeTextObjects;
-            for(index = 0; index < drawing_array.length; ++index)
-                if(drawing_array[index].parent && drawing_array[index].parent.Get_Id() === id)
-                    return drawing_array.splice(index, 1);
-
-            drawing_array = this.behindDocObjects;
-            for(index = 0; index < drawing_array.length; ++index)
-                if(drawing_array[index].parent && drawing_array[index].parent.Get_Id() === id)
-                    return drawing_array.splice(index, 1);
-
-            drawing_array = this.inlineObjects;
-            for(index = 0; index < drawing_array.length; ++index)
-                if(drawing_array[index].parent && drawing_array[index].parent.Get_Id() === id)
-                    return drawing_array.splice(index, 1);
-
-            drawing_array = this.wrappingObjects;
-            for(index = 0; index < drawing_array.length; ++index)
-                if(drawing_array[index].parent && drawing_array[index].parent.Get_Id() === id)
-                    return drawing_array.splice(index, 1);
         }
         return null;
     },
@@ -314,7 +254,6 @@ CGraphicPage.prototype =
             {
                 findInArrayAndRemove(drawingPage.inlineObjects, docContent, document);
                 findInArrayAndRemove(drawingPage.behindDocObjects, docContent, document);
-                findInArrayAndRemove(drawingPage.wrappingObjects, docContent, document);
                 findInArrayAndRemove(drawingPage.beforeTextObjects, docContent, document);
                 findTableInArrayAndRemove(drawingPage.flowTables, docContent, document);
             }
@@ -331,9 +270,6 @@ CGraphicPage.prototype =
     {
         for(var _object_index = 0; _object_index < this.inlineObjects.length; ++_object_index)
             this.inlineObjects[_object_index].draw(graphics);
-
-        for(_object_index = 0; _object_index < this.wrappingObjects.length; ++_object_index)
-            this.wrappingObjects[_object_index].draw(graphics);
 
         for(_object_index = 0; _object_index < this.beforeTextObjects.length; ++_object_index)
             this.beforeTextObjects[_object_index].draw(graphics);
@@ -372,7 +308,6 @@ CGraphicPage.prototype =
     {
         var search_array = [];
         search_array= search_array.concat(this.behindDocObjects);
-        search_array= search_array.concat(this.wrappingObjects);
         search_array= search_array.concat(this.inlineObjects);
         search_array= search_array.concat(this.beforeTextObjects);
 
@@ -384,40 +319,25 @@ CGraphicPage.prototype =
 
     },
 
-    addGraphicObject: function(graphicObject)
-    {
-        switch (graphicObject.getDrawingArrayType())
-        {
-            case DRAWING_ARRAY_TYPE_INLINE:
-            {
-                this.inlineObjects.push(graphicObject);
-                break;
-            }
-            case DRAWING_ARRAY_TYPE_BEHIND:
-            {
-                this.behindDocObjects.push(graphicObject);
-                this.behindDocObjects.sort(ComparisonByZIndexSimpleParent);
-                break;
-            }
-            case DRAWING_ARRAY_TYPE_WRAPPING:
-            {
-                this.wrappingObjects.push(graphicObject);
-                this.wrappingObjects.sort(ComparisonByZIndexSimpleParent);
-                break;
-            }
-            case DRAWING_ARRAY_TYPE_BEFORE:
-            {
-                this.beforeTextObjects.push(graphicObject);
-                this.beforeTextObjects.sort(ComparisonByZIndexSimpleParent);
-                break;
-            }
+    addGraphicObject: function(graphicObject){
+
+        var Type = graphicObject.getDrawingArrayType();
+        if(Type === DRAWING_ARRAY_TYPE_INLINE){
+            this.inlineObjects.push(graphicObject);
+        }
+        else if(Type === DRAWING_ARRAY_TYPE_BEHIND){
+            this.behindDocObjects.push(graphicObject);
+            this.behindDocObjects.sort(ComparisonByZIndexSimpleParent);
+        }
+        else{
+            this.beforeTextObjects.push(graphicObject);
+            this.beforeTextObjects.sort(ComparisonByZIndexSimpleParent);
         }
     },
 
     sortDrawingArrays: function()
     {
         this.behindDocObjects.sort(ComparisonByZIndexSimpleParent);
-        this.wrappingObjects.sort(ComparisonByZIndexSimpleParent);
         this.beforeTextObjects.sort(ComparisonByZIndexSimpleParent);
         if(this.hdrFtrPage)
         {
@@ -433,27 +353,28 @@ CGraphicPage.prototype =
         graphics.SetIntegerGrid(true);
     },
 
-    drawWrappingObjects: function(graphics)
+
+    drawBehindObjectsByContent: function(graphics, content)
     {
+        var bIntegerGrid = graphics.m_bIntegerGrid;
         var drawing;
-        for(var _object_index = 0; _object_index < this.wrappingObjects.length; ++_object_index)
+        for(var _object_index = 0; _object_index < this.behindDocObjects.length; ++_object_index)
         {
-            drawing = this.wrappingObjects[_object_index];
-            if(!(drawing.parent && drawing.parent.DocumentContent && drawing.parent.DocumentContent.Is_TableCellContent()))
+            drawing = this.behindDocObjects[_object_index];
+            if(drawing.parent && drawing.parent.DocumentContent && drawing.parent.DocumentContent === content)
             {
                 drawing.draw(graphics);
             }
         }
-        graphics.SetIntegerGrid(true);
+        graphics.SetIntegerGrid(bIntegerGrid);
     },
-
-    drawWrappingObjectsByContent: function(graphics, content)
+    drawBeforeObjectsByContent: function(graphics, content)
     {
         var bIntegerGrid = graphics.m_bIntegerGrid;
         var drawing;
-        for(var _object_index = 0; _object_index < this.wrappingObjects.length; ++_object_index)
+        for(var _object_index = 0; _object_index < this.beforeTextObjects.length; ++_object_index)
         {
-            drawing = this.wrappingObjects[_object_index];
+            drawing = this.beforeTextObjects[_object_index];
             if(drawing.parent && drawing.parent.DocumentContent && drawing.parent.DocumentContent === content)
             {
                 drawing.draw(graphics);
@@ -467,14 +388,6 @@ CGraphicPage.prototype =
     {
         for(var _object_index = 0; _object_index < this.beforeTextObjects.length; ++_object_index)
             this.beforeTextObjects[_object_index].draw(graphics);
-
-        graphics.SetIntegerGrid(true);
-    },
-
-    drawInlineObjects: function(graphics)
-    {
-        for(var _object_index = 0; _object_index < this.inlineObjects.length; ++_object_index)
-            this.inlineObjects[_object_index].draw(graphics);
 
         graphics.SetIntegerGrid(true);
     }

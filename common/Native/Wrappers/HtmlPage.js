@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2019
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -12,8 +12,8 @@
  * warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR  PURPOSE. For
  * details, see the GNU AGPL at: http://www.gnu.org/licenses/agpl-3.0.html
  *
- * You can contact Ascensio System SIA at Lubanas st. 125a-25, Riga, Latvia,
- * EU, LV-1021.
+ * You can contact Ascensio System SIA at 20A-12 Ernesta Birznieka-Upisha
+ * street, Riga, Latvia, EU, LV-1050.
  *
  * The  interactive user interfaces in modified source and object code versions
  * of the Program must display Appropriate Legal Notices, as required under
@@ -121,42 +121,42 @@ function CEditorPage(api)
     }
 
     this.CheckRetinaDisplay = function()
-    {        
+    {
     }
 
     this.ShowOverlay = function()
-    {        
+    {
     }
     this.UnShowOverlay = function()
-    {        
+    {
     }
     this.CheckUnShowOverlay = function()
-    {        
+    {
     }
     this.CheckShowOverlay = function()
-    {        
+    {
     }
 
     this.initEvents2 = function()
-    {        
+    {
     }
 
     this.initEvents2MobileAdvances = function()
-    {        
+    {
     }
     this.onButtonRulersClick = function()
-    {        
+    {
     }
 
     this.HideRulers = function()
-    {        
+    {
     }
 
     this.zoom_FitToWidth = function()
-    {        
+    {
     }
     this.zoom_FitToPage = function()
-    {        
+    {
     }
 
     this.zoom_Fire = function(type, old_zoom)
@@ -175,7 +175,7 @@ function CEditorPage(api)
     {
     }
 
-    this.ScrollToPosition = function(x, y, PageNum)
+    this.ScrollToPosition = function(x, y, PageNum, height)
     {
     }
 
@@ -225,34 +225,38 @@ function CEditorPage(api)
     {
     }
     this.onMouseUp = function(e, bIsWindow)
-    {        
+    {
+    }
+
+    this.onMouseUpMainSimple = function()
+    {
     }
 
     this.onMouseUpExternal = function(x, y)
-    {        
+    {
     }
 
     this.onMouseWhell = function(e)
-    {        
+    {
     }
 
     this.checkViewerModeKeys = function(e)
-    {        
+    {
     }
 
     this.ChangeReaderMode = function()
-    {        
+    {
     }
 
     this.IncreaseReaderFontSize = function()
-    {        
+    {
     }
     this.DecreaseReaderFontSize = function()
-    {        
+    {
     }
 
     this.EnableReaderMode = function()
-    {        
+    {
     }
 
     this.DisableReaderMode = function()
@@ -264,7 +268,7 @@ function CEditorPage(api)
     }
 
     this.TransformDivUseAnimation = function(_div, topPos)
-    {     
+    {
     }
 
     this.onKeyDown = function(e)
@@ -395,10 +399,17 @@ function CEditorPage(api)
 
     this.onTimerScroll = function()
     {
+            var oWordControl = editor.WordControl;
+            if(oWordControl.m_oLogicDocument)
+            {
+                oWordControl.m_oLogicDocument.ContinueCheckSpelling();
+            }
+            oWordControl.m_nPaintTimerId = setTimeout(oWordControl.onTimerScroll, 500);
     }
 
     this.StartMainTimer = function()
     {
+        this.onTimerScroll();
     }
 
     this.onTimerScroll2 = function()

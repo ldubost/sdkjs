@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2019
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -12,8 +12,8 @@
  * warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR  PURPOSE. For
  * details, see the GNU AGPL at: http://www.gnu.org/licenses/agpl-3.0.html
  *
- * You can contact Ascensio System SIA at Lubanas st. 125a-25, Riga, Latvia,
- * EU, LV-1021.
+ * You can contact Ascensio System SIA at 20A-12 Ernesta Birznieka-Upisha
+ * street, Riga, Latvia, EU, LV-1050.
  *
  * The  interactive user interfaces in modified source and object code versions
  * of the Program must display Appropriate Legal Notices, as required under
@@ -44,7 +44,8 @@ function CHistory(Document)
     this.Document   = Document;
     this.Api                  = null;
     this.CollaborativeEditing = null;
-    this.CanNotAddChanges = false;//флаг для отслеживания ошибок добавления изменений без точки:Create_NewPoint->Add->Save_Changes->Add
+    this.CanNotAddChanges = false; // флаг для отслеживания ошибок добавления изменений без точки:Create_NewPoint->Add->Save_Changes->Add
+	this.CollectChanges   = false;
 
 	this.RecalculateData =
 	{
@@ -77,6 +78,8 @@ function CHistory(Document)
     // Параметры для специального сохранения для локальной версии редактора
     this.UserSaveMode   = false;
     this.UserSavedIndex = null;  // Номер точки, на которой произошло последнее сохранение пользователем (не автосохранение)
+
+	this.StoredData = [];
 }
 
 CHistory.prototype =
@@ -171,7 +174,7 @@ CHistory.prototype =
         this.UserSavedIndex = null;
         this.Points.length  = 0;
 		this.TurnOffHistory = 0;
-        this.Internal_RecalcData_Clear();
+        this.private_ClearRecalcData();
     },
 
     Can_Undo : function()
@@ -211,13 +214,13 @@ CHistory.prototype =
                 oItem.Data.Undo();
             }
             oPoint.Items.length = _bottomIndex + 1;
-            this.Document.Set_SelectionState( oPoint.State );
+            this.Document.SetSelectionState( oPoint.State );
         }
     },
 
     Undo : function(Options)
     {
-        this.Check_UninonLastPoints();
+        this.CheckUnionLastPoints();
 
         // Проверяем можно ли сделать Undo
         if (true !== this.Can_Undo())
@@ -225,11 +228,11 @@ CHistory.prototype =
 
         // Запоминаем самое последнее состояние документа для Redo
         if ( this.Index === this.Points.length - 1 )
-            this.LastState = this.Document.Get_SelectionState();
+            this.LastState = this.Document.GetSelectionState();
         
-        this.Document.Selection_Remove(true);
+        this.Document.RemoveSelection(true);
 
-        this.Internal_RecalcData_Clear();
+        this.private_ClearRecalcData();
 
         var Point = null;
         if (undefined !== Options && null !== Options && true === Options.All)
@@ -269,9 +272,16 @@ CHistory.prototype =
             }
         }
 
-        if (null != Point)
-            this.Document.Set_SelectionState( Point.State );
+		this.private_PostProcessingRecalcData();
 
+        if (null != Point)
+            this.Document.SetSelectionState( Point.State );
+		
+		if(!window['AscCommon'].g_specialPasteHelper.pasteStart)
+		{
+			window['AscCommon'].g_specialPasteHelper.SpecialPasteButton_Hide();
+		}
+		
         return this.RecalculateData;
     },
 
@@ -281,11 +291,11 @@ CHistory.prototype =
         if ( true != this.Can_Redo() )
             return null;
 
-        this.Document.Selection_Remove(true);
+        this.Document.RemoveSelection(true);
         
         var Point = this.Points[++this.Index];
 
-        this.Internal_RecalcData_Clear();
+        this.private_ClearRecalcData();
 
         // Выполняем все действия в прямом порядке
         for ( var Index = 0; Index < Point.Items.length; Index++ )
@@ -300,6 +310,8 @@ CHistory.prototype =
 			this.private_UpdateContentChangesOnRedo(Item);
         }
 
+        this.private_PostProcessingRecalcData();
+
         // Восстанавливаем состояние на следующую точку
         var State = null;
         if ( this.Index === this.Points.length - 1 )
@@ -307,26 +319,35 @@ CHistory.prototype =
         else
             State = this.Points[this.Index + 1].State;
 
-        this.Document.Set_SelectionState( State );
-
+        this.Document.SetSelectionState( State );
+		
+		if(!window['AscCommon'].g_specialPasteHelper.pasteStart)
+		{
+			window['AscCommon'].g_specialPasteHelper.SpecialPasteButton_Hide();
+		}
+		
         return this.RecalculateData;
     },
 
     Create_NewPoint : function(Description)
     {
 		if ( 0 !== this.TurnOffHistory )
-			return;
+			return false;
+
+		if (this.Document && this.Document.OnCreateNewHistoryPoint)
+			this.Document.OnCreateNewHistoryPoint();
 
         this.CanNotAddChanges = false;
+		this.CollectChanges   = false;
 
-        if (null !== this.SavedIndex && this.Index < this.SavedIndex)
+		if (null !== this.SavedIndex && this.Index < this.SavedIndex)
             this.Set_SavedIndex(this.Index);
 
         this.Clear_Additional();
 
-        this.Check_UninonLastPoints();
+        this.CheckUnionLastPoints();
         
-        var State = this.Document.Get_SelectionState();
+        var State = this.Document.GetSelectionState();
         var Items = [];
         var Time  = new Date().getTime();
 
@@ -342,6 +363,13 @@ CHistory.prototype =
 
         // Удаляем ненужные точки
         this.Points.length = this.Index + 1;
+		
+		if(!window['AscCommon'].g_specialPasteHelper.pasteStart)
+		{
+			window['AscCommon'].g_specialPasteHelper.SpecialPasteButton_Hide();
+		}
+
+		return true;
     },
 
 	/**
@@ -358,14 +386,19 @@ CHistory.prototype =
 			Description : -1
 		};
 
-		this.Points.length = this.Index + 1;
+		this.Points.length  = this.Index + 1;
+		this.CollectChanges = true;
 	},
     
     Remove_LastPoint : function()
-    {
-        this.Index--;
-        this.Points.length = this.Index + 1;
-    },
+	{
+		if (this.Index > -1)
+		{
+			this.CollectChanges = false;
+			this.Index--;
+			this.Points.length = this.Index + 1;
+		}
+	},
 
     Is_LastPointEmpty : function()
     {
@@ -428,6 +461,9 @@ CHistory.prototype =
             _Class.WriteToBinary(this.BinaryWriter);
         }
 
+        if (Class && Class.SetIsRecalculated && (!_Class || _Class.IsNeedRecalculate()))
+        	Class.SetIsRecalculated(false);
+
 		var Binary_Len = this.BinaryWriter.GetCurPosition() - Binary_Pos;
 		var Item       = {
 			Class  : Class,
@@ -465,34 +501,6 @@ CHistory.prototype =
                 this.CollaborativeEditing.AddPosExtChanges(Item, _Class);
             }
 		}
-	},
-
-	Internal_RecalcData_Clear : function()
-	{
-		// NumPr здесь не обнуляем
-		var NumPr            = this.RecalculateData.NumPr;
-		this.RecalculateData = {
-			Inline   : {
-				Pos     : -1,
-				PageNum : 0
-			},
-			Flow     : [],
-			HdrFtr   : [],
-			Drawings : {
-				All       : false,
-				Map       : {},
-				ThemeInfo : null
-			},
-
-			Tables        : [],
-			NumPr         : NumPr,
-			NotesEnd      : false,
-			NotesEndPage  : 0,
-			Update        : true,
-			ChangedStyles : {},
-			ChangedNums   : {},
-			AllParagraphs : null
-		};
 	},
 
     RecalcData_Add : function(Data)
@@ -661,7 +669,7 @@ CHistory.prototype =
             for (var Lvl = 0; Lvl < 9; ++Lvl)
             {
                 NumPr.Lvl = Lvl;
-                var AllParagraphs = this.Document.Get_AllParagraphsByNumbering(NumPr);
+                var AllParagraphs = this.Document.GetAllParagraphsByNumbering(NumPr);
                 var Count = AllParagraphs.length;
                 for (var Index = 0; Index < Count; ++Index)
                 {
@@ -674,7 +682,7 @@ CHistory.prototype =
         this.RecalculateData.Update = true;
     },
 
-    Check_UninonLastPoints : function()
+	CheckUnionLastPoints : function()
     {
         // Не объединяем точки в истории, когда отключается пересчет.
         // TODO: Неправильно изменяется RecalcIndex
@@ -825,17 +833,20 @@ CHistory.prototype =
       }
     },
 
-    Have_Changes : function(IsNotUserSave)
-    {
-      var checkIndex = (this.Is_UserSaveMode() && !IsNotUserSave) ? this.UserSavedIndex : this.SavedIndex;
-      if (-1 === this.Index && null === checkIndex && false === this.ForceSave)
-        return false;
+	Have_Changes : function(IsNotUserSave)
+	{
+		if (!this.Document || this.Document.IsViewModeInReview())
+			return false;
 
-      if (this.Index != checkIndex || true === this.ForceSave)
-        return true;
+		var checkIndex = (this.Is_UserSaveMode() && !IsNotUserSave) ? this.UserSavedIndex : this.SavedIndex;
+		if (-1 === this.Index && null === checkIndex && false === this.ForceSave)
+			return false;
 
-      return false;
-    },
+		if (this.Index != checkIndex || true === this.ForceSave)
+			return true;
+
+		return false;
+	},
 
     Get_RecalcData : function(RecalcData, arrChanges)
     {
@@ -845,18 +856,19 @@ CHistory.prototype =
         }
         else if (arrChanges)
 		{
-			this.Internal_RecalcData_Clear();
+			this.private_ClearRecalcData();
 			for (var nIndex = 0, nCount = arrChanges.length; nIndex < nCount; ++nIndex)
 			{
 				var oChange = arrChanges[nIndex];
 				oChange.RefreshRecalcData();
 			}
+			this.private_PostProcessingRecalcData();
 		}
         else
         {
             if (this.Index >= 0)
             {
-                this.Internal_RecalcData_Clear();
+                this.private_ClearRecalcData();
 
                 for (var Pos = this.RecIndex + 1; Pos <= this.Index; Pos++)
                 {
@@ -872,6 +884,8 @@ CHistory.prototype =
                             Item.Class.Refresh_RecalcData(Item.Data);
                     }
                 }
+
+                this.private_PostProcessingRecalcData();
             }
         }
 
@@ -926,79 +940,6 @@ CHistory.prototype =
         }
 
         return [];
-    },
-
-    Is_ParagraphSimpleChanges : function()
-    {
-        var Count, Items;
-        if (this.Index - this.RecIndex !== 1 && this.RecIndex >= -1)
-        {
-            Items = [];
-            Count = 0;
-            for (var PointIndex = this.RecIndex + 1; PointIndex <= this.Index; PointIndex++)
-            {
-                Items = Items.concat(this.Points[PointIndex].Items);
-                Count += this.Points[PointIndex].Items.length;
-            }
-        }
-        else if (this.Index >= 0)
-        {
-            // Считываем изменения, начиная с последней точки, и смотрим что надо пересчитать.
-            var Point = this.Points[this.Index];
-
-            Count = Point.Items.length;
-            Items = Point.Items;
-        }
-        else
-            return null;
-
-
-        if (Items.length > 0)
-        {
-            // Смотрим, чтобы параграф, в котором происходили все изменения был один и тот же. Если есть изменение,
-            // которое не возвращает параграф, значит возвращаем null.
-
-            var Para = null;
-            var Class = Items[0].Class;
-            if (Class instanceof Paragraph)
-                Para = Class;
-            else if (Class.Get_Paragraph)
-                Para = Class.Get_Paragraph();
-            else
-                return null;
-
-            for (var Index = 1; Index < Count; Index++)
-            {
-                Class = Items[Index].Class;
-
-                if (Class instanceof Paragraph)
-                {
-                    if (Para != Class)
-                        return null;
-                }
-                else if (Class.Get_Paragraph)
-                {
-                    if (Para != Class.Get_Paragraph())
-                        return null;
-                }
-                else
-                    return null;
-            }
-
-            // Все изменения сделаны в одном параграфе, нам осталось проверить, что каждое из этих изменений
-            // влияет только на данный параграф.
-            for (var Index = 0; Index < Count; Index++)
-            {
-                var Item = Items[Index];
-                var Class = Item.Class;
-                if (!Class.Is_SimpleChanges || !Class.Is_ParagraphSimpleChanges(Item))
-                    return null;
-            }
-
-            return Para;
-        }
-
-        return null;
     },
 
     Set_Additional_ExtendDocumentToPos : function()
@@ -1077,7 +1018,7 @@ CHistory.prototype =
 
     _CheckCanNotAddChanges : function() {
         try {
-            if (this.CanNotAddChanges && this.Api) {
+            if (this.CanNotAddChanges && this.Api && !this.CollectChanges) {
                 var tmpErr = new Error();
                 if (tmpErr.stack) {
                     this.Api.CoAuthoringApi.sendChangesError(tmpErr.stack);
@@ -1153,7 +1094,7 @@ CHistory.prototype.GetAllParagraphsForRecalcData = function(Props)
 	if (!this.RecalculateData.AllParagraphs)
 	{
 		if (this.Document)
-			this.RecalculateData.AllParagraphs = this.Document.Get_AllParagraphs({All : true});
+			this.RecalculateData.AllParagraphs = this.Document.GetAllParagraphs({All : true});
 		else
 			this.RecalculateData.AllParagraphs = [];
 	}
@@ -1186,7 +1127,7 @@ CHistory.prototype.GetAllParagraphsForRecalcData = function(Props)
 			var oPara = this.RecalculateData.AllParagraphs[nParaIndex];
 
 			var NumPr  = Props.NumPr;
-			var _NumPr = oPara.Numbering_Get();
+			var _NumPr = oPara.GetNumPr();
 
 			if (undefined != _NumPr && _NumPr.NumId === NumPr.NumId && (_NumPr.Lvl === NumPr.Lvl || undefined === NumPr.Lvl))
 				arrParagraphs.push(oPara);
@@ -1202,6 +1143,188 @@ CHistory.prototype.SetRecalculateIndex = function(nIndex)
 {
 	this.RecIndex = Math.min(this.Index, nIndex);
 };
+CHistory.prototype.SaveRedoPoints = function()
+{
+	var arrData = [];
+	this.StoredData.push(arrData);
+	for (var nIndex = this.Index + 1, nCount = this.Points.length; nIndex < nCount; ++nIndex)
+	{
+		arrData.push(this.Points[nIndex]);
+	}
+};
+CHistory.prototype.PopRedoPoints = function()
+{
+	if (this.StoredData.length <= 0)
+		return;
+
+	var arrPoints = this.StoredData[this.StoredData.length - 1];
+	this.Points.length = this.Index + 1;
+	for (var nIndex = 0, nCount = arrPoints.length; nIndex < nCount; ++nIndex)
+	{
+		this.Points[this.Index + nIndex + 1] = arrPoints[nIndex];
+	}
+
+	this.StoredData.length = this.StoredData.length - 1;
+};
+CHistory.prototype.RemoveLastPoint = function()
+{
+	this.Remove_LastPoint();
+};
+CHistory.prototype.IsParagraphSimpleChanges = function()
+{
+	var Count, Items;
+	if (this.Index - this.RecIndex !== 1 && this.RecIndex >= -1)
+	{
+		Items = [];
+		Count = 0;
+		for (var PointIndex = this.RecIndex + 1; PointIndex <= this.Index; PointIndex++)
+		{
+			Items = Items.concat(this.Points[PointIndex].Items);
+			Count += this.Points[PointIndex].Items.length;
+		}
+	}
+	else if (this.Index >= 0)
+	{
+		// Считываем изменения, начиная с последней точки, и смотрим что надо пересчитать.
+		var Point = this.Points[this.Index];
+
+		Count = Point.Items.length;
+		Items = Point.Items;
+	}
+	else
+		return null;
+
+
+	if (Items.length > 0)
+	{
+		// Смотрим, чтобы параграф, в котором происходили все изменения был один и тот же. Если есть изменение,
+		// которое не возвращает параграф, значит возвращаем null.
+
+		var Para = null;
+		for (var Index = 0; Index < Count; Index++)
+		{
+			var Class = Items[Index].Class;
+
+			if (Class instanceof Paragraph)
+			{
+				if (null === Para)
+					Para = Class;
+				else if (Para !== Class)
+					return null;
+			}
+			else if (Class instanceof AscCommon.CTableId || Class instanceof AscCommon.CComments)
+			{
+				continue;
+			}
+			else if (Class.GetParagraph)
+			{
+				if (null === Para)
+					Para = Class.GetParagraph();
+				else if (Para !== Class.GetParagraph())
+					return null;
+			}
+			else
+				return null;
+		}
+
+		// Все изменения сделаны в одном параграфе, нам осталось проверить, что каждое из этих изменений
+		// влияет только на данный параграф.
+		for (var Index = 0; Index < Count; Index++)
+		{
+			var Item  = Items[Index];
+			var Class = Item.Class;
+
+			if (Class instanceof AscCommon.CTableId || Class instanceof AscCommon.CComments)
+				continue;
+
+			if (!Class.IsParagraphSimpleChanges || !Class.IsParagraphSimpleChanges(Item))
+				return null;
+		}
+
+		return Para;
+	}
+
+	return null;
+};
+CHistory.prototype.private_ClearRecalcData = function()
+{
+	// NumPr здесь не обнуляем
+	var NumPr            = this.RecalculateData.NumPr;
+	this.RecalculateData = {
+		Inline   : {
+			Pos     : -1,
+			PageNum : 0
+		},
+		Flow     : [],
+		HdrFtr   : [],
+		Drawings : {
+			All       : false,
+			Map       : {},
+			ThemeInfo : null
+		},
+
+		Tables        : [],
+		NumPr         : NumPr,
+		NotesEnd      : false,
+		NotesEndPage  : 0,
+		Update        : true,
+		ChangedStyles : {},
+		ChangedNums   : {},
+		AllParagraphs : null
+	};
+};
+/**
+ * Обработка изменений после Undo/Redo всех изменений
+ */
+CHistory.prototype.private_PostProcessingRecalcData = function()
+{
+	for (var sId in this.RecalculateData.ChangedStyles)
+	{
+		var oStyle = this.RecalculateData.ChangedStyles[sId];
+		oStyle.RecalculateRelatedParagraphs();
+	}
+};
+	/**
+	 * Получаем сколько изменений в истории уже сохранено на сервере на данный момент с учетом текущей точки в истории
+	 * @returns {number}
+	 */
+	CHistory.prototype.GetDeleteIndex = function()
+	{
+		if (null === this.SavedIndex)
+			return null;
+
+		var nSum = 0;
+		for (var nPointIndex = 0, nLastPoint = Math.min(this.SavedIndex, this.Index); nPointIndex <= nLastPoint; ++nPointIndex)
+		{
+			nSum += this.Points[nPointIndex].Items.length;
+		}
+
+		return nSum;
+	};
+	/**
+	 * Удаляем изменения из истории, которые сохранены на сервере. Это происходит при подключении второго пользователя
+	 */
+	CHistory.prototype.RemovePointsByDeleteIndex = function()
+	{
+		var nDeleteIndex = this.GetDeleteIndex();
+		if (null === nDeleteIndex)
+			return;
+
+		while (nDeleteIndex > 0 && this.Points.length > 0)
+		{
+			nDeleteIndex -= this.Points[0].Items.length;
+
+			this.Points.splice(0, 1);
+
+			if (this.Index >= 0)
+				this.Index--;
+
+			if (this.RecIndex >= 0)
+				this.RecIndex--;
+		}
+
+		this.SavedIndex = null;
+	};
 
 function CRC32()
 {

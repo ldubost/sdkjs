@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2019
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -12,8 +12,8 @@
  * warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR  PURPOSE. For
  * details, see the GNU AGPL at: http://www.gnu.org/licenses/agpl-3.0.html
  *
- * You can contact Ascensio System SIA at Lubanas st. 125a-25, Riga, Latvia,
- * EU, LV-1021.
+ * You can contact Ascensio System SIA at 20A-12 Ernesta Birznieka-Upisha
+ * street, Riga, Latvia, EU, LV-1050.
  *
  * The  interactive user interfaces in modified source and object code versions
  * of the Program must display Appropriate Legal Notices, as required under
@@ -37,13 +37,22 @@ function CAscThemes()
     this.EditorThemes = [];
     this.DocumentThemes = [];
 
-    var _count = AscCommon._presentation_editor_themes.length;
+    this._init();
+}
+CAscThemes.prototype._init = function()
+{
+    var _defaultThemes = AscCommon["g_defaultThemes"] || [];
+
+    var _count = _defaultThemes.length;
     for (var i = 0; i < _count; i++)
     {
-        this.EditorThemes[i] = new CAscThemeInfo(AscCommon._presentation_editor_themes[i]);
+        this.EditorThemes[i] = new CAscThemeInfo({
+            Name : _defaultThemes[i],
+            Url : ("/theme" + (i + 1) + "/")
+        });
         this.EditorThemes[i].Index = i;
     }
-}
+};
 CAscThemes.prototype.get_EditorThemes = function(){ return this.EditorThemes; };
 CAscThemes.prototype.get_DocumentThemes = function(){ return this.DocumentThemes; };
 
@@ -60,6 +69,7 @@ function CThemeLoadInfo()
 function CThemeLoader()
 {
     this.Themes = new CAscThemes();
+    this.ThemesCached = [];
 
     // editor themes info
     this.themes_info_editor     = [];
@@ -120,7 +130,7 @@ function CThemeLoader()
         this.Api.sync_StartAction(Asc.c_oAscAsyncActionType.BlockInteraction, Asc.c_oAscAsyncAction.LoadTheme);
 
         // значит эта тема еще не загружалась
-        var theme_src = this.ThemesUrl + "theme" + (this.CurrentLoadThemeIndex + 1) + "/theme.js";
+        var theme_src = this.ThemesUrl + "theme" + (this.CurrentLoadThemeIndex + 1) + "/theme.bin";
         this.LoadThemeJSAsync(theme_src);
 
         this.Api.StartLoadTheme();
@@ -128,49 +138,89 @@ function CThemeLoader()
 
     this.LoadThemeJSAsync = function(theme_src)
     {
-        var scriptElem = document.createElement('script');
-
-        if (scriptElem.readyState && false)
+        if (!window["NATIVE_EDITOR_ENJINE"])
         {
-            scriptElem.onreadystatechange = function () {
-                if (this.readyState == 'complete' || this.readyState == 'loaded')
-                {
-                    scriptElem.onreadystatechange = null;
-                    setTimeout(oThis._callback_theme_load, 0);
-                }
-            }
-        }
-        scriptElem.onload = scriptElem.onerror = oThis._callback_theme_load;
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', theme_src, true);
 
-        scriptElem.setAttribute('src',theme_src);
-        scriptElem.setAttribute('type','text/javascript');
-        document.getElementsByTagName('head')[0].appendChild(scriptElem);
+            if (typeof ArrayBuffer !== 'undefined' && !window.opera)
+                xhr.responseType = 'arraybuffer';
+
+            if (xhr.overrideMimeType)
+                xhr.overrideMimeType('text/plain; charset=x-user-defined');
+            else
+                xhr.setRequestHeader('Accept-Charset', 'x-user-defined');
+
+            xhr.onload = function()
+            {
+                if (this.readyState == 4 && (this.status == 200 || location.href.indexOf("file:") == 0))
+                {
+                    if (typeof ArrayBuffer !== 'undefined' && !window.opera && this.response)
+                    {
+                        oThis._callback_theme_load(new Uint8Array(this.response));
+                    }
+                    else if (AscCommon.AscBrowser.isIE)
+                    {
+                        var _response = new VBArray(this["responseBody"]).toArray();
+                        var srcLen = _response.length;
+                        var _responseNative = new Uint8Array(srcLen);
+
+                        for (var i = 0; i < srcLen; i++)
+                        {
+                            _responseNative[i] = _response[i];
+                        }
+
+                        oThis._callback_theme_load(_responseNative);
+                    }
+                    else
+                    {
+                        var srcLen = this.responseText.length;
+                        var _responseNative = new Uint8Array(srcLen);
+
+                        for (var i = 0; i < srcLen; i++)
+                        {
+                            _responseNative[i] = (this.responseText.charCodeAt(i) & 0xFF);
+                        }
+
+                        oThis._callback_theme_load(_responseNative);
+                    }
+                }
+            };
+
+            xhr.send(null);
+        }
+        else
+        {
+            this._callback_theme_load(window['native']['WC_LoadTheme'](theme_src));
+        }
     };
 
-    this._callback_theme_load = function()
+    this._callback_theme_load = function(_binary)
     {
-        var g_th = window["g_theme" + (oThis.CurrentLoadThemeIndex + 1)];
-        if (g_th !== undefined)
+        if (_binary)
+            oThis.ThemesCached[oThis.CurrentLoadThemeIndex] = _binary;
+
+        _binary = oThis.ThemesCached[oThis.CurrentLoadThemeIndex];
+
+        if (_binary)
         {
             var _loader = new AscCommon.BinaryPPTYLoader();
             _loader.Api = oThis.Api;
             _loader.IsThemeLoader = true;
 
             var pres = {};
-            pres.themes = [];
             pres.slideMasters = [];
-            pres.slideLayouts = [];
             pres.DrawingDocument = editor.WordControl.m_oDrawingDocument;
 
             AscCommon.History.MinorChanges = true;
-            _loader.Load(g_th, pres);
+            _loader.Load(_binary, pres);
             for(var i = 0; i < pres.slideMasters.length; ++i)
             {
                 pres.slideMasters[i].setThemeIndex(oThis.CurrentLoadThemeIndex);
             }
             AscCommon.History.MinorChanges = false;
 
-            if (oThis.IsReloadBinaryThemeEditorNow)
+            if (oThis.IsReloadBinaryThemeEditorNow || window["NATIVE_EDITOR_ENJINE"])
             {
                 oThis.asyncImagesEndLoaded();
                 oThis.IsReloadBinaryThemeEditorNow = false;

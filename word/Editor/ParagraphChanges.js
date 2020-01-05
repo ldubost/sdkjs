@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2019
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -12,8 +12,8 @@
  * warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR  PURPOSE. For
  * details, see the GNU AGPL at: http://www.gnu.org/licenses/agpl-3.0.html
  *
- * You can contact Ascensio System SIA at Lubanas st. 125a-25, Riga, Latvia,
- * EU, LV-1021.
+ * You can contact Ascensio System SIA at 20A-12 Ernesta Birznieka-Upisha
+ * street, Riga, Latvia, EU, LV-1050.
  *
  * The  interactive user interfaces in modified source and object code versions
  * of the Program must display Appropriate Legal Notices, as required under
@@ -73,6 +73,8 @@ AscDFH.changesFactory[AscDFH.historyitem_Paragraph_FramePr]                   = 
 AscDFH.changesFactory[AscDFH.historyitem_Paragraph_SectionPr]                 = CChangesParagraphSectPr;
 AscDFH.changesFactory[AscDFH.historyitem_Paragraph_PrChange]                  = CChangesParagraphPrChange;
 AscDFH.changesFactory[AscDFH.historyitem_Paragraph_PrReviewInfo]              = CChangesParagraphPrReviewInfo;
+AscDFH.changesFactory[AscDFH.historyitem_Paragraph_OutlineLvl]                = CChangesParagraphOutlineLvl;
+AscDFH.changesFactory[AscDFH.historyitem_Paragraph_DefaultTabSize]            = CChangesParagraphDefaultTabSize;
 
 function private_ParagraphChangesOnLoadPr(oColor)
 {
@@ -105,6 +107,10 @@ AscDFH.changesRelationMap[AscDFH.historyitem_Paragraph_Numbering]               
 ];
 AscDFH.changesRelationMap[AscDFH.historyitem_Paragraph_Align]                     = [
 	AscDFH.historyitem_Paragraph_Align,
+	AscDFH.historyitem_Paragraph_Pr
+];
+AscDFH.changesRelationMap[AscDFH.historyitem_Paragraph_DefaultTabSize]            = [
+	AscDFH.historyitem_Paragraph_DefaultTabSize,
 	AscDFH.historyitem_Paragraph_Pr
 ];
 AscDFH.changesRelationMap[AscDFH.historyitem_Paragraph_Ind_First]                 = [
@@ -217,6 +223,7 @@ AscDFH.changesRelationMap[AscDFH.historyitem_Paragraph_Pr]                      
 	AscDFH.historyitem_Paragraph_Pr,
 	AscDFH.historyitem_Paragraph_Numbering,
 	AscDFH.historyitem_Paragraph_Align,
+	AscDFH.historyitem_Paragraph_DefaultTabSize,
 	AscDFH.historyitem_Paragraph_Ind_First,
 	AscDFH.historyitem_Paragraph_Ind_Right,
 	AscDFH.historyitem_Paragraph_Ind_Left,
@@ -246,7 +253,8 @@ AscDFH.changesRelationMap[AscDFH.historyitem_Paragraph_Pr]                      
 	AscDFH.historyitem_Paragraph_PresentationPr_Level,
 	AscDFH.historyitem_Paragraph_FramePr,
 	AscDFH.historyitem_Paragraph_PrChange,
-	AscDFH.historyitem_Paragraph_PrReviewInfo
+	AscDFH.historyitem_Paragraph_PrReviewInfo,
+	AscDFH.historyitem_Paragraph_OutlineLvl
 ];
 AscDFH.changesRelationMap[AscDFH.historyitem_Paragraph_PresentationPr_Bullet]     = [
 	AscDFH.historyitem_Paragraph_PresentationPr_Bullet,
@@ -272,6 +280,9 @@ AscDFH.changesRelationMap[AscDFH.historyitem_Paragraph_PrReviewInfo]            
 	AscDFH.historyitem_Paragraph_Pr,
 	AscDFH.historyitem_Paragraph_PrChange,
 	AscDFH.historyitem_Paragraph_PrReviewInfo
+];
+AscDFH.changesRelationMap[AscDFH.historyitem_Paragraph_OutlineLvl]                = [
+	AscDFH.historyitem_Paragraph_OutlineLvl
 ];
 
 // Общая функция Merge для изменений, которые зависят только от себя и AscDFH.historyitem_Paragraph_Pr
@@ -314,6 +325,7 @@ CChangesParagraphAddItem.prototype.Undo = function()
 	var oParagraph = this.Class;
 	oParagraph.Content.splice(this.Pos, this.Items.length);
 	oParagraph.private_UpdateTrackRevisions();
+	oParagraph.private_CheckUpdateBookmarks(this.Items);
 	private_ParagraphChangesOnSetValue(this.Class);
 };
 CChangesParagraphAddItem.prototype.Redo = function()
@@ -324,7 +336,19 @@ CChangesParagraphAddItem.prototype.Redo = function()
 
 	oParagraph.Content = Array_start.concat(this.Items, Array_end);
 	oParagraph.private_UpdateTrackRevisions();
+	oParagraph.private_CheckUpdateBookmarks(this.Items);
 	private_ParagraphChangesOnSetValue(this.Class);
+
+	for (var nIndex = 0, nCount = this.Items.length; nIndex < nCount; ++nIndex)
+	{
+		var oItem = this.Items[nIndex];
+		oItem.Parent = this.Class;
+		if (oItem.SetParagraph)
+			oItem.SetParagraph(this.Class);
+
+		if (oItem.Recalc_RunsCompiledPr)
+			oItem.Recalc_RunsCompiledPr();
+	}
 };
 CChangesParagraphAddItem.prototype.private_WriteItem = function(Writer, Item)
 {
@@ -358,8 +382,8 @@ CChangesParagraphAddItem.prototype.Load = function(Color)
 				}
 			}
 
-			if (Element.Set_Paragraph)
-				Element.Set_Paragraph(oParagraph);
+			if (Element.SetParagraph)
+				Element.SetParagraph(oParagraph);
 
 			oParagraph.Content.splice(Pos, 0, Element);
 			AscCommon.CollaborativeEditing.Update_DocumentPositionsOnAdd(oParagraph, Pos);
@@ -371,6 +395,7 @@ CChangesParagraphAddItem.prototype.Load = function(Color)
 
 	oParagraph.private_ResetSelection();
 	oParagraph.private_UpdateTrackRevisions();
+	oParagraph.private_CheckUpdateBookmarks(this.Items);
 
 	private_ParagraphChangesOnSetValue(this.Class);
 };
@@ -384,6 +409,22 @@ CChangesParagraphAddItem.prototype.IsRelated = function(oChanges)
 CChangesParagraphAddItem.prototype.CreateReverseChange = function()
 {
 	return this.private_CreateReverseChange(CChangesParagraphRemoveItem);
+};
+CChangesParagraphAddItem.prototype.IsParagraphSimpleChanges = function()
+{
+	// Простыми измененями считаем добавление комментариев и добавление ранов с простым текстом
+	for (var nIndex = 0, nCount = this.Items.length; nIndex < nCount; ++nIndex)
+	{
+		var oItem = this.Items[nIndex];
+		if ((para_Run !== oItem.Type || !oItem.IsContentSuitableForParagraphSimpleChanges())
+			&& para_Comment !== oItem.Type
+			&& para_Bookmark !== oItem.Type)
+		{
+			return false;
+		}
+	}
+
+	return true;
 };
 /**
  * @constructor
@@ -404,13 +445,27 @@ CChangesParagraphRemoveItem.prototype.Undo = function()
 
 	oParagraph.Content = Array_start.concat(this.Items, Array_end);
 	oParagraph.private_UpdateTrackRevisions();
+	oParagraph.private_CheckUpdateBookmarks(this.Items);
 	private_ParagraphChangesOnSetValue(this.Class);
+
+	for (var nIndex = 0, nCount = this.Items.length; nIndex < nCount; ++nIndex)
+	{
+		var oItem = this.Items[nIndex];
+
+		oItem.Parent = this.Class;
+		if (oItem.SetParagraph)
+			oItem.SetParagraph(this.Class);
+
+		if (oItem.Recalc_RunsCompiledPr)
+			oItem.Recalc_RunsCompiledPr();
+	}
 };
 CChangesParagraphRemoveItem.prototype.Redo = function()
 {
 	var oParagraph  = this.Class;
 	oParagraph.Content.splice(this.Pos, this.Items.length);
 	oParagraph.private_UpdateTrackRevisions();
+	oParagraph.private_CheckUpdateBookmarks(this.Items);
 	private_ParagraphChangesOnSetValue(this.Class);
 };
 CChangesParagraphRemoveItem.prototype.private_WriteItem = function(Writer, Item)
@@ -436,6 +491,7 @@ CChangesParagraphRemoveItem.prototype.Load = function(Color)
 	}
 	oParagraph.private_ResetSelection();
 	oParagraph.private_UpdateTrackRevisions();
+	oParagraph.private_CheckUpdateBookmarks(this.Items);
 
 	private_ParagraphChangesOnSetValue(this.Class);
 };
@@ -449,6 +505,22 @@ CChangesParagraphRemoveItem.prototype.IsRelated = function(oChanges)
 CChangesParagraphRemoveItem.prototype.CreateReverseChange = function()
 {
 	return this.private_CreateReverseChange(CChangesParagraphAddItem);
+};
+CChangesParagraphRemoveItem.prototype.IsParagraphSimpleChanges = function()
+{
+	// Простыми измененями считаем добавление комментариев и добавление ранов с простым текстом
+	for (var nIndex = 0, nCount = this.Items.length; nIndex < nCount; ++nIndex)
+	{
+		var oItem = this.Items[nIndex];
+		if ((para_Run !== oItem.Type || !oItem.IsContentSuitableForParagraphSimpleChanges())
+			&& para_Comment !== oItem.Type
+			&& para_Bookmark !== oItem.Type)
+		{
+			return false;
+		}
+	}
+
+	return true;
 };
 /**
  * @constructor
@@ -526,6 +598,32 @@ CChangesParagraphIndFirst.prototype.private_SetValue = function(Value)
 };
 CChangesParagraphIndFirst.prototype.Merge = private_ParagraphChangesOnMergePr;
 CChangesParagraphIndFirst.prototype.Load = private_ParagraphChangesOnLoadPr;
+
+/**
+ * @constructor
+ * @extends {AscDFH.CChangesBaseDoubleProperty}
+ */
+function CChangesParagraphDefaultTabSize(Class, Old, New, Color)
+{
+	AscDFH.CChangesBaseDoubleProperty.call(this, Class, Old, New, Color);
+}
+CChangesParagraphDefaultTabSize.prototype = Object.create(AscDFH.CChangesBaseDoubleProperty.prototype);
+CChangesParagraphDefaultTabSize.prototype.constructor = CChangesParagraphDefaultTabSize;
+CChangesParagraphDefaultTabSize.prototype.Type = AscDFH.historyitem_Paragraph_DefaultTabSize;
+CChangesParagraphDefaultTabSize.prototype.private_SetValue = function(Value)
+{
+	var oParagraph = this.Class;
+
+
+	oParagraph.Pr.DefaultTab = Value;
+
+	oParagraph.CompiledPr.NeedRecalc = true;
+	oParagraph.private_UpdateTrackRevisionOnChangeParaPr(false);
+	private_ParagraphChangesOnSetValue(this.Class);
+};
+CChangesParagraphDefaultTabSize.prototype.Merge = private_ParagraphChangesOnMergePr;
+CChangesParagraphDefaultTabSize.prototype.Load = private_ParagraphChangesOnLoadPr;
+
 /**
  * @constructor
  * @extends {AscDFH.CChangesBaseDoubleProperty}
@@ -848,6 +946,10 @@ CChangesParagraphShdValue.prototype.private_SetValue = function(Value)
 };
 CChangesParagraphShdValue.prototype.Merge = private_ParagraphChangesOnMergeShdPr;
 CChangesParagraphShdValue.prototype.Load = private_ParagraphChangesOnLoadPr;
+CChangesParagraphShdValue.prototype.IsNeedRecalculate = function()
+{
+	return false;
+};
 /**
  * @constructor
  * @extends {AscDFH.CChangesBaseObjectProperty}
@@ -878,6 +980,10 @@ CChangesParagraphShdColor.prototype.private_SetValue = function(Value)
 };
 CChangesParagraphShdColor.prototype.Merge = private_ParagraphChangesOnMergeShdPr;
 CChangesParagraphShdColor.prototype.Load = private_ParagraphChangesOnLoadPr;
+CChangesParagraphShdColor.prototype.IsNeedRecalculate = function()
+{
+	return false;
+};
 /**
  * @constructor
  * @extends {AscDFH.CChangesBaseObjectProperty}
@@ -908,6 +1014,10 @@ CChangesParagraphShdUnifill.prototype.private_SetValue = function(Value)
 };
 CChangesParagraphShdUnifill.prototype.Merge = private_ParagraphChangesOnMergeShdPr;
 CChangesParagraphShdUnifill.prototype.Load = private_ParagraphChangesOnLoadPr;
+CChangesParagraphShdUnifill.prototype.IsNeedRecalculate = function()
+{
+	return false;
+};
 /**
  * @constructor
  * @extends {AscDFH.CChangesBaseObjectProperty}
@@ -965,6 +1075,10 @@ CChangesParagraphShd.prototype.Merge = function(oChange)
 	return true;
 };
 CChangesParagraphShd.prototype.Load = private_ParagraphChangesOnLoadPr;
+CChangesParagraphShd.prototype.IsNeedRecalculate = function()
+{
+	return false;
+};
 /**
  * @constructor
  * @extends {AscDFH.CChangesBaseBoolProperty}
@@ -1215,6 +1329,11 @@ CChangesParagraphPr.prototype.Merge = function(oChange)
 		case AscDFH.historyitem_Paragraph_Align:
 		{
 			this.New.Jc = oChange.New;
+			break;
+		}
+		case AscDFH.historyitem_Paragraph_DefaultTabSize:
+		{
+			this.New.DefaultTab = oChange.New;
 			break;
 		}
 		case AscDFH.historyitem_Paragraph_Ind_First:
@@ -1496,15 +1615,17 @@ CChangesParagraphSectPr.prototype.Type = AscDFH.historyitem_Paragraph_SectionPr;
 CChangesParagraphSectPr.prototype.Undo = function()
 {
 	var oParagraph = this.Class;
+	var oOldSectPr = oParagraph.SectPr;
 	oParagraph.SectPr = this.Old;
-	oParagraph.LogicDocument.Update_SectionsInfo();
+	oParagraph.LogicDocument.UpdateSectionInfo(oOldSectPr, this.Old, false);
 	private_ParagraphChangesOnSetValue(this.Class);
 };
 CChangesParagraphSectPr.prototype.Redo = function()
 {
 	var oParagraph = this.Class;
+	var oOldSectPr = oParagraph.SectPr;
 	oParagraph.SectPr = this.New;
-	oParagraph.LogicDocument.Update_SectionsInfo();
+	oParagraph.LogicDocument.UpdateSectionInfo(oOldSectPr, this.New, false);
 	private_ParagraphChangesOnSetValue(this.Class);
 };
 CChangesParagraphSectPr.prototype.WriteToBinary = function(Writer)
@@ -1710,6 +1831,20 @@ CChangesParagraphPrChange.prototype.Merge = function(oChange)
 
 	return true;
 };
+CChangesParagraphPrChange.prototype.IsChangedNumbering = function()
+{
+	var oNewNumPr = this.New.PrChange ? this.New.PrChange.NumPr : null;
+	var oOldNumPr = this.Old.PrChange ? this.Old.PrChange.NumPr : null;
+
+	if ((!oNewNumPr && oOldNumPr)
+		|| (oNewNumPr && !oOldNumPr)
+		|| (oNewNumPr && oOldNumPr && (oNewNumPr.NumId !== oOldNumPr.NumId || oNewNumPr.Lvl !== oOldNumPr.Lvl)))
+	{
+		return true;
+	}
+
+	return false;
+};
 /**
  * @constructor
  * @extends {AscDFH.CChangesBaseObjectProperty}
@@ -1741,4 +1876,30 @@ CChangesParagraphPrReviewInfo.prototype.Merge = function(oChange)
 		return false;
 
 	return true;
+};
+/**
+ * @constructor
+ * @extends {AscDFH.CChangesBaseLongProperty}
+ */
+function CChangesParagraphOutlineLvl(Class, Old, New, Color)
+{
+	AscDFH.CChangesBaseLongProperty.call(this, Class, Old, New, Color);
+}
+CChangesParagraphOutlineLvl.prototype = Object.create(AscDFH.CChangesBaseLongProperty.prototype);
+CChangesParagraphOutlineLvl.prototype.constructor = CChangesParagraphOutlineLvl;
+CChangesParagraphOutlineLvl.prototype.Type = AscDFH.historyitem_Paragraph_OutlineLvl;
+CChangesParagraphOutlineLvl.prototype.private_SetValue = function(Value)
+{
+	var oParagraph = this.Class;
+	oParagraph.Pr.OutlineLvl = Value;
+
+	oParagraph.CompiledPr.NeedRecalc = true;
+	oParagraph.private_UpdateTrackRevisionOnChangeParaPr(false);
+	private_ParagraphChangesOnSetValue(this.Class);
+};
+CChangesParagraphOutlineLvl.prototype.Merge = private_ParagraphChangesOnMergePr;
+CChangesParagraphOutlineLvl.prototype.Load = private_ParagraphChangesOnLoadPr;
+CChangesParagraphOutlineLvl.prototype.IsNeedRecalculate = function()
+{
+	return false;
 };

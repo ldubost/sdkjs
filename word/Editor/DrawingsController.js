@@ -1,9 +1,36 @@
-"use strict";
-/**
- * User: Ilja.Kirillov
- * Date: 10.06.2016
- * Time: 15:31
+/*
+ * (c) Copyright Ascensio System SIA 2010-2019
+ *
+ * This program is a free software product. You can redistribute it and/or
+ * modify it under the terms of the GNU Affero General Public License (AGPL)
+ * version 3 as published by the Free Software Foundation. In accordance with
+ * Section 7(a) of the GNU AGPL its Section 15 shall be amended to the effect
+ * that Ascensio System SIA expressly excludes the warranty of non-infringement
+ * of any third-party rights.
+ *
+ * This program is distributed WITHOUT ANY WARRANTY; without even the implied
+ * warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR  PURPOSE. For
+ * details, see the GNU AGPL at: http://www.gnu.org/licenses/agpl-3.0.html
+ *
+ * You can contact Ascensio System SIA at 20A-12 Ernesta Birznieka-Upisha
+ * street, Riga, Latvia, EU, LV-1050.
+ *
+ * The  interactive user interfaces in modified source and object code versions
+ * of the Program must display Appropriate Legal Notices, as required under
+ * Section 5 of the GNU AGPL version 3.
+ *
+ * Pursuant to Section 7(b) of the License you must retain the original Product
+ * logo when distributing the program. Pursuant to Section 7(e) we decline to
+ * grant you any rights under trademark law for use of our trademarks.
+ *
+ * All the Product's GUI elements, including illustrations and icon sets, as
+ * well as technical writing content are licensed under the terms of the
+ * Creative Commons Attribution-ShareAlike 4.0 International. See the License
+ * terms at http://creativecommons.org/licenses/by-sa/4.0/legalcode
+ *
  */
+
+"use strict";
 
 /**
  * Специальный класс-обработчик команд в автофигурах
@@ -21,13 +48,13 @@ function CDrawingsController(LogicDocument, DrawingsObjects)
 CDrawingsController.prototype = Object.create(CDocumentControllerBase.prototype);
 CDrawingsController.prototype.constructor = CDrawingsController;
 
-CDrawingsController.prototype.CanTargetUpdate = function()
+CDrawingsController.prototype.CanUpdateTarget = function()
 {
 	return true;
 };
-CDrawingsController.prototype.RecalculateCurPos = function()
+CDrawingsController.prototype.RecalculateCurPos = function(bUpdateX, bUpdateY)
 {
-	return this.DrawingObjects.recalculateCurPos();
+	return this.DrawingObjects.recalculateCurPos(bUpdateX, bUpdateY);
 };
 CDrawingsController.prototype.GetCurPage = function()
 {
@@ -45,6 +72,14 @@ CDrawingsController.prototype.AddInlineImage = function(nW, nH, oImage, oChart, 
 {
 	return this.DrawingObjects.addInlineImage(nW, nH, oImage, oChart, bFlow);
 };
+CDrawingsController.prototype.AddImages = function(aImages)
+{
+	return this.DrawingObjects.addImages(aImages);
+};
+CDrawingsController.prototype.AddSignatureLine = function(oSignatureDrawing)
+{
+	return this.DrawingObjects.addSignatureLine(oSignatureDrawing);
+};
 CDrawingsController.prototype.AddOleObject = function(W, H, nWidthPix, nHeightPix, Img, Data, sApplicationId)
 {
 	this.DrawingObjects.addOleObject(W, H, nWidthPix, nHeightPix, Img, Data, sApplicationId);
@@ -61,13 +96,13 @@ CDrawingsController.prototype.AddInlineTable = function(Cols, Rows)
 {
 	this.DrawingObjects.addInlineTable(Cols, Rows);
 };
-CDrawingsController.prototype.ClearParagraphFormatting = function()
+CDrawingsController.prototype.ClearParagraphFormatting = function(isClearParaPr, isClearTextPr)
 {
-	this.DrawingObjects.paragraphClearFormatting();
+	this.DrawingObjects.paragraphClearFormatting(isClearParaPr, isClearTextPr);
 };
 CDrawingsController.prototype.AddToParagraph = function(oItem, bRecalculate)
 {
-	if (para_NewLine === oItem.Type && true === oItem.Is_PageOrColumnBreak())
+	if (para_NewLine === oItem.Type && true === oItem.IsPageOrColumnBreak())
 		return;
 
 	this.DrawingObjects.paragraphAdd(oItem, bRecalculate);
@@ -75,9 +110,9 @@ CDrawingsController.prototype.AddToParagraph = function(oItem, bRecalculate)
 	this.LogicDocument.Document_UpdateUndoRedoState();
 	this.LogicDocument.Document_UpdateInterfaceState();
 };
-CDrawingsController.prototype.Remove = function(Count, bOnlyText, bRemoveOnlySelection, bOnTextAdd)
+CDrawingsController.prototype.Remove = function(Count, bOnlyText, bRemoveOnlySelection, bOnTextAdd, isWord)
 {
-	return this.DrawingObjects.remove(Count, bOnlyText, bRemoveOnlySelection, bOnTextAdd);
+	return this.DrawingObjects.remove(Count, bOnlyText, bRemoveOnlySelection, bOnTextAdd, isWord);
 };
 CDrawingsController.prototype.GetCursorPosXY = function()
 {
@@ -111,14 +146,26 @@ CDrawingsController.prototype.MoveCursorToEndPos = function(AddToSelect)
 };
 CDrawingsController.prototype.MoveCursorLeft = function(AddToSelect, Word)
 {
+	// Заглушка от передвижения автофигур внутри больщих таблиц
+	if (!this.LogicDocument.Pages[this.LogicDocument.CurPage])
+		return true;
+
 	return this.DrawingObjects.cursorMoveLeft(AddToSelect, Word);
 };
 CDrawingsController.prototype.MoveCursorRight = function(AddToSelect, Word, FromPaste)
 {
+	// Заглушка от передвижения автофигур внутри больщих таблиц
+	if (!this.LogicDocument.Pages[this.LogicDocument.CurPage])
+		return true;
+
 	return this.DrawingObjects.cursorMoveRight(AddToSelect, Word, FromPaste);
 };
 CDrawingsController.prototype.MoveCursorUp = function(AddToSelect, CtrlKey)
 {
+	// Заглушка от передвижения автофигур внутри больщих таблиц
+	if (!this.LogicDocument.Pages[this.LogicDocument.CurPage])
+		return true;
+
 	var RetValue = this.DrawingObjects.cursorMoveUp(AddToSelect, CtrlKey);
 	this.LogicDocument.Document_UpdateInterfaceState();
 	this.LogicDocument.Document_UpdateSelectionState();
@@ -126,6 +173,10 @@ CDrawingsController.prototype.MoveCursorUp = function(AddToSelect, CtrlKey)
 };
 CDrawingsController.prototype.MoveCursorDown = function(AddToSelect, CtrlKey)
 {
+	// Заглушка от передвижения автофигур внутри больщих таблиц
+	if (!this.LogicDocument.Pages[this.LogicDocument.CurPage])
+		return true;
+
 	var RetValue = this.DrawingObjects.cursorMoveDown(AddToSelect, CtrlKey);
 	this.LogicDocument.Document_UpdateInterfaceState();
 	this.LogicDocument.Document_UpdateSelectionState();
@@ -188,10 +239,6 @@ CDrawingsController.prototype.SetParagraphIndent = function(Ind)
 {
 	this.DrawingObjects.setParagraphIndent(Ind);
 };
-CDrawingsController.prototype.SetParagraphNumbering = function(NumInfo)
-{
-	this.DrawingObjects.setParagraphNumbering(NumInfo);
-};
 CDrawingsController.prototype.SetParagraphShd = function(Shd)
 {
 	this.DrawingObjects.setParagraphShd(Shd);
@@ -228,11 +275,11 @@ CDrawingsController.prototype.SetParagraphFramePr = function(FramePr, bDelete)
 {
 	// Не добавляем и не работаем с рамками в автофигурах
 };
-CDrawingsController.prototype.IncreaseOrDecreaseParagraphFontSize = function(bIncrease)
+CDrawingsController.prototype.IncreaseDecreaseFontSize = function(bIncrease)
 {
 	this.DrawingObjects.paragraphIncDecFontSize(bIncrease);
 };
-CDrawingsController.prototype.IncreaseOrDecreaseParagraphIndent = function(bIncrease)
+CDrawingsController.prototype.IncreaseDecreaseIndent = function(bIncrease)
 {
 	if (true != this.DrawingObjects.isSelectedText())
 	{
@@ -240,7 +287,7 @@ CDrawingsController.prototype.IncreaseOrDecreaseParagraphIndent = function(bIncr
 		if (null != ParaDrawing)
 		{
 			var Paragraph = ParaDrawing.Parent;
-			Paragraph.IncDec_Indent(bIncrease);
+			Paragraph.IncreaseDecreaseIndent(bIncrease);
 		}
 	}
 	else
@@ -256,11 +303,11 @@ CDrawingsController.prototype.SetTableProps = function(Props)
 {
 	this.DrawingObjects.setTableProps(Props);
 };
-CDrawingsController.prototype.GetCurrentParaPr = function()
+CDrawingsController.prototype.GetCalculatedParaPr = function()
 {
 	return this.DrawingObjects.getParagraphParaPr();
 };
-CDrawingsController.prototype.GetCurrentTextPr = function()
+CDrawingsController.prototype.GetCalculatedTextPr = function()
 {
 	return this.DrawingObjects.getParagraphTextPr();
 };
@@ -281,7 +328,7 @@ CDrawingsController.prototype.RemoveSelection = function(bNoCheckDrawing)
 	}
 	return this.DrawingObjects.resetSelection(undefined, bNoCheckDrawing);
 };
-CDrawingsController.prototype.IsEmptySelection = function(bCheckHidden)
+CDrawingsController.prototype.IsSelectionEmpty = function(bCheckHidden)
 {
 	return false;
 };
@@ -292,7 +339,7 @@ CDrawingsController.prototype.DrawSelectionOnPage = function(PageAbs)
 };
 CDrawingsController.prototype.GetSelectionBounds = function()
 {
-	return this.DrawingObjects.Get_SelectionBounds();
+	return this.DrawingObjects.GetSelectionBounds();
 };
 CDrawingsController.prototype.IsMovingTableBorder = function()
 {
@@ -308,7 +355,7 @@ CDrawingsController.prototype.SelectAll = function()
 };
 CDrawingsController.prototype.GetSelectedContent = function(SelectedContent)
 {
-	this.DrawingObjects.Get_SelectedContent(SelectedContent);
+	this.DrawingObjects.GetSelectedContent(SelectedContent);
 };
 CDrawingsController.prototype.UpdateCursorType = function(X, Y, PageAbs, MouseEvent)
 {
@@ -323,6 +370,14 @@ CDrawingsController.prototype.IsSelectionUse = function()
 {
 	return this.DrawingObjects.isSelectionUse();
 };
+CDrawingsController.prototype.IsNumberingSelection = function()
+{
+	var oTargetDocContent = this.DrawingObjects.getTargetDocContent();
+	if (oTargetDocContent && oTargetDocContent.IsNumberingSelection)
+		return  oTargetDocContent.IsNumberingSelection();
+
+	return false;
+};
 CDrawingsController.prototype.IsTextSelectionUse = function()
 {
 	return this.DrawingObjects.isTextSelectionUse();
@@ -335,9 +390,9 @@ CDrawingsController.prototype.GetSelectedText = function(bClearText, oPr)
 {
 	return this.DrawingObjects.getSelectedText(bClearText, oPr);
 };
-CDrawingsController.prototype.GetCurrentParagraph = function()
+CDrawingsController.prototype.GetCurrentParagraph = function(bIgnoreSelection, arrSelectedParagraphs, oPr)
 {
-	return this.DrawingObjects.getCurrentParagraph();
+	return this.DrawingObjects.getCurrentParagraph(bIgnoreSelection, arrSelectedParagraphs, oPr);
 };
 CDrawingsController.prototype.GetSelectedElementsInfo = function(oInfo)
 {
@@ -347,7 +402,7 @@ CDrawingsController.prototype.AddTableRow = function(bBefore)
 {
 	this.DrawingObjects.tableAddRow(bBefore);
 };
-CDrawingsController.prototype.AddTableCol = function(bBefore)
+CDrawingsController.prototype.AddTableColumn = function(bBefore)
 {
 	this.DrawingObjects.tableAddCol(bBefore);
 };
@@ -355,7 +410,7 @@ CDrawingsController.prototype.RemoveTableRow = function()
 {
 	this.DrawingObjects.tableRemoveRow();
 };
-CDrawingsController.prototype.RemoveTableCol = function()
+CDrawingsController.prototype.RemoveTableColumn = function()
 {
 	this.DrawingObjects.tableRemoveCol();
 };
@@ -366,6 +421,10 @@ CDrawingsController.prototype.MergeTableCells = function()
 CDrawingsController.prototype.SplitTableCells = function(Cols, Rows)
 {
 	this.DrawingObjects.tableSplitCell(Cols, Rows);
+};
+CDrawingsController.prototype.RemoveTableCells = function()
+{
+	this.DrawingObjects.tableRemoveCells();
 };
 CDrawingsController.prototype.RemoveTable = function()
 {
@@ -382,6 +441,10 @@ CDrawingsController.prototype.CanMergeTableCells = function()
 CDrawingsController.prototype.CanSplitTableCells = function()
 {
 	return this.DrawingObjects.tableCheckSplit();
+};
+CDrawingsController.prototype.DistributeTableCells = function(isHorizontally)
+{
+	return this.DrawingObjects.distributeTableCells(isHorizontally);
 };
 CDrawingsController.prototype.UpdateInterfaceState = function()
 {
@@ -409,7 +472,7 @@ CDrawingsController.prototype.UpdateRulersState = function()
 CDrawingsController.prototype.UpdateSelectionState = function()
 {
 	this.DrawingObjects.documentUpdateSelectionState();
-	this.LogicDocument.Document_UpdateTracks();
+	this.LogicDocument.UpdateTracks();
 };
 CDrawingsController.prototype.GetSelectionState = function()
 {
@@ -441,13 +504,13 @@ CDrawingsController.prototype.IsCursorInHyperlink = function(bCheckEnd)
 };
 CDrawingsController.prototype.AddComment = function(Comment)
 {
-	if (true != this.DrawingObjects.isSelectedText())
+	if (true !== this.DrawingObjects.isSelectedText())
 	{
 		var ParaDrawing = this.DrawingObjects.getMajorParaDrawing();
 		if (null != ParaDrawing)
 		{
 			var Paragraph = ParaDrawing.Parent;
-			Paragraph.Add_Comment2(Comment, ParaDrawing.Get_Id());
+			Paragraph.AddCommentToObject(Comment, ParaDrawing.Get_Id());
 		}
 	}
 	else
@@ -457,8 +520,9 @@ CDrawingsController.prototype.AddComment = function(Comment)
 };
 CDrawingsController.prototype.CanAddComment = function()
 {
+	// TODO: Как будет реализовано добавление комментариев к объекту, возвращать тут true
 	if (true != this.DrawingObjects.isSelectedText())
-		return true;
+		return false;
 	else
 		return this.DrawingObjects.canAddComment();
 };
@@ -485,7 +549,7 @@ CDrawingsController.prototype.RestoreDocumentStateAfterLoadChanges = function(St
 	if (true !== this.DrawingObjects.Load_DocumentStateAfterLoadChanges(State))
 	{
 		var LogicDocument = this.LogicDocument;
-		LogicDocument.Set_DocPosType(docpostype_Content);
+		LogicDocument.SetDocPosType(docpostype_Content);
 
 		var ContentPos = 0;
 		if (LogicDocument.Pages[LogicDocument.CurPage])
@@ -495,7 +559,7 @@ CDrawingsController.prototype.RestoreDocumentStateAfterLoadChanges = function(St
 
 		ContentPos = Math.max(0, Math.min(LogicDocument.Content.length - 1, ContentPos));
 		LogicDocument.CurPos.ContentPos = ContentPos;
-		LogicDocument.Content[ContentPos].Cursor_MoveToStartPos(false);
+		LogicDocument.Content[ContentPos].MoveCursorToStartPos(false);
 	}
 };
 CDrawingsController.prototype.GetColumnSize = function()
@@ -517,4 +581,22 @@ CDrawingsController.prototype.RemoveTextSelection = function()
 {
 	this.DrawingObjects.removeTextSelection();
 };
+CDrawingsController.prototype.AddContentControl = function(nContentControlType)
+{
+	return this.DrawingObjects.AddContentControl(nContentControlType);
+};
+CDrawingsController.prototype.GetStyleFromFormatting = function()
+{
+	return this.DrawingObjects.GetStyleFromFormatting();
+};
+CDrawingsController.prototype.GetSimilarNumbering = function(oEngine)
+{
+	var oDocContent = this.DrawingObjects.getTargetDocContent();
 
+	if (oDocContent && oDocContent.GetSimilarNumbering)
+		oDocContent.GetSimilarNumbering(oEngine);
+};
+CDrawingsController.prototype.GetAllFields = function(isUseSelection, arrFields)
+{
+	return this.DrawingObjects.GetAllFields(isUseSelection, arrFields);
+};

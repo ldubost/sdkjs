@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2019
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -12,8 +12,8 @@
  * warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR  PURPOSE. For
  * details, see the GNU AGPL at: http://www.gnu.org/licenses/agpl-3.0.html
  *
- * You can contact Ascensio System SIA at Lubanas st. 125a-25, Riga, Latvia,
- * EU, LV-1021.
+ * You can contact Ascensio System SIA at 20A-12 Ernesta Birznieka-Upisha
+ * street, Riga, Latvia, EU, LV-1050.
  *
  * The  interactive user interfaces in modified source and object code versions
  * of the Program must display Appropriate Legal Notices, as required under
@@ -50,6 +50,7 @@ function ParaHyperlink()
     this.Value   = "";
     this.Visited = false;
     this.ToolTip = "";
+    this.Anchor  = "";
 
     // Добавляем данный класс в таблицу Id (обязательно в конце конструктора)
     AscCommon.g_oTableId.Add( this, this.Id );
@@ -63,20 +64,33 @@ ParaHyperlink.prototype.Get_Id = function()
     return this.Id;
 };
 
-ParaHyperlink.prototype.Copy = function(Selected)
+
+ParaHyperlink.prototype.Get_FirstTextPr2 = function()
+{
+    for(var i = 0; i < this.Content.length; ++i)
+    {
+        if(this.Content[i].Type === para_Run && !this.Content[i].Is_Empty())
+        {
+            return this.Content[i].Get_CompiledPr();
+        }
+    }
+    return null;
+};
+
+ParaHyperlink.prototype.Copy = function(Selected, oPr)
 {
     var NewHyperlink = CParagraphContentWithParagraphLikeContent.prototype.Copy.apply(this, arguments);
-    NewHyperlink.Set_Value(this.Value);
-    NewHyperlink.Set_ToolTip(this.ToolTip);
+    NewHyperlink.SetValue(this.Value);
+    NewHyperlink.SetToolTip(this.ToolTip);
+    NewHyperlink.SetAnchor(this.Anchor);
     NewHyperlink.Visited = this.Visited;
     return NewHyperlink;
 };
 
-ParaHyperlink.prototype.Get_SelectedElementsInfo = function(Info)
+ParaHyperlink.prototype.GetSelectedElementsInfo = function(Info, ContentPos, Depth)
 {
-    Info.Set_Hyperlink(this);
-
-    CParagraphContentWithParagraphLikeContent.prototype.Get_SelectedElementsInfo.apply(this, arguments);
+    Info.SetHyperlink(this);
+    CParagraphContentWithParagraphLikeContent.prototype.GetSelectedElementsInfo.apply(this, arguments);
 };
 
 ParaHyperlink.prototype.Add_ToContent = function(Pos, Item, UpdatePosition)
@@ -108,107 +122,33 @@ ParaHyperlink.prototype.Remove_FromContent = function(Pos, Count, UpdatePosition
 
 ParaHyperlink.prototype.Add = function(Item)
 {
-    switch (Item.Type)
-    {
-        case para_Run  :
-        case para_Field:
-        {
-            var TextPr = this.Get_FirstTextPr();
-            Item.Select_All();
-            Item.Apply_TextPr(TextPr);
-            Item.Selection_Remove();
+	if (para_Hyperlink === Item.Type)
+	{
+		// Вместо добавления самого элемента добавляем его содержимое
+		var Count = Item.Content.length;
 
-            var CurPos = this.State.ContentPos;
-            var CurItem = this.Content[CurPos];
-            if (para_Run === CurItem.Type || para_Math === CurItem.Type)
-            {
-                var ContentPos = new CParagraphContentPos();
-                this.Content[CurPos].Get_ParaContentPos(false, false, ContentPos);
+		if (Count > 0)
+		{
+			var CurPos  = this.State.ContentPos;
+			var CurItem = this.Content[CurPos];
 
-                // Разделяем текущий элемент (возвращается правая часть)
-                var NewElement = this.Content[CurPos].Split(ContentPos, 0);
+			var CurContentPos = new CParagraphContentPos();
+			CurItem.Get_ParaContentPos(false, false, CurContentPos);
 
-                if (null !== NewElement)
-                    this.Add_ToContent(CurPos + 1, NewElement);
-
-                this.Add_ToContent(CurPos + 1, Item);
-
-                if (para_Field === Item.Type)
-                {
-                    this.State.ContentPos = CurPos + 2;
-                    this.Content[this.State.ContentPos].Cursor_MoveToStartPos(false);
-                }
-                else
-                {
-                    this.State.ContentPos = CurPos + 1;
-                    this.Content[this.State.ContentPos].Cursor_MoveToEndPos(false);
-                }
-            }
-            else
-                CurItem.Add(Item);
-
-            break;
-        }
-        case para_Math :
-        {
-            var ContentPos = new CParagraphContentPos();
-            this.Get_ParaContentPos(false, false, ContentPos);
-            var CurPos = ContentPos.Get(0);
-
-            // Ран формула делит на части, а в остальные элементы добавляется целиком
-            if (para_Run === this.Content[CurPos].Type)
-            {
-                // Разделяем текущий элемент (возвращается правая часть)
-                var NewElement = this.Content[CurPos].Split(ContentPos, 1);
-
-                if (null !== NewElement)
-                    this.Add_ToContent(CurPos + 1, NewElement, true);
-
-                var Elem = new ParaMath();
-                Elem.Root.Load_FromMenu(Item.Menu, this.Get_Paragraph());
-                Elem.Root.Correct_Content(true);
-                this.Add_ToContent(CurPos + 1, Elem, true);
-
-                // Перемещаем кусор в конец формулы
-                this.State.ContentPos = CurPos + 1;
-                this.Content[this.State.ContentPos].Cursor_MoveToEndPos(false);
-            }
-            else
-                this.Content[CurPos].Add(Item);
-
-            break;
-        }
-        case para_Hyperlink:
-        {
-            // Вместо добавления самого элемента добавляем его содержимое
-            var Count = Item.Content.length;
-
-            if (Count > 0)
-            {
-                var CurPos  = this.State.ContentPos;
-                var CurItem = this.Content[CurPos];
-
-                var CurContentPos = new CParagraphContentPos();
-                CurItem.Get_ParaContentPos(false, false, CurContentPos);
-
-                var NewItem = CurItem.Split(CurContentPos, 0);
-                for (var Index = 0; Index < Count; Index++)
-                {
-                    this.Add_ToContent(CurPos + Index + 1, Item.Content[Index], false);
-                }
-                this.Add_ToContent(CurPos + Count + 1, NewItem, false);
-                this.State.ContentPos = CurPos + Count;
-                this.Content[this.State.ContentPos].Cursor_MoveToEndPos();
-            }
-
-            break;
-        }
-        default :
-        {
-            this.Content[this.State.ContentPos].Add(Item);
-            break;
-        }
-    }
+			var NewItem = CurItem.Split(CurContentPos, 0);
+			for (var Index = 0; Index < Count; Index++)
+			{
+				this.Add_ToContent(CurPos + Index + 1, Item.Content[Index], false);
+			}
+			this.Add_ToContent(CurPos + Count + 1, NewItem, false);
+			this.State.ContentPos = CurPos + Count;
+			this.Content[this.State.ContentPos].MoveCursorToEndPos();
+		}
+	}
+	else
+	{
+		CParagraphContentWithParagraphLikeContent.prototype.Add.apply(this, arguments);
+	}
 };
 
 ParaHyperlink.prototype.Clear_TextPr = function()
@@ -217,7 +157,7 @@ ParaHyperlink.prototype.Clear_TextPr = function()
     if ( undefined !== this.Paragraph && null !== this.Paragraph )
     {
         var Styles = this.Paragraph.Parent.Get_Styles();
-        HyperlinkStyle = Styles.Get_Default_Hyperlink();
+        HyperlinkStyle = Styles.GetDefaultHyperlink();
     }
 
     var Count = this.Content.length;
@@ -248,8 +188,10 @@ ParaHyperlink.prototype.Clear_TextFormatting = function( DefHyper )
 ParaHyperlink.prototype.Split = function (ContentPos, Depth)
 {
     var NewHyperlink = CParagraphContentWithParagraphLikeContent.prototype.Split.apply(this, arguments);
-    NewHyperlink.Set_Value(this.Value);
-    NewHyperlink.Set_ToolTip(this.ToolTip);
+    NewHyperlink.SetValue(this.Value);
+    NewHyperlink.SetToolTip(this.ToolTip);
+	NewHyperlink.SetAnchor(this.Anchor);
+	NewHyperlink.Visited = this.Visited;
     return NewHyperlink;
 };
 
@@ -272,57 +214,88 @@ ParaHyperlink.prototype.CopyContent = function(Selected)
 ParaHyperlink.prototype.Draw_Elements = function(PDSE)
 {
     PDSE.VisitedHyperlink = this.Visited;
+    PDSE.Hyperlink = true;
     CParagraphContentWithParagraphLikeContent.prototype.Draw_Elements.apply(this, arguments);
     PDSE.VisitedHyperlink = false;
+    PDSE.Hyperlink = false;
 };
 
 ParaHyperlink.prototype.Draw_Lines = function(PDSL)
 {
     PDSL.VisitedHyperlink = this.Visited;
+    PDSL.Hyperlink = true;
     CParagraphContentWithParagraphLikeContent.prototype.Draw_Lines.apply(this, arguments);
     PDSL.VisitedHyperlink = false;
+    PDSL.Hyperlink = false;
 };
 //-----------------------------------------------------------------------------------
 // Работаем со значениями
 //-----------------------------------------------------------------------------------
-ParaHyperlink.prototype.Set_Visited = function(Value)
-{
-    this.Visited = Value;
-};
-
-ParaHyperlink.prototype.Get_Visited = function()
+ParaHyperlink.prototype.GetVisited = function()
 {
     return this.Visited;
 };
-
-ParaHyperlink.prototype.Set_ToolTip = function(ToolTip)
+ParaHyperlink.prototype.SetVisited = function(isVisited)
+{
+	this.Visited = isVisited;
+};
+ParaHyperlink.prototype.SetToolTip = function(ToolTip)
 {
     History.Add(new CChangesHyperlinkToolTip(this, this.ToolTip, ToolTip));
     this.ToolTip = ToolTip;
 };
-
-ParaHyperlink.prototype.Get_ToolTip = function()
+ParaHyperlink.prototype.GetToolTip = function()
 {
-    if ( null === this.ToolTip )
-    {
-        if ( "string" === typeof(this.Value) )
-            return this.Value;
-        else
-            return "";
-    }
-    else
-        return this.ToolTip;
-};
+	if (this.Anchor)
+		return AscCommon.translateManager.getValue("Current Document");
 
-ParaHyperlink.prototype.Get_Value = function()
-{
-    return this.Value;
+	if ( null === this.ToolTip )
+	{
+		if ( "string" === typeof(this.Value) )
+			return this.Value;
+		else
+			return "";
+	}
+	else
+		return this.ToolTip;
 };
-
 ParaHyperlink.prototype.Set_Value = function(Value)
 {
     History.Add(new CChangesHyperlinkValue(this, this.Value, Value));
     this.Value = Value;
+};
+ParaHyperlink.prototype.GetAnchor = function()
+{
+	return this.Anchor;
+};
+ParaHyperlink.prototype.SetAnchor = function(sBookmarkName)
+{
+	History.Add(new CChangesHyperlinkAnchor(this, this.Anchor, sBookmarkName));
+	this.Anchor = sBookmarkName;
+};
+ParaHyperlink.prototype.GetValue = function()
+{
+	return this.Value;
+};
+ParaHyperlink.prototype.SetValue = function(sValue)
+{
+	this.Set_Value(sValue);
+};
+/**
+ * Проверяем является ли данная ссылка внутренней
+ * @returns {boolean}
+ */
+ParaHyperlink.prototype.IsAnchor = function()
+{
+	return !!(this.Anchor);
+};
+/**
+ * Проверяем является ли данная ссылка ссылкой в начало документа
+ * @returns {boolean}
+ */
+ParaHyperlink.prototype.IsTopOfDocument = function()
+{
+	return (this.Anchor === "_top");
 };
 //----------------------------------------------------------------------------------------------------------------------
 // Функции совместного редактирования
@@ -336,6 +309,7 @@ ParaHyperlink.prototype.Write_ToBinary2 = function(Writer)
     // String : ToolTip
     // Long   : Количество элементов
     // Array of Strings : массив с Id элементов
+	// String : Anchor
 
     Writer.WriteString2( this.Id );
     if(!(editor && editor.isDocumentEditor))
@@ -354,6 +328,8 @@ ParaHyperlink.prototype.Write_ToBinary2 = function(Writer)
     {
         Writer.WriteString2( this.Content[Index].Get_Id() );
     }
+
+	Writer.WriteString2(this.Anchor);
 };
 
 ParaHyperlink.prototype.Read_FromBinary2 = function(Reader)
@@ -363,6 +339,7 @@ ParaHyperlink.prototype.Read_FromBinary2 = function(Reader)
     // String : ToolTip
     // Long   : Количество элементов
     // Array of Strings : массив с Id элементов
+	// String : Anchor
 
     this.Id      = Reader.GetString2();
     this.Value   = Reader.GetString2();
@@ -377,6 +354,8 @@ ParaHyperlink.prototype.Read_FromBinary2 = function(Reader)
         if ( null !== Element )
             this.Content.push( Element );
     }
+
+    this.Anchor = Reader.GetString2();
 };
 
 ParaHyperlink.prototype.Write_ToBinary2SpreadSheets = function(Writer)
@@ -388,15 +367,36 @@ ParaHyperlink.prototype.Write_ToBinary2SpreadSheets = function(Writer)
 
 ParaHyperlink.prototype.Document_UpdateInterfaceState = function()
 {
-    var HyperText = new CParagraphGetText();
-    this.Get_Text( HyperText );
+	var oHyperText = new CParagraphGetText();
+	this.Get_Text(oHyperText);
 
-    var HyperProps = new Asc.CHyperlinkProperty(this);
-    HyperProps.put_Text( HyperText.Text );
+	var oHyperProps = new Asc.CHyperlinkProperty(this);
+	oHyperProps.put_Text(oHyperText.Text);
+	oHyperProps.put_InternalHyperlink(this);
 
-    editor.sync_HyperlinkPropCallback(HyperProps);
+	var sAnchor = oHyperProps.get_Bookmark();
 
-    CParagraphContentWithParagraphLikeContent.prototype.Document_UpdateInterfaceState.apply(this, arguments);
+	var oLogicDocument = this.Paragraph ? this.Paragraph.LogicDocument : null;
+	if (oLogicDocument && sAnchor)
+	{
+		var oBookmarksManager = oLogicDocument.GetBookmarksManager();
+		var oBookmark         = oBookmarksManager.GetBookmarkByName(sAnchor);
+		if (oBookmarksManager.IsHiddenBookmark(sAnchor) && oBookmark)
+		{
+			var oPara = oBookmark[0].GetParagraph();
+			if (oBookmarksManager.GetNameForHeadingBookmark(oPara) === sAnchor)
+			{
+				oHyperProps.put_Heading(oPara);
+			}
+			else
+			{
+				oHyperProps.put_Bookmark(null);
+			}
+		}
+	}
+
+	editor.sync_HyperlinkPropCallback(oHyperProps);
+	CParagraphContentWithParagraphLikeContent.prototype.Document_UpdateInterfaceState.apply(this, arguments);
 };
 
 function CParaHyperLinkStartState(HyperLink)
@@ -410,6 +410,69 @@ function CParaHyperLinkStartState(HyperLink)
     }
 }
 
+/**
+ * Класс описывающий типы привязок для гиперссылки
+ * @param {c_oAscHyperlinkAnchor} nType
+ * @param vParam
+ * @constructor
+ */
+function CHyperlinkAnchor(nType, vParam)
+{
+	this.Type = nType;
+
+	this.Bookmark  = null;
+	this.Paragraph = null;
+	this.Lvl       = null;
+
+	if (c_oAscHyperlinkAnchor.Bookmark === this.Type)
+	{
+		this.Bookmark = vParam;
+	}
+	else if (c_oAscHyperlinkAnchor.Heading === this.Type)
+	{
+		this.Paragraph = vParam.Paragraph;
+		this.Lvl       = vParam.Lvl;
+	}
+}
+CHyperlinkAnchor.prototype.GetType = function()
+{
+	return this.Type;
+};
+CHyperlinkAnchor.prototype.GetBookmarkName = function()
+{
+	if (c_oAscHyperlinkAnchor.Bookmark === this.Type)
+		return this.Bookmark;
+
+	return "";
+};
+CHyperlinkAnchor.prototype.GetHeadingText = function()
+{
+	if (c_oAscHyperlinkAnchor.Heading === this.Type && this.Paragraph instanceof Paragraph)
+		return this.Paragraph.GetText();
+
+	return "";
+};
+CHyperlinkAnchor.prototype.GetHeadingLevel = function()
+{
+	if (c_oAscHyperlinkAnchor.Heading === this.Type)
+		return this.Lvl;
+
+	return -1;
+};
+CHyperlinkAnchor.prototype.GetHeadingParagraph = function()
+{
+	if (c_oAscHyperlinkAnchor.Heading === this.Type && this.Paragraph instanceof Paragraph)
+		return this.Paragraph;
+
+	return "";
+};
+
 //--------------------------------------------------------export----------------------------------------------------
 window['AscCommonWord'] = window['AscCommonWord'] || {};
 window['AscCommonWord'].ParaHyperlink = ParaHyperlink;
+
+CHyperlinkAnchor.prototype['asc_GetType']             = CHyperlinkAnchor.prototype.GetType;
+CHyperlinkAnchor.prototype['asc_GetBookmarkName']     = CHyperlinkAnchor.prototype.GetBookmarkName;
+CHyperlinkAnchor.prototype['asc_GetHeadingText']      = CHyperlinkAnchor.prototype.GetHeadingText;
+CHyperlinkAnchor.prototype['asc_GetHeadingLevel']     = CHyperlinkAnchor.prototype.GetHeadingLevel;
+CHyperlinkAnchor.prototype['asc_GetHeadingParagraph'] = CHyperlinkAnchor.prototype.GetHeadingParagraph;

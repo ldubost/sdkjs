@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2019
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -12,8 +12,8 @@
  * warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR  PURPOSE. For
  * details, see the GNU AGPL at: http://www.gnu.org/licenses/agpl-3.0.html
  *
- * You can contact Ascensio System SIA at Lubanas st. 125a-25, Riga, Latvia,
- * EU, LV-1021.
+ * You can contact Ascensio System SIA at 20A-12 Ernesta Birznieka-Upisha
+ * street, Riga, Latvia, EU, LV-1050.
  *
  * The  interactive user interfaces in modified source and object code versions
  * of the Program must display Appropriate Legal Notices, as required under
@@ -103,7 +103,7 @@
 	{
 		if (-1 == this.LogicDocument.CurPage)
 			return null;
-		return this.LogicDocument.Slides[this.LogicDocument.CurPage].graphicObjects.Get_SelectionBounds();
+		return this.LogicDocument.Slides[this.LogicDocument.CurPage].graphicObjects.GetSelectionBounds();
 	};
 	CMobileDelegateEditorPresentation.prototype.ScrollTo = function(_scroll)
 	{
@@ -140,10 +140,10 @@
 		var _controller = this.LogicDocument.Slides[this.LogicDocument.CurPage].graphicObjects;
 		var _elementsCount = _controller.selectedObjects.length;
 
-		if (!_controller.Is_SelectionUse() && _elementsCount > 0)
+		if (!_controller.IsSelectionUse() && _elementsCount > 0)
 			_mode = AscCommon.MobileTouchContextMenuType.Target;
 
-		if (_controller.Get_SelectionBounds())
+		if (_controller.GetSelectionBounds())
 			_mode = AscCommon.MobileTouchContextMenuType.Select;
 
 		if (_mode == AscCommon.MobileTouchContextMenuType.Slide && _controller.getSelectedObjectsBounds())
@@ -165,7 +165,7 @@
 
 		var _controller = this.LogicDocument.Slides[this.LogicDocument.CurPage].graphicObjects;
 
-		var _target = _controller.Is_SelectionUse();
+		var _target = _controller.IsSelectionUse();
 		if (_target === false)
 		{
 			/*
@@ -194,7 +194,7 @@
 			return;
 		}
 
-		var _select = _controller.Get_SelectionBounds();
+		var _select = _controller.GetSelectionBounds();
 		if (_select)
 		{
 			var _rect1 = _select.Start;
@@ -256,7 +256,7 @@
 
 		var _mode = 0;
 
-		var _target = _controller.Is_SelectionUse();
+		var _target = _controller.IsSelectionUse();
 		if (_target === false)
 		{
 			_posX = this.DrawingDocument.m_dTargetX;
@@ -282,7 +282,7 @@
 			_mode = 1;
 		}
 
-		var _select = _controller.Get_SelectionBounds();
+		var _select = _controller.GetSelectionBounds();
 		if (_select)
 		{
 			var _rect1 = _select.Start;
@@ -364,7 +364,7 @@
 		var _element = this.delegate.GetScrollerParent();
 		this.CreateScrollerDiv(_element);
 
-		this.iScroll = new window.IScroll(_element, {
+		this.iScroll = new window.IScrollMobile(_element, {
 			scrollbars: true,
 			mouseWheel: true,
 			interactiveScrollbars: true,
@@ -499,7 +499,7 @@
 				var _x2 = this.RectSelect2.x + this.RectSelect2.w;
 				var _y2 = this.RectSelect2.y + this.RectSelect2.h / 2;
 
-				this.delegate.LogicDocument.Selection_Remove();
+				this.delegate.LogicDocument.RemoveSelection();
 				if (1 == this.DragSelect)
 				{
 					global_mouseEvent.Button = 0;
@@ -767,6 +767,7 @@
 		var isPreventDefault = false;
 		switch (this.Mode)
 		{
+            case AscCommon.MobileTouchMode.None:
 			case AscCommon.MobileTouchMode.Select:
 			case AscCommon.MobileTouchMode.Scroll:
 			case AscCommon.MobileTouchMode.InlineObj:
@@ -957,7 +958,10 @@
 		this.checkPointerMultiTouchRemove(e);
 
 		if (this.Api.isViewMode || isPreventDefault)
-			AscCommon.g_inputContext.preventVirtualKeyboard(e);
+            AscCommon.stopEvent(e);//AscCommon.g_inputContext.preventVirtualKeyboard(e);
+
+        if (AscCommon.g_inputContext.isHardCheckKeyboard)
+            isPreventDefault ? AscCommon.g_inputContext.preventVirtualKeyboard_Hard() : AscCommon.g_inputContext.enableVirtualKeyboard_Hard();
 
 		if (true !== this.iScroll.isAnimating)
 			this.CheckContextMenuTouchEnd(isCheckContextMenuMode, isCheckContextMenuSelect, isCheckContextMenuCursor, isCheckContextMenuTableRuler);
@@ -1146,7 +1150,7 @@
 		var _element = this.delegate.GetScrollerParent();
 		this.CreateScrollerDiv(_element);
 
-		this.iScroll = new window.IScroll(_element, {
+		this.iScroll = new window.IScrollMobile(_element, {
 			scrollbars: true,
 			mouseWheel: true,
 			interactiveScrollbars: true,
@@ -1169,8 +1173,6 @@
 		this.IsTouching = true;
 		this.MoveAfterDown = false;
 
-		AscCommon.g_inputContext.enableVirtualKeyboard();
-
 		var _e = e.touches ? e.touches[0] : e;
 
 		AscCommon.check_MouseDownEvent(_e, false);
@@ -1183,7 +1185,6 @@
 		this.iScroll._start(e);
 
 		AscCommon.stopEvent(e);
-		AscCommon.g_inputContext.HtmlArea.readOnly = true;
 		return false;
 	};
 	CMobileTouchManagerThumbnails.prototype.onTouchMove  = function(e)
@@ -1273,7 +1274,12 @@
 			this.CheckContextMenuTouchEnd(isCheckContextMenuMode);
 
 		AscCommon.stopEvent(e);
-		AscCommon.g_inputContext.HtmlArea.readOnly = false;
+
+        if (!AscCommon.g_inputContext.isHardCheckKeyboard)
+        	AscCommon.g_inputContext.preventVirtualKeyboard(e);
+        else
+            AscCommon.g_inputContext.preventVirtualKeyboard_Hard();
+
 		return false;
 	};
 

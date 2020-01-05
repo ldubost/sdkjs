@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2019
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -12,8 +12,8 @@
  * warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR  PURPOSE. For
  * details, see the GNU AGPL at: http://www.gnu.org/licenses/agpl-3.0.html
  *
- * You can contact Ascensio System SIA at Lubanas st. 125a-25, Riga, Latvia,
- * EU, LV-1021.
+ * You can contact Ascensio System SIA at 20A-12 Ernesta Birznieka-Upisha
+ * street, Riga, Latvia, EU, LV-1050.
  *
  * The  interactive user interfaces in modified source and object code versions
  * of the Program must display Appropriate Legal Notices, as required under
@@ -713,17 +713,24 @@ CHatchBrush.prototype =
         if (undefined === global_hatch_offsets[name])
             this.Name = "cross";
 
-        this.Canvas = document.createElement('canvas');
-        this.Canvas.width = HATCH_TX_SIZE;
-        this.Canvas.height = HATCH_TX_SIZE;
+        if (!window["NATIVE_EDITOR_ENJINE"])
+        {
+            this.Canvas = document.createElement('canvas');
+            this.Canvas.width = HATCH_TX_SIZE;
+            this.Canvas.height = HATCH_TX_SIZE;
 
-        this.Ctx = this.Canvas.getContext('2d');
-        this.Data = this.Ctx.createImageData(HATCH_TX_SIZE, HATCH_TX_SIZE);
+            this.Ctx = this.Canvas.getContext('2d');
+            this.Data = this.Ctx.createImageData(HATCH_TX_SIZE, HATCH_TX_SIZE);
+        }
+        else
+        {
+            this.Data = new Uint8Array(4 * HATCH_TX_SIZE * HATCH_TX_SIZE);
+        }
     },
 
     CheckColors : function(r,g,b,a,br,bg,bb,ba)
     {
-        if (null == this.Canvas)
+        if (null == this.Data)
             return;
 
         if (this.fgClr.R == r && this.fgClr.G == g && this.fgClr.B == b && this.fgClr.A == a &&
@@ -743,7 +750,7 @@ CHatchBrush.prototype =
         var _len = HATCH_TX_SIZE * HATCH_TX_SIZE;
         var _src_data_offset = global_hatch_offsets[this.Name] * _len;
         var _src_data = global_hatch_data;
-        var _dst_data = this.Data.data;
+        var _dst_data = this.Canvas ? this.Data.data : this.Data;
         var _ind = 0;
 
         for (var i = 0; i < _len; i++)
@@ -764,7 +771,16 @@ CHatchBrush.prototype =
             }
         }
 
-        this.Ctx.putImageData(this.Data, 0, 0);
+        if (this.Canvas)
+            this.Ctx.putImageData(this.Data, 0, 0);
+    },
+
+    toDataURL : function()
+    {
+        if (this.Canvas)
+            return this.Canvas.toDataURL("image/png");
+
+        return "data:onlyoffice_hatch," + AscCommon.Base64Encode(this.Data, 4 * HATCH_TX_SIZE * HATCH_TX_SIZE);
     }
 };
 

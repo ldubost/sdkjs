@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2019
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -12,8 +12,8 @@
  * warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR  PURPOSE. For
  * details, see the GNU AGPL at: http://www.gnu.org/licenses/agpl-3.0.html
  *
- * You can contact Ascensio System SIA at Lubanas st. 125a-25, Riga, Latvia,
- * EU, LV-1021.
+ * You can contact Ascensio System SIA at 20A-12 Ernesta Birznieka-Upisha
+ * street, Riga, Latvia, EU, LV-1050.
  *
  * The  interactive user interfaces in modified source and object code versions
  * of the Program must display Appropriate Legal Notices, as required under
@@ -583,6 +583,7 @@ function FT_Stream(data, size)
                 case 24:  /* read a byte sequence */
                 case 25:   /* skip some bytes      */
                 {
+					var len = arrayFields[ind].size;
                     if ( cursor + fsize > this.size )
                     {
                         error = 85;
@@ -594,7 +595,7 @@ function FT_Stream(data, size)
                     if ( fval == 24 )
                     {
                         data = structure.data;
-                        pos = structure.pos + arrayFields[ind].offset;
+                        pos = structure.pos + fields[ind].offset;
 
                         for (var i=0;i<len;i++)
                             data[i] = this.data[cursor+i];
@@ -661,8 +662,8 @@ function FT_Stream(data, size)
             /* finally, store the value in the object */
 
             data = structure.data;
-            pos = structure.pos + arrayFields[ind].offset;
-            switch (arrayFields[ind])
+            pos = structure.pos + fields[ind].offset;
+            switch (fields[ind])
             {
                 case 1:
                     data[pos] = value & 0xFF;
@@ -703,9 +704,12 @@ window['AscFonts'].FT_Stream = FT_Stream;
 window['AscFonts'].g_memory = g_memory;
 
 window['AscFonts'].CFontManager = function CFontManager() {
-    this.m_oLibrary = {};
-    this.m_oLibrary.tt_hint_props = {};
+    this.m_pFont = null;
+    this.m_oFontsCache = { Fonts : {} };
     this.Initialize = function(){};
+    this.SetHintsProps = function(){};
+    this.LoadFont = function(){};
+    this.ClearRasterMemory = function(){};
     this.ClearFontsRasterCache = function(){};
 };
 

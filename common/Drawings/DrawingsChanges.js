@@ -1,3 +1,37 @@
+/*
+ * (c) Copyright Ascensio System SIA 2010-2019
+ *
+ * This program is a free software product. You can redistribute it and/or
+ * modify it under the terms of the GNU Affero General Public License (AGPL)
+ * version 3 as published by the Free Software Foundation. In accordance with
+ * Section 7(a) of the GNU AGPL its Section 15 shall be amended to the effect
+ * that Ascensio System SIA expressly excludes the warranty of non-infringement
+ * of any third-party rights.
+ *
+ * This program is distributed WITHOUT ANY WARRANTY; without even the implied
+ * warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR  PURPOSE. For
+ * details, see the GNU AGPL at: http://www.gnu.org/licenses/agpl-3.0.html
+ *
+ * You can contact Ascensio System SIA at 20A-12 Ernesta Birznieka-Upisha
+ * street, Riga, Latvia, EU, LV-1050.
+ *
+ * The  interactive user interfaces in modified source and object code versions
+ * of the Program must display Appropriate Legal Notices, as required under
+ * Section 5 of the GNU AGPL version 3.
+ *
+ * Pursuant to Section 7(b) of the License you must retain the original Product
+ * logo when distributing the program. Pursuant to Section 7(e) we decline to
+ * grant you any rights under trademark law for use of our trademarks.
+ *
+ * All the Product's GUI elements, including illustrations and icon sets, as
+ * well as technical writing content are licensed under the terms of the
+ * Creative Commons Attribution-ShareAlike 4.0 International. See the License
+ * terms at http://creativecommons.org/licenses/by-sa/4.0/legalcode
+ *
+ */
+
+"use strict";
+
 (function (window, undefined) {
     var drawingsChangesMap = {};
     var drawingConstructorsMap = {};
@@ -119,6 +153,97 @@
         return !!oPosExtHor[this.Type];
     };
     window['AscDFH'].CChangesDrawingsDouble = CChangesDrawingsDouble;
+
+
+
+    function CChangesDrawingsDouble2(Class, Type, OldPr, NewPr) {
+        this.Type = Type;
+        var _OldPr = AscFormat.isRealNumber(OldPr) ? OldPr : undefined;
+        var _NewPr = AscFormat.isRealNumber(NewPr) ? NewPr : undefined;
+		AscDFH.CChangesBaseDoubleProperty.call(this, Class, _OldPr, _NewPr);
+    }
+
+    CChangesDrawingsDouble2.prototype = Object.create(AscDFH.CChangesBaseDoubleProperty.prototype);
+    CChangesDrawingsDouble2.prototype.constructor = CChangesDrawingsDouble2;
+
+    CChangesDrawingsDouble2.prototype.CreateReverseChange = function()
+    {
+        return new this.constructor(this.Class, this.Type, this.New, this.Old, this.Color);
+    };
+
+    CChangesDrawingsDouble2.prototype.private_SetValue = private_SetValue;
+
+    CChangesDrawingsDouble2.prototype.Load = function(){
+        this.Redo();
+        this.RefreshRecalcData();
+    };
+    CChangesDrawingsDouble2.prototype.WriteToBinary = function(Writer)
+    {
+        // Long  : Flag
+        // 1-bit : Подсвечивать ли данные изменения
+        // 2-bit : IsUndefined New
+        // 3-bit : IsUndefined Old
+        // double : New
+        // double : Old
+
+        var nFlags = 0;
+
+        if (false !== this.Color)
+            nFlags |= 1;
+
+        if (undefined === this.New)
+            nFlags |= 2;
+
+        if (undefined === this.Old)
+            nFlags |= 4;
+
+        Writer.WriteLong(nFlags);
+
+        if (undefined !== this.New)
+            Writer.WriteDouble2(this.New);
+
+        if (undefined !== this.Old)
+            Writer.WriteDouble2(this.Old);
+    };
+    CChangesDrawingsDouble2.prototype.ReadFromBinary = function(Reader)
+    {
+
+
+
+        Reader.Seek2(Reader.GetCurPos() - 4);
+        this.Type = Reader.GetLong();
+        // Long  : Flag
+        // 1-bit : Подсвечивать ли данные изменения
+        // 2-bit : IsUndefined New
+        // 3-bit : IsUndefined Old
+        // double : New
+        // double : Old
+
+
+        var nFlags = Reader.GetLong();
+
+        if (nFlags & 1)
+            this.Color = true;
+        else
+            this.Color = false;
+
+        if (nFlags & 2)
+            this.New = undefined;
+        else
+            this.New = Reader.GetDoubleLE();
+
+        if (nFlags & 4)
+            this.Old = undefined;
+        else
+            this.Old = Reader.GetDoubleLE();
+    };
+    CChangesDrawingsDouble2.prototype.IsPosExtChange = function () {
+        return !!oPosExtMap[this.Type];
+    };
+    CChangesDrawingsDouble2.prototype.IsHorizontal = function () {
+        return !!oPosExtHor[this.Type];
+    };
+    window['AscDFH'].CChangesDrawingsDouble2 = CChangesDrawingsDouble2;
 
 
     function CChangesDrawingsString(Class, Type, OldPr, NewPr) {
@@ -595,13 +720,14 @@
     window['AscDFH'].CChangesDrawingChangeTheme = CChangesDrawingChangeTheme;
 
 
-    function CChangesDrawingTimingLocks(Class, deleteLock, backgroundLock, timingLock, transitionLock, layoutLock){
+    function CChangesDrawingTimingLocks(Class, deleteLock, backgroundLock, timingLock, transitionLock, layoutLock, showLock){
         this.Type = AscDFH.historyitem_SlideSetLocks;
         this.deleteLock = deleteLock;
         this.backgroundLock = backgroundLock;
         this.timingLock = timingLock;
         this.transitionLock = transitionLock;
         this.layoutLock = layoutLock;
+        this.showLock = showLock;
 		AscDFH.CChangesBase.call(this, Class);
     }
 
@@ -614,6 +740,7 @@
         AscFormat.writeObject(Writer, this.timingLock);
         AscFormat.writeObject(Writer, this.transitionLock);
         AscFormat.writeObject(Writer, this.layoutLock);
+        AscFormat.writeObject(Writer, this.showLock);
     };
 
     CChangesDrawingTimingLocks.prototype.ReadFromBinary = function(Reader){
@@ -622,6 +749,7 @@
         this.timingLock = AscFormat.readObject(Reader);
         this.transitionLock = AscFormat.readObject(Reader);
         this.layoutLock = AscFormat.readObject(Reader);
+        this.showLock = AscFormat.readObject(Reader);
     };
 
     CChangesDrawingTimingLocks.prototype.Undo = function(){
@@ -631,6 +759,7 @@
         oSlide.timingLock = null;
         oSlide.transitionLock = null;
         oSlide.layoutLock = null;
+        oSlide.showLock = null;
     };
 
     CChangesDrawingTimingLocks.prototype.Redo = function(){
@@ -640,6 +769,7 @@
          oSlide.timingLock = this.timingLock;
          oSlide.transitionLock = this.transitionLock;
          oSlide.layoutLock = this.layoutLock;
+         oSlide.showLock = this.showLock;
     };
     CChangesDrawingTimingLocks.prototype.Load = function(){
         this.Redo();
@@ -669,8 +799,8 @@
         if(bIsArray){
             Writer.WriteLong(Pr.length);
             for(var i = 0; i < Pr.length; ++i){
-                Writer.WriteLong(Pr[i].sqref.c1);
-                Writer.WriteLong(Pr[i].sqref.r1);
+                Writer.WriteLong(Pr[i].sqRef.c1);
+                Writer.WriteLong(Pr[i].sqRef.r1);
                 Writer.WriteString2(Pr[i].f);
             }
         }
@@ -686,7 +816,7 @@
                 var oSparkline = new AscCommonExcel.sparkline();
                 var col = Reader.GetLong();
                 var row = Reader.GetLong();
-                oSparkline.sqref = new Asc.Range(col, row, col, row);
+                oSparkline.sqRef = new Asc.Range(col, row, col, row);
                 oSparkline.setF(Reader.GetString2());
                 RetPr.push(oSparkline);
             }
@@ -751,8 +881,8 @@
         var bIsObject = AscCommon.isRealObject(this.sparkline);
         Writer.WriteBool(bIsObject);
         if(bIsObject){
-            Writer.WriteLong(this.sparkline.sqref.c1);
-            Writer.WriteLong(this.sparkline.sqref.r1);
+            Writer.WriteLong(this.sparkline.sqRef.c1);
+            Writer.WriteLong(this.sparkline.sqRef.r1);
             Writer.WriteString2(this.sparkline.f);
         }
         Writer.WriteBool(this.bReverse === true);
@@ -763,7 +893,7 @@
             this.sparkline = new AscCommonExcel.sparkline();
             var col = Reader.GetLong();
             var row = Reader.GetLong();
-            this.sparkline.sqref = new Asc.Range(col, row, col, row);
+            this.sparkline.sqRef = new Asc.Range(col, row, col, row);
             this.sparkline.setF(Reader.GetString2());
         }
         this.bReverse = Reader.GetBool();
@@ -771,7 +901,7 @@
 
     CChangesSparklinesRemoveData.prototype.Undo = function(){
         if(this.bReverse){
-            this.Class.remove(this.sparkline.sqref);
+            this.Class.remove(this.sparkline.sqRef);
         }
         else{
             this.Class.arrSparklines.push(this.sparkline);
@@ -783,7 +913,7 @@
             this.Class.arrSparklines.push(this.sparkline);
         }
         else{
-            this.Class.remove(this.sparkline.sqref);
+            this.Class.remove(this.sparkline.sqRef);
         }
         this.Class.cleanCache();
     };

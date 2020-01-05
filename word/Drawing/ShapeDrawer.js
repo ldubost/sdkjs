@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2019
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -12,8 +12,8 @@
  * warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR  PURPOSE. For
  * details, see the GNU AGPL at: http://www.gnu.org/licenses/agpl-3.0.html
  *
- * You can contact Ascensio System SIA at Lubanas st. 125a-25, Riga, Latvia,
- * EU, LV-1021.
+ * You can contact Ascensio System SIA at 20A-12 Ernesta Birznieka-Upisha
+ * street, Riga, Latvia, EU, LV-1050.
  *
  * The  interactive user interfaces in modified source and object code versions
  * of the Program must display Appropriate Legal Notices, as required under
@@ -268,6 +268,7 @@ function CShapeDrawer()
     this.bIsTexture = false;
     this.bIsNoFillAttack = false;
     this.bIsNoStrokeAttack = false;
+    this.bDrawSmartAttack = false;
     this.FillUniColor = null;
     this.StrokeUniColor = null;
     this.StrokeWidth = 0;
@@ -395,7 +396,14 @@ CShapeDrawer.prototype =
                 }
                 case c_oAscFill.FILL_TYPE_SOLID:
                 {
-                    this.FillUniColor = _fill.color.RGBA;
+                    if(_fill.color)
+                    {
+                        this.FillUniColor = _fill.color.RGBA;
+                    }
+                    else
+                    {
+                        this.FillUniColor = new AscFormat.CUniColor().RGBA;
+                    }
                     break;
                 }
                 case c_oAscFill.FILL_TYPE_GRAD:
@@ -404,7 +412,16 @@ CShapeDrawer.prototype =
                     if (_c.length == 0)
                         this.FillUniColor = new AscFormat.CUniColor().RGBA;
                     else
-                        this.FillUniColor = _fill.colors[0].color.RGBA;
+                    {
+                        if(_fill.colors[0].color)
+                        {
+                            this.FillUniColor = _fill.colors[0].color.RGBA;
+                        }
+                        else
+                        {
+                            this.FillUniColor = new AscFormat.CUniColor().RGBA;
+                        }
+                    }
 
                     bIsCheckBounds = true;
 
@@ -429,7 +446,13 @@ CShapeDrawer.prototype =
         }
 
         if (this.Ln == null || this.Ln.Fill == null || this.Ln.Fill.fill == null)
+        {
             this.bIsNoStrokeAttack = true;
+            if (true === graphics.IsTrack)
+                graphics.Graphics.ArrayPoints = null;
+            else
+                graphics.ArrayPoints = null;
+        }
         else
         {
             var _fill = this.Ln.Fill.fill;
@@ -442,7 +465,14 @@ CShapeDrawer.prototype =
                 }
                 case c_oAscFill.FILL_TYPE_SOLID:
                 {
-                    this.StrokeUniColor = _fill.color.RGBA;
+                    if(_fill.color)
+                    {
+                        this.StrokeUniColor = _fill.color.RGBA;
+                    }
+                    else
+                    {
+                        this.StrokeUniColor = new AscFormat.CUniColor().RGBA;
+                    }
                     break;
                 }
                 case c_oAscFill.FILL_TYPE_GRAD:
@@ -451,13 +481,29 @@ CShapeDrawer.prototype =
                     if (_c == 0)
                         this.StrokeUniColor = new AscFormat.CUniColor().RGBA;
                     else
-                        this.StrokeUniColor = _fill.colors[0].color.RGBA;
+                    {
+                        if(_fill.colors[0].color)
+                        {
+                            this.StrokeUniColor = _fill.colors[0].color.RGBA;
+                        }
+                        else
+                        {
+                            this.StrokeUniColor = new AscFormat.CUniColor().RGBA;
+                        }
+                    }
 
                     break;
                 }
                 case c_oAscFill.FILL_TYPE_PATT:
                 {
-                    this.StrokeUniColor = _fill.fgClr.RGBA;
+                    if(_fill.fgClr)
+                    {
+                        this.StrokeUniColor = _fill.fgClr.RGBA;
+                    }
+                    else
+                    {
+                        this.StrokeUniColor = new AscFormat.CUniColor().RGBA;
+                    }
                     break;
                 }
                 case c_oAscFill.FILL_TYPE_NOFILL:
@@ -482,13 +528,14 @@ CShapeDrawer.prototype =
             if (graphics.IsSlideBoundsCheckerType && !this.bIsNoStrokeAttack)
                 graphics.LineWidth = this.StrokeWidth;
 
+            var isUseArrayPoints = false;
             if ((this.Ln.headEnd != null && this.Ln.headEnd.type != null) || (this.Ln.tailEnd != null && this.Ln.tailEnd.type != null))
-            {
-                if (true === graphics.IsTrack)
-                    graphics.Graphics.ArrayPoints = [];
-                else
-                    graphics.ArrayPoints = [];
-            }
+                isUseArrayPoints = true;
+
+            if (true === graphics.IsTrack && graphics.Graphics != undefined && graphics.Graphics != null)
+                graphics.Graphics.ArrayPoints = isUseArrayPoints ? [] : null;
+            else
+                graphics.ArrayPoints = isUseArrayPoints ? [] : null;
 
             if (this.Graphics.m_oContext != null && this.Ln.Join != null && this.Ln.Join.type != null)
                 this.OldLineJoin = this.Graphics.m_oContext.lineJoin;
@@ -680,8 +727,6 @@ CShapeDrawer.prototype =
             {
                 if (this.IsRectShape)
                 {
-                    this.Graphics._s();
-
                     if ((null == this.UniFill.transparent) || (this.UniFill.transparent == 255))
                     {
                         this.Graphics.drawImage(getFullImageSrc2(this.UniFill.fill.RasterImageId), this.min_x, this.min_y, (this.max_x - this.min_x), (this.max_y - this.min_y), undefined, this.UniFill.fill.srcRect, this.UniFill.fill.canvas);
@@ -749,7 +794,8 @@ CShapeDrawer.prototype =
                         _is_ctx = true;
                     }
 
-                    var _ctx = (this.Graphics.IsTrack === true) ? this.Graphics.Graphics.m_oContext : this.Graphics.m_oContext;
+                    var _gr = (this.Graphics.IsTrack === true) ? this.Graphics.Graphics : this.Graphics;
+                    var _ctx = _gr.m_oContext;
 
                     var patt = !_img_native ? _ctx.createPattern(_img.Image, "repeat") : _ctx.createPattern(_img_native, "repeat");
 
@@ -793,6 +839,9 @@ CShapeDrawer.prototype =
                     }
 
                     _ctx.restore();
+
+                    _gr.m_bPenColorInit = false;
+                    _gr.m_bBrushColorInit = false;
                 }
             }
 
@@ -824,7 +873,8 @@ CShapeDrawer.prototype =
                     _is_ctx = true;
                 }
 
-                var _ctx = (this.Graphics.IsTrack === true) ? this.Graphics.Graphics.m_oContext : this.Graphics.m_oContext;
+                var _gr = (this.Graphics.IsTrack === true) ? this.Graphics.Graphics : this.Graphics;
+                var _ctx = _gr.m_oContext;
 
                 var _patt_name = AscCommon.global_hatch_names[_fill.ftype];
                 if (undefined == _patt_name)
@@ -880,6 +930,9 @@ CShapeDrawer.prototype =
 
                 _ctx.restore();
 
+                _gr.m_bPenColorInit = false;
+                _gr.m_bBrushColorInit = false;
+
                 if (bIsIntegerGridTRUE)
                 {
                     this.Graphics.SetIntegerGrid(true);
@@ -904,7 +957,8 @@ CShapeDrawer.prototype =
                     _is_ctx = true;
                 }
 
-                var _ctx = (this.Graphics.IsTrack === true) ? this.Graphics.Graphics.m_oContext : this.Graphics.m_oContext;
+                var _gr = (this.Graphics.IsTrack === true) ? this.Graphics.Graphics : this.Graphics;
+                var _ctx = _gr.m_oContext;
 
                 var gradObj = null;
                 if (_fill.lin)
@@ -933,7 +987,7 @@ CShapeDrawer.prototype =
                 else
                 {
                     //gradObj = _ctx.createLinearGradient(this.min_x, this.min_y, this.max_x, this.min_y);
-                    var points = this.getGradientPoints(this.min_x, this.min_y, this.max_x, this.max_y, 90 * 60000, false);
+                    var points = this.getGradientPoints(this.min_x, this.min_y, this.max_x, this.max_y, 0, false);
                     gradObj = _ctx.createLinearGradient(points.x0, points.y0, points.x1, points.y1);
                 }
 
@@ -955,6 +1009,9 @@ CShapeDrawer.prototype =
                 {
                     _ctx.fill();
                 }
+
+                _gr.m_bPenColorInit = false;
+                _gr.m_bBrushColorInit = false;
 
                 if (bIsIntegerGridTRUE)
                 {
@@ -1033,7 +1090,13 @@ CShapeDrawer.prototype =
             }
         }
 
+		var arr = (this.Graphics.IsTrack === true) ? this.Graphics.Graphics.ArrayPoints : this.Graphics.ArrayPoints;
+        var isArrowsPresent = (arr != null && arr.length > 1 && this.IsCurrentPathCanArrows === true) ? true : false;
+
         var rgba = this.StrokeUniColor;
+		if (this.Ln && this.Ln.Fill != null && this.Ln.Fill.transparent != null && !isArrowsPresent)
+			rgba.A = this.Ln.Fill.transparent;
+
         this.Graphics.p_color(rgba.R, rgba.G, rgba.B, rgba.A);
 
         if (this.IsRectShape && this.Graphics.AddSmartRect !== undefined)
@@ -1053,8 +1116,7 @@ CShapeDrawer.prototype =
             this.Graphics.m_oContext.lineJoin = this.OldLineJoin;
         }
 
-        var arr = (this.Graphics.IsTrack === true) ? this.Graphics.Graphics.ArrayPoints : this.Graphics.ArrayPoints;
-        if (arr != null && arr.length > 1 && this.IsCurrentPathCanArrows === true)
+        if (isArrowsPresent)
         {
             this.IsArrowsDrawing = true;
             this.Graphics.p_dash(null);
@@ -1063,7 +1125,9 @@ CShapeDrawer.prototype =
             // трансформируем точки в окончательные.
             // и отправляем на отрисовку (с матрицей)
 
-            var trans = (this.Graphics.IsTrack === true) ? this.Graphics.Graphics.m_oFullTransform : this.Graphics.m_oFullTransform;
+			var _graphicsCtx = (this.Graphics.IsTrack === true) ? this.Graphics.Graphics : this.Graphics;
+
+			var trans = _graphicsCtx.m_oFullTransform;
             var trans1 = AscCommon.global_MatrixTransformer.Invert(trans);
 
             var x1 = trans.TransformPointX(0, 0);
@@ -1072,8 +1136,13 @@ CShapeDrawer.prototype =
             var y2 = trans.TransformPointY(1, 1);
             var dKoef = Math.sqrt(((x2-x1)*(x2-x1)+(y2-y1)*(y2-y1))/2);
             var _pen_w = (this.Graphics.IsTrack === true) ? (this.Graphics.Graphics.m_oContext.lineWidth * dKoef) : (this.Graphics.m_oContext.lineWidth * dKoef);
+			var _max_w = undefined;
+			if (_graphicsCtx.IsThumbnail === true)
+			    _max_w = 2;
 
             var _max_delta_eps2 = 0.001;
+
+            var arrKoef = this.isArrPix ? (1 / AscCommon.g_dKoef_mm_to_pix) : 1;
 
             if (this.Ln.headEnd != null)
             {
@@ -1096,18 +1165,9 @@ CShapeDrawer.prototype =
 
                 if (_max_delta > _max_delta_eps2)
                 {
-                    if (this.Graphics.IsTrack)
-                    {
-                        this.Graphics.Graphics.ArrayPoints = null;
-                        DrawLineEnd(_x1, _y1, _x2, _y2, this.Ln.headEnd.type, this.Ln.headEnd.GetWidth(_pen_w), this.Ln.headEnd.GetLen(_pen_w), this, trans1);
-                        this.Graphics.Graphics.ArrayPoints = arr;
-                    }
-                    else
-                    {
-                        this.Graphics.ArrayPoints = null;
-                        DrawLineEnd(_x1, _y1, _x2, _y2, this.Ln.headEnd.type, this.Ln.headEnd.GetWidth(_pen_w), this.Ln.headEnd.GetLen(_pen_w), this, trans1);
-                        this.Graphics.ArrayPoints = arr;
-                    }
+					_graphicsCtx.ArrayPoints = null;
+					DrawLineEnd(_x1, _y1, _x2, _y2, this.Ln.headEnd.type, arrKoef * this.Ln.headEnd.GetWidth(_pen_w, _max_w), arrKoef * this.Ln.headEnd.GetLen(_pen_w, _max_w), this, trans1);
+					_graphicsCtx.ArrayPoints = arr;
                 }
             }
             if (this.Ln.tailEnd != null)
@@ -1133,18 +1193,9 @@ CShapeDrawer.prototype =
 
                 if (_max_delta > _max_delta_eps2)
                 {
-                    if (this.Graphics.IsTrack)
-                    {
-                        this.Graphics.Graphics.ArrayPoints = null;
-                        DrawLineEnd(_x1, _y1, _x2, _y2, this.Ln.tailEnd.type, this.Ln.tailEnd.GetWidth(_pen_w), this.Ln.tailEnd.GetLen(_pen_w), this, trans1);
-                        this.Graphics.Graphics.ArrayPoints = arr;
-                    }
-                    else
-                    {
-                        this.Graphics.ArrayPoints = null;
-                        DrawLineEnd(_x1, _y1, _x2, _y2, this.Ln.tailEnd.type, this.Ln.tailEnd.GetWidth(_pen_w), this.Ln.tailEnd.GetLen(_pen_w), this, trans1);
-                        this.Graphics.ArrayPoints = arr;
-                    }
+					_graphicsCtx.ArrayPoints = null;
+					DrawLineEnd(_x1, _y1, _x2, _y2, this.Ln.tailEnd.type, arrKoef * this.Ln.tailEnd.GetWidth(_pen_w, _max_w), arrKoef * this.Ln.tailEnd.GetLen(_pen_w, _max_w), this, trans1);
+					_graphicsCtx.ArrayPoints = arr;
                 }
             }
             this.IsArrowsDrawing = false;
@@ -1171,6 +1222,9 @@ CShapeDrawer.prototype =
             if (this.bIsNoStrokeAttack)
                 bIsStroke = false;
 
+			var arr = this.Graphics.ArrayPoints;
+			var isArrowsPresent = (arr != null && arr.length > 1 && this.IsCurrentPathCanArrows === true) ? true : false;
+
             if (bIsStroke)
             {
                 if (null != this.OldLineJoin && !this.IsArrowsDrawing)
@@ -1179,6 +1233,9 @@ CShapeDrawer.prototype =
                 }
 
                 var rgba = this.StrokeUniColor;
+				if (this.Ln && this.Ln.Fill != null && this.Ln.Fill.transparent != null && !isArrowsPresent)
+					rgba.A = this.Ln.Fill.transparent;
+
                 this.Graphics.p_color(rgba.R, rgba.G, rgba.B, rgba.A);
             }
 
@@ -1213,8 +1270,16 @@ CShapeDrawer.prototype =
                         }
                         else
                         {
-                            this.Graphics.drawImage(getFullImageSrc2(this.UniFill.fill.RasterImageId), this.min_x, this.min_y, (this.max_x - this.min_x), (this.max_y - this.min_y), undefined, this.UniFill.fill.srcRect);
-                            bIsFill = false;
+                            if (this.IsRectShape)
+                            {
+                                this.Graphics.drawImage(getFullImageSrc2(this.UniFill.fill.RasterImageId), this.min_x, this.min_y, (this.max_x - this.min_x), (this.max_y - this.min_y), undefined, this.UniFill.fill.srcRect);
+                                bIsFill = false;
+                            }
+                            else
+                            {
+                                // TODO: support srcRect
+                                this.Graphics.put_brushTexture(getFullImageSrc2(this.UniFill.fill.RasterImageId), 0);
+                            }
                         }
                     }
                     else
@@ -1250,7 +1315,7 @@ CShapeDrawer.prototype =
                         var _url64 = "";
                         try
                         {
-                            _url64 = _pattern.Canvas.toDataURL("image/png");
+                            _url64 = _pattern.toDataURL();
                         }
                         catch (err)
                         {
@@ -1290,7 +1355,7 @@ CShapeDrawer.prototype =
                         }
                         else
                         {
-                            points = this.getGradientPoints(this.min_x, this.min_y, this.max_x, this.max_y, 90 * 60000, false);
+                            points = this.getGradientPoints(this.min_x, this.min_y, this.max_x, this.max_y, 0, false);
                         }
 
                         this.Graphics.put_BrushGradient(_fill, points, this.UniFill.transparent);
@@ -1352,15 +1417,14 @@ CShapeDrawer.prototype =
             {
                 this.Graphics.drawpath(1);
             }
-            else
+            else if (false)
             {
                 // такого быть не должно по идее
                 this.Graphics.b_color1(0, 0, 0, 0);
                 this.Graphics.drawpath(256);
             }
 
-            var arr = this.Graphics.ArrayPoints;
-            if (arr != null && arr.length > 1 && this.IsCurrentPathCanArrows === true)
+            if (isArrowsPresent)
             {
                 this.IsArrowsDrawing = true;
                 this.Graphics.p_dash(null);
@@ -1380,6 +1444,8 @@ CShapeDrawer.prototype =
                 var y2 = trans.TransformPointY(1, 1);
                 var dKoef = Math.sqrt(((x2-x1)*(x2-x1)+(y2-y1)*(y2-y1))/2);
                 var _pen_w = lineSize * dKoef;
+
+                var _pen_w_max = 2.5 / AscCommon.g_dKoef_mm_to_pix;
 
                 if (this.Ln.headEnd != null)
                 {
@@ -1401,7 +1467,7 @@ CShapeDrawer.prototype =
                     if (_max_delta > 0.001)
                     {
                         this.Graphics.ArrayPoints = null;
-                        DrawLineEnd(_x1, _y1, _x2, _y2, this.Ln.headEnd.type, this.Ln.headEnd.GetWidth(_pen_w, 7 / AscCommon.g_dKoef_mm_to_pix), this.Ln.headEnd.GetLen(_pen_w, 7 / AscCommon.g_dKoef_mm_to_pix), this, trans1);
+                        DrawLineEnd(_x1, _y1, _x2, _y2, this.Ln.headEnd.type, this.Ln.headEnd.GetWidth(_pen_w, _pen_w_max), this.Ln.headEnd.GetLen(_pen_w, _pen_w_max), this, trans1);
                         this.Graphics.ArrayPoints = arr;
                     }
                 }
@@ -1427,7 +1493,7 @@ CShapeDrawer.prototype =
                     if (_max_delta > 0.001)
                     {
                         this.Graphics.ArrayPoints = null;
-                        DrawLineEnd(_x1, _y1, _x2, _y2, this.Ln.tailEnd.type, this.Ln.tailEnd.GetWidth(_pen_w, 7 / AscCommon.g_dKoef_mm_to_pix), this.Ln.tailEnd.GetLen(_pen_w, 7 / AscCommon.g_dKoef_mm_to_pix), this, trans1);
+                        DrawLineEnd(_x1, _y1, _x2, _y2, this.Ln.tailEnd.type, this.Ln.tailEnd.GetWidth(_pen_w, _pen_w_max), this.Ln.tailEnd.GetLen(_pen_w, _pen_w_max), this, trans1);
                         this.Graphics.ArrayPoints = arr;
                     }
                 }

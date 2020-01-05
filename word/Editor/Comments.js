@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2019
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -12,8 +12,8 @@
  * warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR  PURPOSE. For
  * details, see the GNU AGPL at: http://www.gnu.org/licenses/agpl-3.0.html
  *
- * You can contact Ascensio System SIA at Lubanas st. 125a-25, Riga, Latvia,
- * EU, LV-1021.
+ * You can contact Ascensio System SIA at 20A-12 Ernesta Birznieka-Upisha
+ * street, Riga, Latvia, EU, LV-1050.
  *
  * The  interactive user interfaces in modified source and object code versions
  * of the Program must display Appropriate Legal Notices, as required under
@@ -40,10 +40,14 @@ function CCommentData()
 {
     this.m_sText      = "";
     this.m_sTime      = "";
+	this.m_sOOTime      = "";
     this.m_sUserId    = "";
+	this.m_sProviderId= "";
     this.m_sUserName  = "";
+	this.m_sInitials  = "";
     this.m_sQuoteText = null;
     this.m_bSolved    = false;
+	this.m_nDurableId = null;
     this.m_aReplies   = [];
     
     this.Copy = function()
@@ -52,10 +56,14 @@ function CCommentData()
         
         NewData.m_sText      = this.m_sText;
         NewData.m_sTime      = this.m_sTime;
+		NewData.m_sOOTime    = this.m_sOOTime;
         NewData.m_sUserId    = this.m_sUserId;
+		NewData.m_sProviderId= this.m_sProviderId;
         NewData.m_sUserName  = this.m_sUserName;
+		NewData.m_sInitials  = this.m_sInitials;
         NewData.m_sQuoteText = this.m_sQuoteText;
         NewData.m_bSolved    = this.m_bSolved;
+		NewData.m_nDurableId = this.m_nDurableId;
         
         var Count = this.m_aReplies.length;
         for (var Pos = 0; Pos < Count; Pos++)
@@ -128,10 +136,14 @@ function CCommentData()
     {
         this.m_sText      = AscCommentData.asc_getText();
         this.m_sTime      = AscCommentData.asc_getTime();
+		this.m_sOOTime    = AscCommentData.asc_getOnlyOfficeTime();
         this.m_sUserId    = AscCommentData.asc_getUserId();
+		this.m_sProviderId= AscCommentData.asc_getProviderId();
         this.m_sQuoteText = AscCommentData.asc_getQuoteText();
         this.m_bSolved    = AscCommentData.asc_getSolved();
         this.m_sUserName  = AscCommentData.asc_getUserName();
+		this.m_sInitials  = AscCommentData.asc_getInitials();
+		this.m_nDurableId = AscCommentData.asc_getDurableId();
 
         var RepliesCount  = AscCommentData.asc_getRepliesCount();
         for ( var Index = 0; Index < RepliesCount; Index++ )
@@ -146,8 +158,13 @@ function CCommentData()
     {
         // String            : m_sText
         // String            : m_sTime
+		// String            : m_sOOTime
         // String            : m_sUserId
+		// String            : m_sProviderId
         // String            : m_sUserName
+		// String            : m_sInitials
+		// Bool              : Null ли DurableId
+		// ULong             : m_nDurableId
         // Bool              : Null ли QuoteText
         // String            : (Если предыдущий параметр false) QuoteText
         // Bool              : Solved
@@ -157,9 +174,19 @@ function CCommentData()
         var Count = this.m_aReplies.length;
         Writer.WriteString2( this.m_sText );
         Writer.WriteString2( this.m_sTime );
+		Writer.WriteString2( this.m_sOOTime );
         Writer.WriteString2( this.m_sUserId );
+		Writer.WriteString2( this.m_sProviderId );
         Writer.WriteString2( this.m_sUserName );
+		Writer.WriteString2( this.m_sInitials );
 
+		if ( null === this.m_nDurableId )
+			Writer.WriteBool( true );
+		else
+		{
+			Writer.WriteBool( false );
+			Writer.WriteULong( this.m_nDurableId );
+		}
         if ( null === this.m_sQuoteText )
             Writer.WriteBool( true );
         else
@@ -180,6 +207,7 @@ function CCommentData()
     {
         // String            : m_sText
         // String            : m_sTime
+		// String            : m_sOOTime
         // String            : m_sUserId
         // Bool              : Null ли QuoteText
         // String            : (Если предыдущий параметр false) QuoteText
@@ -189,9 +217,16 @@ function CCommentData()
 
         this.m_sText     = Reader.GetString2();
         this.m_sTime     = Reader.GetString2();
+		this.m_sOOTime   = Reader.GetString2();
         this.m_sUserId   = Reader.GetString2();
+		this.m_sProviderId = Reader.GetString2();
         this.m_sUserName = Reader.GetString2();
+		this.m_sInitials = Reader.GetString2();
 
+		if ( true != Reader.GetBool() )
+			this.m_nDurableId = Reader.GetULong();
+		else
+			this.m_nDurableId = null;
         var bNullQuote = Reader.GetBool();
         if ( true != bNullQuote  )
             this.m_sQuoteText = Reader.GetString2();
@@ -214,6 +249,10 @@ CCommentData.prototype.GetUserName = function()
 {
 	return this.m_sUserName;
 };
+CCommentData.prototype.SetUserName = function(sUserName)
+{
+	this.m_sUserName = sUserName;
+};
 CCommentData.prototype.GetDateTime = function()
 {
 	var nTime = parseInt(this.m_sTime);
@@ -233,6 +272,10 @@ CCommentData.prototype.GetReply = function(nIndex)
 CCommentData.prototype.GetText = function()
 {
 	return this.Get_Text();
+};
+CCommentData.prototype.SetText = function(sText)
+{
+	this.m_sText = sText;
 };
 CCommentData.prototype.GetQuoteText = function()
 {
@@ -324,15 +367,15 @@ function CComment(Parent, Data)
         if ( ObjStart === ObjEnd )
         {
             if ( null != ObjStart )
-                ObjStart.Remove_CommentMarks( this.Id );
+                ObjStart.RemoveCommentMarks( this.Id );
         }
         else
         {
             if ( null != ObjStart )
-                ObjStart.Remove_CommentMarks( this.Id );
+                ObjStart.RemoveCommentMarks( this.Id );
 
             if ( null != ObjEnd )
-                ObjEnd.Remove_CommentMarks( this.Id );
+                ObjEnd.RemoveCommentMarks( this.Id );
         }
     };
 
@@ -459,7 +502,7 @@ function CComment(Parent, Data)
 		}
 
         if ( false === bUse )
-            editor.WordControl.m_oLogicDocument.Remove_Comment( this.Id, true, false );
+            editor.WordControl.m_oLogicDocument.RemoveComment( this.Id, true, false );
     };
 
     // Добавляем данный класс в таблицу Id (обязательно в конце конструктора)
@@ -468,6 +511,24 @@ function CComment(Parent, Data)
 CComment.prototype.GetData = function()
 {
 	return this.Data;
+};
+CComment.prototype.IsSolved = function()
+{
+	if (this.Data)
+		return this.Data.IsSolved();
+
+	return false;
+};
+CComment.prototype.IsGlobalComment = function()
+{
+	return (!this.Data || null === this.Data.GetQuoteText());
+};
+CComment.prototype.GetDurableId = function()
+{
+	if (this.Data)
+		return this.Data.m_nDurableId;
+
+	return -1;
 };
 
 var comments_NoComment        = 0;
@@ -478,7 +539,8 @@ function CComments()
 {
     this.Id     = AscCommon.g_oIdCounter.Get_NewId();
 
-    this.m_bUse         = false; // Используются ли комментарии
+    this.m_bUse       = false; // Используются ли комментарии
+	this.m_bUseSolved = false; // Использовать ли разрешенные комментарии
 
     this.m_aComments    = {};    // ассоциативный  массив
     this.m_sCurrent     = null;  // текущий комментарий
@@ -537,9 +599,9 @@ function CComments()
         this.Pages[PageNum] = [];
     };
 
-    this.Add_DrawingRect = function(X, Y, W, H, PageNum, CommentId, InvertTransform)
+    this.Add_DrawingRect = function(X, Y, W, H, PageNum, arrCommentId, InvertTransform)
     {
-        this.Pages[PageNum].push( new CCommentDrawingRect(X, Y, W, H, CommentId, InvertTransform) );
+        this.Pages[PageNum].push( new CCommentDrawingRect(X, Y, W, H, arrCommentId, InvertTransform) );
     };
 
     this.Set_Current = function(Id)
@@ -547,35 +609,42 @@ function CComments()
         this.m_sCurrent = Id;
     };
 
-    this.Get_ByXY = function(PageNum, X, Y, Type)
-    {
-        var Page = this.Pages[PageNum], _X, _Y;
-        if ( undefined !== Page )
-        {
-            var Count = Page.length;
-            for ( var Pos = 0; Pos < Count; Pos++ )
-            {
-                var DrawingRect = Page[Pos];
-                if(!DrawingRect.InvertTransform)
-                {
-                    _X = X;
-                    _Y = Y;
-                }
-                else
-                {
-                    _X = DrawingRect.InvertTransform.TransformPointX(X, Y);
-                    _Y = DrawingRect.InvertTransform.TransformPointY(X, Y);
-                }
-                if ( _X >= DrawingRect.X && _X <= DrawingRect.X + DrawingRect.W && _Y >= DrawingRect.Y && _Y <= DrawingRect.Y + DrawingRect.H )
-                {
-                    var Comment = this.Get_ById( DrawingRect.CommentId );
-                    if ( null != Comment )
-                        return Comment;
-                }
-            }
-        }
-        return null;
-    };
+    this.Get_ByXY = function(PageNum, X, Y)
+	{
+		var Page = this.Pages[PageNum], _X, _Y;
+		if (undefined !== Page)
+		{
+			var Count = Page.length;
+			for (var Pos = 0; Pos < Count; Pos++)
+			{
+				var DrawingRect = Page[Pos];
+				if (!DrawingRect.InvertTransform)
+				{
+					_X = X;
+					_Y = Y;
+				}
+				else
+				{
+					_X = DrawingRect.InvertTransform.TransformPointX(X, Y);
+					_Y = DrawingRect.InvertTransform.TransformPointY(X, Y);
+				}
+				if (_X >= DrawingRect.X && _X <= DrawingRect.X + DrawingRect.W && _Y >= DrawingRect.Y && _Y <= DrawingRect.Y + DrawingRect.H)
+				{
+					var arrComments = [];
+					for (var nCommentIndex = 0, nCommentsCount = DrawingRect.CommentId.length; nCommentIndex < nCommentsCount; ++nCommentIndex)
+					{
+						var oComment = this.Get_ById(DrawingRect.CommentId[nCommentIndex]);
+						if (oComment)
+							arrComments.push(oComment);
+					}
+
+					return arrComments;
+				}
+			}
+		}
+
+		return [];
+	};
 
     this.Get_Current = function()
     {
@@ -608,7 +677,7 @@ function CComments()
         for (var Id in this.m_aComments)
         {
         	if (!arrAllParagraphs && editor && editor.WordControl.m_oLogicDocument)
-        		arrAllParagraphs = editor.WordControl.m_oLogicDocument.Get_AllParagraphs({All : true});
+        		arrAllParagraphs = editor.WordControl.m_oLogicDocument.GetAllParagraphs({All : true});
 
             this.m_aComments[Id].Check_MergeData(arrAllParagraphs);
         }
@@ -629,13 +698,34 @@ CComments.prototype.GetAllComments = function()
 {
 	return this.m_aComments;
 };
+CComments.prototype.SetUseSolved = function(isUse)
+{
+	this.m_bUseSolved = isUse;
+};
+CComments.prototype.IsUseSolved = function()
+{
+	return this.m_bUseSolved;
+};
+CComments.prototype.GetCommentIdByGuid = function(sGuid)
+{
+	var nDurableId = parseInt(sGuid, 16);
+	for (var sId in this.m_aComments)
+	{
+		if (this.m_aComments[sId].GetDurableId() === nDurableId)
+			return sId;
+	}
 
-//----------------------------------------------------------------------------------------------------------------------
-// Класс для работы внутри параграфа
-//----------------------------------------------------------------------------------------------------------------------
+	return "";
+};
 
+/**
+ * Класс для элемента начала/конца комментария в параграфе
+ * @constructor
+ * @extends {CParagraphContentBase}
+ */
 function ParaComment(Start, Id)
 {
+	CParagraphContentBase.call(this);
     this.Id = AscCommon.g_oIdCounter.Get_NewId();
 
     this.Paragraph = null;
@@ -655,510 +745,131 @@ function ParaComment(Start, Id)
     g_oTableId.Add( this, this.Id );
 }
 
-ParaComment.prototype =
-{
-    Get_Id : function()
-    {
-        return this.Id;
-    },
+ParaComment.prototype = Object.create(CParagraphContentBase.prototype);
+ParaComment.prototype.constructor = ParaComment;
 
-	Set_CommentId : function(NewCommentId)
+ParaComment.prototype.Get_Id = function()
+{
+	return this.Id;
+};
+ParaComment.prototype.GetId = function()
+{
+	return this.Get_Id();
+};
+ParaComment.prototype.Set_CommentId = function(NewCommentId)
+{
+	if (this.CommentId !== NewCommentId)
 	{
-		if (this.CommentId !== NewCommentId)
-		{
-			History.Add(new CChangesParaCommentCommentId(this, this.CommentId, NewCommentId));
-			this.CommentId = NewCommentId;
-		}
-	},
-
-    Set_Paragraph : function(Paragraph)
-    {
-        this.Paragraph = Paragraph;
-    },
-
-    Is_Empty : function()
-    {
-        return true;
-    },
-
-    Is_CheckingNearestPos : function()
-    {
-        return false;
-    },
-
-    Get_CompiledTextPr : function()
-    {
-        return null;
-    },
-
-    Clear_TextPr : function()
-    {
-
-    },
-
-    Remove : function()
-    {
-        return false;
-    },
-
-    Get_DrawingObjectRun : function(Id)
-    {
-        return null;
-    },
-
-    Get_DrawingObjectContentPos : function(Id, ContentPos, Depth)
-    {
-        return false;
-    },
-
-    Get_Layout : function(DrawingLayout, UseContentPos, ContentPos, Depth)
-    {
-    },
-
-    Get_NextRunElements : function(RunElements, UseContentPos, Depth)
-    {
-    },
-
-    Get_PrevRunElements : function(RunElements, UseContentPos, Depth)
-    {
-    },
-
-    Collect_DocumentStatistics : function(ParaStats)
-    {
-    },
-
-    Create_FontMap : function(Map)
-    {
-    },
-
-    Get_AllFontNames : function(AllFonts)
-    {
-    },
-
-    Get_SelectedText : function(bAll, bClearText, oPr)
-    {        
-        return "";
-    },
-
-    Get_SelectionDirection : function()
-    {
-        return 1;
-    },
-
-    Clear_TextFormatting : function( DefHyper )
-    {
-    },
-    
-    Can_AddDropCap : function()
-    {
-        return null;
-    },
-
-    Get_TextForDropCap : function(DropCapText, UseContentPos, ContentPos, Depth)
-    {
-    },
-
-    Get_StartTabsCount : function(TabsCounter)
-    {
-        return true;
-    },
-
-    Remove_StartTabs : function(TabsCounter)
-    {
-        return true;
-    },
-    
-    Copy : function(Selected)
-    {
-        return new ParaComment(this.Start, this.CommentId);
-    },
-
-    CopyContent : function(Selected)
-    {
-        return [];
-    },
-    
-    Split : function()
-    {
-        return new ParaRun();
-    },
-    
-    Apply_TextPr : function()
-    {
-    },
-
-    Check_RevisionsChanges : function(Checker, ContentPos, Depth)
-    {
-    },
-
-    Get_ParaPosByContentPos : function(ContentPos, Depth)
-    {
-        return new CParaPos(this.StartRange, this.StartLine, 0, 0);
-    },
-//-----------------------------------------------------------------------------------
-// Функции пересчета
-//-----------------------------------------------------------------------------------
-
-    Recalculate_Reset : function(StartRange, StartLine)
-    {
-        this.StartLine   = StartLine;
-        this.StartRange  = StartRange;
-    },
-
-    Recalculate_Range : function(PRS, ParaPr)
-    {
-    },
-
-    Recalculate_Set_RangeEndPos : function(PRS, PRP, Depth)
-    {
-    },
-
-    Recalculate_LineMetrics : function(PRS, ParaPr, _CurLine, _CurRange)
-    {
-    },
-
-    Recalculate_Range_Width : function(PRSC, _CurLine, _CurRange)
-    {
-    },
-
-    Recalculate_Range_Spaces : function(PRSA, CurLine, CurRange, CurPage)
-    {
-        var Para = PRSA.Paragraph;
-        var DocumentComments = Para.LogicDocument.Comments;
-        var Comment = DocumentComments.Get_ById( this.CommentId );
-        if ( null === Comment )
-            return;
-
-        var X    = PRSA.X;
-        var Y    = Para.Pages[CurPage].Y      + Para.Lines[CurLine].Top;
-        var H    = Para.Lines[CurLine].Bottom - Para.Lines[CurLine].Top;
-        var Page = Para.Get_StartPage_Absolute() + CurPage;
-        
-        if ( comment_type_HdrFtr === Comment.m_oTypeInfo.Type )
-        {
-            var HdrFtr = Comment.m_oTypeInfo.Data;
-
-            if (-1 !== HdrFtr.RecalcInfo.CurPage)
-                Page = HdrFtr.RecalcInfo.CurPage;
-        }
-
-		if (Para && Para === AscCommon.g_oTableId.Get_ById(Para.Get_Id()))
-		{
-			// Заглушка для повторяющегося заголовка в таблицах
-			if (true === this.Start)
-			{
-				Comment.Set_StartId(Para.Get_Id());
-				Comment.Set_StartInfo(Page, X, Y, H);
-			}
-			else
-			{
-				Comment.Set_EndId(Para.Get_Id());
-			}
-		}
-    },
-
-    Recalculate_PageEndInfo : function(PRSI, _CurLine, _CurRange)
-    {
-        if ( true === this.Start )
-            PRSI.Add_Comment( this.CommentId );
-        else
-            PRSI.Remove_Comment( this.CommentId );
-    },
-
-    Save_RecalculateObject : function(Copy)
-    {
-        var RecalcObj = new CRunRecalculateObject(this.StartLine, this.StartRange);
-        return RecalcObj;
-    },
-
-    Load_RecalculateObject : function(RecalcObj, Parent)
-    {
-        this.StartLine  = RecalcObj.StartLine;
-        this.StartRange = RecalcObj.StartRange;
-        
-        var PageNum = Parent.Get_StartPage_Absolute();
-        
-        var DocumentComments = editor.WordControl.m_oLogicDocument.Comments;
-        var Comment = DocumentComments.Get_ById( this.CommentId );
-        
-        Comment.m_oStartInfo.PageNum = PageNum;
-    },
-
-    Prepare_RecalculateObject : function()
-    {
-    },
-
-    Is_EmptyRange : function(_CurLine, _CurRange)
-    {
-        return true;
-    },
-
-    Check_Range_OnlyMath : function(Checker, CurRange, CurLine)
-    {
-    },
-
-    Check_MathPara : function(Checker)
-    {
-    },
-
-    Check_PageBreak : function()
-    {
-        return false;
-    },
-
-    Check_BreakPageEnd : function(PBChecker)
-    {
-        return true;
-    },
-
-    Recalculate_CurPos : function(X, Y, CurrentRun, _CurRange, _CurLine, CurPage, UpdateCurPos, UpdateTarget, ReturnTarget)
-    {
-        return { X : X };
-    },
-
-    Recalculate_MinMaxContentWidth : function()
-    {
-
-    },
-
-    Get_Range_VisibleWidth : function(RangeW, _CurLine, _CurRange)
-    {
-    },
-
-    Shift_Range : function(Dx, Dy, _CurLine, _CurRange)
-    {
-        var DocumentComments = editor.WordControl.m_oLogicDocument.Comments;
-        var Comment = DocumentComments.Get_ById( this.CommentId );
-        if ( null === Comment )
-            return;
-
-        if ( true === this.Start )
-        {
-            Comment.m_oStartInfo.X += Dx;
-            Comment.m_oStartInfo.Y += Dy;
-        }
-    },    
-//-----------------------------------------------------------------------------------
-// Функции отрисовки
-//-----------------------------------------------------------------------------------
-    Draw_HighLights : function(PDSH)
-    {
-        if ( true === this.Start )
-            PDSH.Add_Comment( this.CommentId );
-        else
-            PDSH.Remove_Comment( this.CommentId );
-    },
-
-    Draw_Elements : function(PDSE)
-    {
-    },
-
-    Draw_Lines : function(PDSL)
-    {
-    },
-//-----------------------------------------------------------------------------------
-// Функции для работы с курсором
-//-----------------------------------------------------------------------------------
-    Is_CursorPlaceable : function()
-    {
-        return false;
-    },
-
-    Cursor_Is_Start : function()
-    {
-        return true;
-    },
-
-    Cursor_Is_NeededCorrectPos : function()
-    {
-        return true;
-    },
-
-    Cursor_Is_End : function()
-    {
-        return true;
-    },
-
-    Cursor_MoveToStartPos : function()
-    {
-    },
-
-    Cursor_MoveToEndPos : function(SelectFromEnd)
-    {
-    },
-
-    Get_ParaContentPosByXY : function(SearchPos, Depth, _CurLine, _CurRange, StepEnd)
-    {
-        return false;
-    },
-
-    Get_ParaContentPos : function(bSelection, bStart, ContentPos, bUseCorrection)
-    {
-    },
-
-    Set_ParaContentPos : function(ContentPos, Depth)
-    {
-    },
-
-    Get_PosByElement : function(Class, ContentPos, Depth, UseRange, Range, Line)
-    {
-        if ( this === Class )
-            return true;
-
-        return false;
-    },
-
-    Get_ElementByPos : function(ContentPos, Depth)
-    {
-        return this;
-    },
-
-    Get_ClassesByPos : function(Classes, ContentPos, Depth)
-    {
-        Classes.push(this);
-    },
-
-    Get_PosByDrawing : function(Id, ContentPos, Depth)
-    {
-        return false;
-    },
-
-    Get_RunElementByPos : function(ContentPos, Depth)
-    {
-        return null;
-    },
-
-    Get_LastRunInRange : function(_CurLine, _CurRange)
-    {
-        return null;
-    },
-
-    Get_LeftPos : function(SearchPos, ContentPos, Depth, UseContentPos)
-    {
-    },
-
-    Get_RightPos : function(SearchPos, ContentPos, Depth, UseContentPos, StepEnd)
-    {
-    },
-
-    Get_WordStartPos : function(SearchPos, ContentPos, Depth, UseContentPos)
-    {
-    },
-
-    Get_WordEndPos : function(SearchPos, ContentPos, Depth, UseContentPos, StepEnd)
-    {
-    },
-
-    Get_EndRangePos : function(_CurLine, _CurRange, SearchPos, Depth)
-    {
-        return false;
-    },
-
-    Get_StartRangePos : function(_CurLine, _CurRange, SearchPos, Depth)
-    {
-        return false;
-    },
-
-    Get_StartRangePos2 : function(_CurLine, _CurRange, ContentPos, Depth)
-    {
-    },
-
-	Get_EndRangePos2 : function(_CurLine, _CurRange, ContentPos, Depth)
+		History.Add(new CChangesParaCommentCommentId(this, this.CommentId, NewCommentId));
+		this.CommentId = NewCommentId;
+	}
+};
+ParaComment.prototype.Copy = function(Selected)
+{
+	return new ParaComment(this.Start, this.CommentId);
+};
+ParaComment.prototype.Recalculate_Range_Spaces = function(PRSA, CurLine, CurRange, CurPage)
+{
+	var Para             = PRSA.Paragraph;
+	var DocumentComments = Para.LogicDocument.Comments;
+	var Comment          = DocumentComments.Get_ById(this.CommentId);
+	if (null === Comment)
+		return;
+
+	var X    = PRSA.X;
+	var Y    = Para.Pages[CurPage].Y + Para.Lines[CurLine].Y - Para.Lines[CurLine].Metrics.Ascent;
+	var H    = Para.Lines[CurLine].Metrics.Ascent + Para.Lines[CurLine].Metrics.Descent;
+	var Page = Para.Get_StartPage_Absolute() + CurPage;
+
+	if (comment_type_HdrFtr === Comment.m_oTypeInfo.Type)
 	{
-	},
+		var HdrFtr = Comment.m_oTypeInfo.Data;
 
-    Get_StartPos : function(ContentPos, Depth)
-    {
-    },
+		if (-1 !== HdrFtr.RecalcInfo.CurPage)
+			Page = HdrFtr.RecalcInfo.CurPage;
+	}
 
-    Get_EndPos : function(BehindEnd, ContentPos, Depth)
-    {
-    },
-//-----------------------------------------------------------------------------------
-// Функции для работы с селектом
-//-----------------------------------------------------------------------------------
-    Set_SelectionContentPos : function(StartContentPos, EndContentPos, Depth, StartFlag, EndFlag)
-    {
-    },
-
-    Selection_Stop : function()
-    {
-    },
-
-    Selection_Remove : function()
-    {
-    },
-
-    Select_All : function(Direction)
-    {
-    },
-
-    Selection_DrawRange : function(_CurLine, _CurRange, SelectionDraw)
-    {
-    },
-
-    Selection_IsEmpty : function(CheckEnd)
-    {
-        return true;
-    },
-
-    Selection_CheckParaEnd : function()
-    {
-        return false;
-    },
-
-    Is_SelectedAll : function(Props)
-    {
-        return true;
-    },
-
-    Selection_CorrectLeftPos : function(Direction)
-    {
-        return true;
-    },
-
-    Selection_CheckParaContentPos : function(ContentPos)
-    {
-        return true;
-    },
-//----------------------------------------------------------------------------------------------------------------------
-// Функции совместного редактирования
-//----------------------------------------------------------------------------------------------------------------------
-    Refresh_RecalcData : function()
-    {
-    },
-    
-    Write_ToBinary2 : function(Writer)
-    {
-        Writer.WriteLong( AscDFH.historyitem_type_CommentMark );
-
-        // String   : Id
-        // String   : Id комментария
-        // Bool     : Start
-
-        Writer.WriteString2( "" + this.Id );
-        Writer.WriteString2( "" + this.CommentId );
-        Writer.WriteBool( this.Start );
-    },
-
-    Read_FromBinary2 : function(Reader)
-    {
-        this.Id        = Reader.GetString2();
-        this.CommentId = Reader.GetString2();
-        this.Start     = Reader.GetBool();
-    }
+	if (Para && Para === AscCommon.g_oTableId.Get_ById(Para.Get_Id()))
+	{
+		// Заглушка для повторяющегося заголовка в таблицах
+		if (true === this.Start)
+		{
+			Comment.Set_StartId(Para.Get_Id());
+			Comment.Set_StartInfo(Page, X, Y, H);
+		}
+		else
+		{
+			Comment.Set_EndId(Para.Get_Id());
+		}
+	}
 };
-ParaComment.prototype.Get_CurrentParaPos = function()
+ParaComment.prototype.Recalculate_PageEndInfo = function(PRSI, _CurLine, _CurRange)
 {
-    return new CParaPos(this.StartRange, this.StartLine, 0, 0);
+	if (true === this.Start)
+		PRSI.AddComment(this.CommentId);
+	else
+		PRSI.RemoveComment(this.CommentId);
 };
-ParaComment.prototype.Get_TextPr = function(ContentPos, Depth)
+ParaComment.prototype.SaveRecalculateObject = function(Copy)
 {
-    return new CTextPr();
+	var RecalcObj = new CRunRecalculateObject(this.StartLine, this.StartRange);
+	return RecalcObj;
 };
-ParaComment.prototype.CanSplit = function()
+ParaComment.prototype.LoadRecalculateObject = function(RecalcObj, Parent)
 {
-	return false;
+	this.StartLine  = RecalcObj.StartLine;
+	this.StartRange = RecalcObj.StartRange;
+
+	var PageNum = Parent.Get_StartPage_Absolute();
+
+	var DocumentComments = editor.WordControl.m_oLogicDocument.Comments;
+	var Comment          = DocumentComments.Get_ById(this.CommentId);
+
+	Comment.m_oStartInfo.PageNum = PageNum;
+};
+ParaComment.prototype.PrepareRecalculateObject = function()
+{
+};
+ParaComment.prototype.Shift_Range = function(Dx, Dy, _CurLine, _CurRange)
+{
+	var DocumentComments = editor.WordControl.m_oLogicDocument.Comments;
+	var Comment          = DocumentComments.Get_ById(this.CommentId);
+	if (null === Comment)
+		return;
+
+	if (true === this.Start)
+	{
+		Comment.m_oStartInfo.X += Dx;
+		Comment.m_oStartInfo.Y += Dy;
+	}
+};
+ParaComment.prototype.Draw_HighLights = function(PDSH)
+{
+	if (true === this.Start)
+		PDSH.AddComment(this.CommentId);
+	else
+		PDSH.RemoveComment(this.CommentId);
+};
+ParaComment.prototype.Refresh_RecalcData = function()
+{
+};
+ParaComment.prototype.Write_ToBinary2 = function(Writer)
+{
+	Writer.WriteLong(AscDFH.historyitem_type_CommentMark);
+
+	// String   : Id
+	// String   : Id комментария
+	// Bool     : Start
+
+	Writer.WriteString2("" + this.Id);
+	Writer.WriteString2("" + this.CommentId);
+	Writer.WriteBool(this.Start);
+};
+ParaComment.prototype.Read_FromBinary2 = function(Reader)
+{
+	this.Id        = Reader.GetString2();
+	this.CommentId = Reader.GetString2();
+	this.Start     = Reader.GetBool();
 };
 ParaComment.prototype.SetCommentId = function(sCommentId)
 {
@@ -1172,17 +883,11 @@ ParaComment.prototype.IsCommentStart = function()
 {
 	return this.Start;
 };
-//----------------------------------------------------------------------------------------------------------------------
-// Разное
-//----------------------------------------------------------------------------------------------------------------------
-ParaComment.prototype.Set_ReviewType = function(ReviewType, RemovePrChange){};
-ParaComment.prototype.Set_ReviewTypeWithInfo = function(ReviewType, ReviewInfo){};
-ParaComment.prototype.Check_RevisionsChanges = function(Checker, ContentPos, Depth){};
-ParaComment.prototype.Accept_RevisionChanges = function(Type, bAll){};
-ParaComment.prototype.Reject_RevisionChanges = function(Type, bAll){};
 
 //--------------------------------------------------------export----------------------------------------------------
 window['AscCommon'] = window['AscCommon'] || {};
+
 window['AscCommon'].CCommentData = CCommentData;
-window['AscCommon'].CComment = CComment;
-window['AscCommon'].ParaComment = ParaComment;
+window['AscCommon'].CComments    = CComments;
+window['AscCommon'].CComment     = CComment;
+window['AscCommon'].ParaComment  = ParaComment;

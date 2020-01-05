@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2019
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -12,8 +12,8 @@
  * warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR  PURPOSE. For
  * details, see the GNU AGPL at: http://www.gnu.org/licenses/agpl-3.0.html
  *
- * You can contact Ascensio System SIA at Lubanas st. 125a-25, Riga, Latvia,
- * EU, LV-1021.
+ * You can contact Ascensio System SIA at 20A-12 Ernesta Birznieka-Upisha
+ * street, Riga, Latvia, EU, LV-1050.
  *
  * The  interactive user interfaces in modified source and object code versions
  * of the Program must display Appropriate Legal Notices, as required under
@@ -568,6 +568,21 @@
 		{
 			return Base64Encode(this.data, nLen, nPos);
 		}
+		this.GetData   = function(nPos, nLen)
+		{
+			var _canvas = document.createElement('canvas');
+			var _ctx    = _canvas.getContext('2d');
+
+			var len = this.GetCurPosition();
+
+			//todo ImData.data.length multiple of 4
+			var ImData = _ctx.createImageData(Math.ceil(len / 4), 1);
+			var res = ImData.data;
+
+			for (var i = 0; i < len; i++)
+				res[i] = this.data[i];
+			return res;
+		}
 		this.GetCurPosition     = function()
 		{
 			return this.pos;
@@ -600,6 +615,16 @@
 				val += 256;
 			this.data[this.pos++] = val;
 		}
+		this.WriteShort          = function(val)
+		{
+			this.CheckSize(2);
+			this.data[this.pos++] = (val) & 0xFF;
+			this.data[this.pos++] = (val >>> 8) & 0xFF;
+		}
+		this.WriteUShort          = function(val)
+		{
+			this.WriteShort(AscFonts.FT_Common.UShort_To_Short(val));
+		}
 		this.WriteLong          = function(val)
 		{
 			this.CheckSize(4);
@@ -607,6 +632,10 @@
 			this.data[this.pos++] = (val >>> 8) & 0xFF;
 			this.data[this.pos++] = (val >>> 16) & 0xFF;
 			this.data[this.pos++] = (val >>> 24) & 0xFF;
+		}
+		this.WriteULong          = function(val)
+		{
+			this.WriteLong(AscFonts.FT_Common.UintToInt(val));
 		}
 		this.WriteDouble        = function(val)
 		{
@@ -617,18 +646,21 @@
 			this.data[this.pos++] = (lval >>> 16) & 0xFF;
 			this.data[this.pos++] = (lval >>> 24) & 0xFF;
 		}
+		var tempHelp = new ArrayBuffer(8);
+		var tempHelpUnit = new Uint8Array(tempHelp);
+		var tempHelpFloat = new Float64Array(tempHelp);
 		this.WriteDouble2       = function(val)
 		{
 			this.CheckSize(8);
-			var aVal              = this._doubleEncodeLE754(val);
-			this.data[this.pos++] = aVal[0];
-			this.data[this.pos++] = aVal[1];
-			this.data[this.pos++] = aVal[2];
-			this.data[this.pos++] = aVal[3];
-			this.data[this.pos++] = aVal[4];
-			this.data[this.pos++] = aVal[5];
-			this.data[this.pos++] = aVal[6];
-			this.data[this.pos++] = aVal[7];
+			tempHelpFloat[0] = val;
+			this.data[this.pos++] = tempHelpUnit[0];
+			this.data[this.pos++] = tempHelpUnit[1];
+			this.data[this.pos++] = tempHelpUnit[2];
+			this.data[this.pos++] = tempHelpUnit[3];
+			this.data[this.pos++] = tempHelpUnit[4];
+			this.data[this.pos++] = tempHelpUnit[5];
+			this.data[this.pos++] = tempHelpUnit[6];
+			this.data[this.pos++] = tempHelpUnit[7];
 		}
 		this._doubleEncodeLE754 = function(v)
 		{
@@ -693,13 +725,38 @@
 			a[i - d] |= s * 128;
 			return a;
 		}
+        this.WriteStringBySymbol = function(code)
+        {
+        	if (code < 0xFFFF)
+			{
+				this.CheckSize(4);
+                this.data[this.pos++] = 1;
+                this.data[this.pos++] = 0;
+                this.data[this.pos++] = code & 0xFF;
+                this.data[this.pos++] = (code >>> 8) & 0xFF;
+			}
+			else
+			{
+                this.CheckSize(6);
+                this.data[this.pos++] = 2;
+                this.data[this.pos++] = 0;
+
+                var codePt = code - 0x10000;
+                var c1 = 0xD800 | (codePt >> 10);
+                var c2 = 0xDC00 | (codePt & 0x3FF);
+                this.data[this.pos++] = c1 & 0xFF;
+                this.data[this.pos++] = (c1 >>> 8) & 0xFF;
+                this.data[this.pos++] = c2 & 0xFF;
+                this.data[this.pos++] = (c2 >>> 8) & 0xFF;
+			}
+        }
 		this.WriteString        = function(text)
 		{
 			if ("string" != typeof text)
 				text = text + "";
 
 			var count = text.length & 0xFFFF;
-			this.CheckSize(count + 2);
+			this.CheckSize(2 * count + 2);
 			this.data[this.pos++] = count & 0xFF;
 			this.data[this.pos++] = (count >>> 8) & 0xFF;
 			for (var i = 0; i < count; i++)
@@ -740,6 +797,21 @@
 				this.data[this.pos++] = (c >>> 8) & 0xFF;
 			}
 		}
+		this.WriteString4       = function(text)
+		{
+			if ("string" != typeof text)
+				text = text + "";
+
+			var count      = text.length & 0x7FFFFFFF;
+			this.WriteLong(count);
+			this.CheckSize(2 * count);
+			for (var i = 0; i < count; i++)
+			{
+				var c                 = text.charCodeAt(i) & 0xFFFF;
+				this.data[this.pos++] = c & 0xFF;
+				this.data[this.pos++] = (c >>> 8) & 0xFF;
+			}
+		}
 		this.ClearNoAttack      = function()
 		{
 			this.pos = 0;
@@ -761,6 +833,205 @@
 				this.data[this.pos++] = data[_pos + i];
 			}
 		}
+
+		this.WriteUtf8Char = function(code)
+		{
+			this.CheckSize(1);
+			if (code < 0x80) {
+				this.data[this.pos++] = code;
+			}
+			else if (code < 0x0800) {
+				this.data[this.pos++] = (0xC0 | (code >> 6));
+				this.data[this.pos++] = (0x80 | (code & 0x3F));
+			}
+			else if (code < 0x10000) {
+				this.data[this.pos++] = (0xE0 | (code >> 12));
+				this.data[this.pos++] = (0x80 | ((code >> 6) & 0x3F));
+				this.data[this.pos++] = (0x80 | (code & 0x3F));
+			}
+			else if (code < 0x1FFFFF) {
+				this.data[this.pos++] = (0xF0 | (code >> 18));
+				this.data[this.pos++] = (0x80 | ((code >> 12) & 0x3F));
+				this.data[this.pos++] = (0x80 | ((code >> 6) & 0x3F));
+				this.data[this.pos++] = (0x80 | (code & 0x3F));
+			}
+			else if (code < 0x3FFFFFF) {
+				this.data[this.pos++] = (0xF8 | (code >> 24));
+				this.data[this.pos++] = (0x80 | ((code >> 18) & 0x3F));
+				this.data[this.pos++] = (0x80 | ((code >> 12) & 0x3F));
+				this.data[this.pos++] = (0x80 | ((code >> 6) & 0x3F));
+				this.data[this.pos++] = (0x80 | (code & 0x3F));
+			}
+			else if (code < 0x7FFFFFFF) {
+				this.data[this.pos++] = (0xFC | (code >> 30));
+				this.data[this.pos++] = (0x80 | ((code >> 24) & 0x3F));
+				this.data[this.pos++] = (0x80 | ((code >> 18) & 0x3F));
+				this.data[this.pos++] = (0x80 | ((code >> 12) & 0x3F));
+				this.data[this.pos++] = (0x80 | ((code >> 6) & 0x3F));
+				this.data[this.pos++] = (0x80 | (code & 0x3F));
+			}
+		};
+
+		this.WriteXmlString = function(val)
+		{
+			var pCur = 0;
+			var pEnd = val.length;
+			while (pCur < pEnd)
+			{
+				var code = val.charCodeAt(pCur++);
+				if (code >= 0xD800 && code <= 0xDFFF && pCur < pEnd)
+				{
+					code = 0x10000 + (((code & 0x3FF) << 10) | (0x03FF & val.charCodeAt(pCur++)));
+				}
+				this.WriteUtf8Char(code);
+			}
+		};
+		this.WriteXmlStringEncode = function(val)
+		{
+			var pCur = 0;
+			var pEnd = val.length;
+			while (pCur < pEnd)
+			{
+				var code = val.charCodeAt(pCur++);
+				if (code >= 0xD800 && code <= 0xDFFF && pCur < pEnd)
+				{
+					code = 0x10000 + (((code & 0x3FF) << 10) | (0x03FF & val.charCodeAt(pCur++)));
+				}
+				switch (code)
+				{
+					case 0x26:
+						//&
+						this.WriteUtf8Char(0x26);
+						this.WriteUtf8Char(0x61);
+						this.WriteUtf8Char(0x6d);
+						this.WriteUtf8Char(0x70);
+						this.WriteUtf8Char(0x3b);
+						break;
+					case 0x27:
+						//'
+						this.WriteUtf8Char(0x26);
+						this.WriteUtf8Char(0x61);
+						this.WriteUtf8Char(0x70);
+						this.WriteUtf8Char(0x6f);
+						this.WriteUtf8Char(0x73);
+						this.WriteUtf8Char(0x3b);
+						break;
+					case 0x3c:
+						//<
+						this.WriteUtf8Char(0x26);
+						this.WriteUtf8Char(0x6c);
+						this.WriteUtf8Char(0x74);
+						this.WriteUtf8Char(0x3b);
+						break;
+					case 0x3e:
+						//>
+						this.WriteUtf8Char(0x26);
+						this.WriteUtf8Char(0x67);
+						this.WriteUtf8Char(0x74);
+						this.WriteUtf8Char(0x3b);
+						break;
+					case 0x22:
+						//"
+						this.WriteUtf8Char(0x26);
+						this.WriteUtf8Char(0x71);
+						this.WriteUtf8Char(0x75);
+						this.WriteUtf8Char(0x6f);
+						this.WriteUtf8Char(0x74);
+						this.WriteUtf8Char(0x3b);
+						break;
+					default:
+						this.WriteUtf8Char(code);
+						break;
+				}
+			}
+		};
+		this.WriteXmlBool = function(val)
+		{
+			this.WriteXmlString(val ? '1' : '0');
+		};
+		this.WriteXmlNumber = function(val)
+		{
+			this.WriteXmlString(val.toString());
+		};
+		this.WriteXmlNodeStart = function(name, isClose)
+		{
+			this.WriteUtf8Char(0x3c);
+			this.WriteXmlString(name);
+			if(isClose)
+			{
+				this.WriteUtf8Char(0x3e);
+			}
+		};
+		this.WriteXmlNodeEnd = function(name, isEmpty, isEnd)
+		{
+			if (isEmpty)
+			{
+				if (isEnd)
+					this.WriteUtf8Char(0x2f);
+				this.WriteUtf8Char(0x3e);
+			}
+			else
+			{
+				this.WriteUtf8Char(0x3c);
+				this.WriteUtf8Char(0x2f);
+				this.WriteXmlString(name);
+				this.WriteUtf8Char(0x3e);
+			}
+		};
+		this.WriteXmlAttributesEnd = function(name)
+		{
+			this.WriteUtf8Char(0x3e);
+		};
+		this.WriteXmlAttributeString = function(name, val)
+		{
+			this.WriteUtf8Char(0x20);
+			this.WriteXmlString(name);
+			this.WriteUtf8Char(0x3d);
+			this.WriteUtf8Char(0x22);
+			this.WriteXmlString(val);
+			this.WriteUtf8Char(0x22);
+		};
+		this.WriteXmlAttributeStringEncode = function(name, val)
+		{
+			this.WriteUtf8Char(0x20);
+			this.WriteXmlString(name);
+			this.WriteUtf8Char(0x3d);
+			this.WriteUtf8Char(0x22);
+			this.WriteXmlStringEncode(val);
+			this.WriteUtf8Char(0x22);
+		};
+		this.WriteXmlAttributeBool = function(name, val)
+		{
+			this.WriteXmlAttributeString(name, val ? '1' : '0');
+		};
+		this.WriteXmlAttributeNumber = function(name, val)
+		{
+			this.WriteXmlAttributeString(name, val.toString());
+		};
+		this.XlsbStartRecord = function(type, len) {
+			//Type
+			if (type < 0x80) {
+				this.WriteByte(type);
+			}
+			else {
+				this.WriteByte((type & 0x7F) | 0x80);
+				this.WriteByte(type >> 7);
+			}
+			//Len
+			for (var i = 0; i < 4; ++i) {
+				var part = len & 0x7F;
+				len = len >> 7;
+				if (len === 0) {
+					this.WriteByte(part);
+					break;
+				}
+				else {
+					this.WriteByte(part | 0x80);
+				}
+			}
+		};
+		this.XlsbEndRecord = function() {
+		};
 	}
 
 	function CCommandsType()
@@ -903,6 +1174,89 @@
 		[1, 1]
 	];
 
+	function CMetafileFontPicker(manager)
+	{
+		this.Manager = manager; 	// в идеале - кэш измерятеля. тогда ни один шрифт не будет загружен заново
+		if (!this.Manager)
+		{
+			this.Manager = new AscFonts.CFontManager();
+			this.Manager.Initialize(false)
+		}
+
+		this.FontsInCache = {};
+		this.LastPickFont = null;
+		this.LastPickFontNameOrigin = "";
+		this.LastPickFontName = "";
+		this.Metafile = null; 												// класс, которому будет подменяться шрифт
+
+		this.SetFont = function(setFont)
+		{
+			var name = setFont.FontFamily.Name;
+			var size = setFont.FontSize;
+
+            var style = 0;
+            if (setFont.Italic == true)
+                style += 2;
+            if (setFont.Bold == true)
+                style += 1;
+
+            var name_check = name + "_" + style;
+			if (this.FontsInCache[name_check])
+			{
+				this.LastPickFont = this.FontsInCache[name_check];
+			}
+			else
+			{
+				var font = g_fontApplication.GetFontFileWeb(name, style);
+                var font_name_index = AscFonts.g_map_font_index[font.m_wsFontName];
+                var fontId = AscFonts.g_font_infos[font_name_index].GetFontID(AscCommon.g_font_loader, style);
+                var test_id = fontId.id + fontId.faceIndex + size;
+
+                var cache = this.Manager.m_oFontsCache;
+                this.LastPickFont = cache.Fonts[test_id];
+                if (!this.LastPickFont)
+                	this.LastPickFont = cache.Fonts[test_id + "nbold"];
+                if (!this.LastPickFont)
+                    this.LastPickFont = cache.Fonts[test_id + "nitalic"];
+                if (!this.LastPickFont)
+                    this.LastPickFont = cache.Fonts[test_id + "nboldnitalic"];
+
+                if (!this.LastPickFont)
+				{
+					// такого при правильном кэше быть не должно
+					this.LastPickFont = cache.LockFont(fontId.file.stream_index, fontId.id, fontId.faceIndex, size, "", this.Manager);
+				}
+
+				this.FontsInCache[name_check] = this.LastPickFont;
+			}
+
+            this.LastPickFontNameOrigin = name;
+			this.LastPickFontName = name;
+			this.Metafile.SetFont(setFont, true);
+		};
+
+		this.FillTextCode = function(glyph)
+		{
+			if (this.LastPickFont.GetGIDByUnicode(glyph))
+			{
+				if (this.LastPickFontName != this.LastPickFontNameOrigin)
+				{
+                    this.LastPickFontName = this.LastPickFontNameOrigin;
+					this.Metafile.SetFontName(this.LastPickFontName);
+				}
+			}
+			else
+			{
+                var name = AscFonts.FontPickerByCharacter.getFontBySymbol(glyph);
+                if (name != this.LastPickFontName)
+				{
+					this.LastPickFontName = name;
+                    this.Metafile.SetFontName(this.LastPickFontName);
+                }
+			}
+		};
+	}
+
 
 	function CMetafile(width, height)
 	{
@@ -939,10 +1293,13 @@
 		// просто чтобы не создавать каждый раз
 		this.m_oFontSlotFont    = new CFontSetup();
 		this.LastFontOriginInfo = {Name : "", Replace : null};
+		this.m_oFontTmp = { FontFamily : { Name : "arial" }, Bold : false, Italic : false };
 
 		this.StartOffset = 0;
 
 		this.m_bIsPenDash = false;
+
+		this.FontPicker = null;
 	}
 
 	CMetafile.prototype =
@@ -979,7 +1336,8 @@
 		},
 		p_dash : function(params)
 		{
-			var bIsDash = params ? true : false;
+			var bIsDash = (params && (params.length > 0)) ? true : false;
+
 			if (false == this.m_bIsPenDash && bIsDash == this.m_bIsPenDash)
 				return;
 			this.m_bIsPenDash = bIsDash;
@@ -1053,6 +1411,12 @@
 			var isLocalUse = true;
 			if (window["AscDesktopEditor"] && window["AscDesktopEditor"]["IsLocalFile"] && window["AscDesktopEditor"]["IsFilePrinting"])
 				isLocalUse = ((!window["AscDesktopEditor"]["IsLocalFile"]()) && window["AscDesktopEditor"]["IsFilePrinting"]()) ? false : true;
+
+            if (window["AscDesktopEditor"] && !isLocalUse)
+            {
+                if ((undefined !== window["AscDesktopEditor"]["CryptoMode"]) && (0 < window["AscDesktopEditor"]["CryptoMode"]))
+                    isLocalUse = true;
+            }
 
 			if (this.BrushType != MetaBrushType.Texture)
 			{
@@ -1289,11 +1653,17 @@
 		},
 
 		// images
-		drawImage : function(img, x, y, w, h)
+		drawImage : function(img, x, y, w, h, isUseOriginUrl)
 		{
 			var isLocalUse = true;
 			if (window["AscDesktopEditor"] && window["AscDesktopEditor"]["IsLocalFile"] && window["AscDesktopEditor"]["IsFilePrinting"])
 				isLocalUse = ((!window["AscDesktopEditor"]["IsLocalFile"]()) && window["AscDesktopEditor"]["IsFilePrinting"]()) ? false : true;
+
+			if (window["AscDesktopEditor"] && !isLocalUse)
+			{
+				if ((undefined !== window["AscDesktopEditor"]["CryptoMode"]) && (0 < window["AscDesktopEditor"]["CryptoMode"]))
+					isLocalUse = true;
+			}
 
 			if (!window.editor)
 			{
@@ -1301,7 +1671,7 @@
 				this.Memory.WriteByte(CommandType.ctDrawImageFromFile);
 
 				var imgLocal = AscCommon.g_oDocumentUrls.getLocal(img);
-				if (imgLocal && isLocalUse)
+				if (imgLocal && isLocalUse && (true !== isUseOriginUrl))
 				{
 					this.Memory.WriteString2(imgLocal);
 				}
@@ -1318,7 +1688,7 @@
 			}
 
 			var _src = "";
-			if (!window["NATIVE_EDITOR_ENJINE"])
+			if (!window["NATIVE_EDITOR_ENJINE"] && (true !== isUseOriginUrl))
 			{
 				var _img = window.editor.ImageLoader.map_image_index[img];
 				if (_img == undefined || _img.Image == null)
@@ -1345,8 +1715,22 @@
 			this.Memory.WriteDouble(h);
 		},
 
-		SetFont      : function(font)
+		SetFontName : function(name)
 		{
+            var fontinfo = g_fontApplication.GetFontInfo(name, 0, this.LastFontOriginInfo);
+            if (this.m_oFont.Name != fontinfo.Name)
+            {
+                this.m_oFont.Name = fontinfo.Name;
+                this.Memory.WriteByte(CommandType.ctFontName);
+                this.Memory.WriteString(this.m_oFont.Name);
+            }
+		},
+
+		SetFont      : function(font, isFromPicker)
+		{
+			if (this.FontPicker && !isFromPicker)
+				return this.FontPicker.SetFont(font);
+
 			if (null == font)
 				return;
 
@@ -1357,7 +1741,7 @@
 				style += 1;
 
 			var fontinfo = g_fontApplication.GetFontInfo(font.FontFamily.Name, style, this.LastFontOriginInfo);
-			style        = fontinfo.GetBaseStyle(style);
+			//style        = fontinfo.GetBaseStyle(style);
 
 			if (this.m_oFont.Name != fontinfo.Name)
 			{
@@ -1378,16 +1762,12 @@
 				this.Memory.WriteLong(style);
 			}
 		},
-		FillText     : function(x, y, text, isNoReplaceAttack)
+		FillText     : function(x, y, text)
 		{
-			this.Memory.WriteByte(CommandType.ctDrawText);
+			if (null != this.LastFontOriginInfo.Replace && 1 == text.length)
+				return this.FillTextCode(x, y, text.charCodeAt(0));
 
-			if ((true !== isNoReplaceAttack) && null != this.LastFontOriginInfo.Replace && 1 == text.length)
-			{
-				var _code = text.charCodeAt(0);
-				_code     = g_fontApplication.GetReplaceGlyph(_code, this.LastFontOriginInfo.Replace);
-				text      = String.fromCharCode(_code);
-			}
+			this.Memory.WriteByte(CommandType.ctDrawText);
 
 			this.Memory.WriteString(text);
 			this.Memory.WriteDouble(x);
@@ -1395,45 +1775,17 @@
 		},
 		FillTextCode : function(x, y, code)
 		{
-			var _font_info = AscFonts.g_font_infos[AscFonts.g_map_font_index[this.m_oFont.Name]];
+			var _code = code;
+            if (null != this.LastFontOriginInfo.Replace)
+				_code = g_fontApplication.GetReplaceGlyph(_code, this.LastFontOriginInfo.Replace);
 
-			if (code < 0xFFFF)
-				return this.FillText(x, y, String.fromCharCode(code));
-			else
-			{
-				var codePt = code - 0x10000;
-				return this.FillText(x, y, String.fromCharCode(0xD800 + (codePt >> 10), 0xDC00 + (codePt & 0x3FF)), true);
-			}
+			if (this.FontPicker)
+				this.FontPicker.FillTextCode(_code);
 
-			if (window["native"] !== undefined)
-			{
-				// TODO:
-				return;
-			}
-
-			var _is_face_index_no_0 = (_font_info.faceIndexR <= 0 && _font_info.faceIndexI <= 0 && _font_info.faceIndexB <= 0 && _font_info.faceIndexBI <= 0);
-
-			var _old_pos = this.Memory.pos;
-
-			g_fontApplication.LoadFont(_font_info.Name, AscCommon.g_font_loader, AscCommon.g_oTextMeasurer.m_oManager, this.m_oFont.FontSize, Math.max(this.m_oFont.Style, 0), 72, 72);
-
-			if (null != this.LastFontOriginInfo.Replace)
-			{
-				code = g_fontApplication.GetReplaceGlyph(code, this.LastFontOriginInfo.Replace);
-			}
-
-			AscCommon.g_oTextMeasurer.m_oManager.LoadStringPathCode(code, false, x, y, this);
-
-			// start (1) + draw(1) + typedraw(4) + end(1) = 7!
-			if ((this.Memory.pos - _old_pos) < 8)
-				this.Memory.pos = _old_pos;
-
-			/*
-			 this.Memory.WriteByte(CommandType.ctDrawTextCode);
-			 this.Memory.WriteLong(code);
-			 this.Memory.WriteDouble(x);
-			 this.Memory.WriteDouble(y);
-			 */
+            this.Memory.WriteByte(CommandType.ctDrawText);
+			this.Memory.WriteStringBySymbol(_code);
+            this.Memory.WriteDouble(x);
+            this.Memory.WriteDouble(y);
 		},
 		tg           : function(gid, x, y)
 		{
@@ -1557,33 +1909,11 @@
 			if (undefined !== fontSizeKoef)
 				_lastFont.Size *= fontSizeKoef;
 
-			var style = 0;
-			if (_lastFont.Italic == true)
-				style += 2;
-			if (_lastFont.Bold == true)
-				style += 1;
-
-			var fontinfo = g_fontApplication.GetFontInfo(_lastFont.Name, style, this.LastFontOriginInfo);
-			style        = fontinfo.GetBaseStyle(style);
-
-			if (this.m_oFont.Name != fontinfo.Name)
-			{
-				this.m_oFont.Name = fontinfo.Name;
-				this.Memory.WriteByte(CommandType.ctFontName);
-				this.Memory.WriteString(this.m_oFont.Name);
-			}
-			if (this.m_oFont.FontSize != _lastFont.Size)
-			{
-				this.m_oFont.FontSize = _lastFont.Size;
-				this.Memory.WriteByte(CommandType.ctFontSize);
-				this.Memory.WriteDouble(this.m_oFont.FontSize);
-			}
-			if (this.m_oFont.Style != style)
-			{
-				this.m_oFont.Style = style;
-				this.Memory.WriteByte(CommandType.ctFontStyle);
-				this.Memory.WriteLong(style);
-			}
+            this.m_oFontTmp.FontFamily.Name = _lastFont.Name;
+            this.m_oFontTmp.Bold = _lastFont.Bold;
+            this.m_oFontTmp.Italic = _lastFont.Italic;
+            this.m_oFontTmp.FontSize = _lastFont.Size;
+            this.SetFont(this.m_oFontTmp);
 		}
 	};
 
@@ -1611,10 +1941,19 @@
 		this._restoreDumpedVectors = null;
 
 		this.m_oBaseTransform = null;
+
+		this.UseOriginImageUrl = false;
+
+        this.FontPicker = null;
 	}
 
 	CDocumentRenderer.prototype =
 	{
+		InitPicker : function(_manager)
+		{
+			this.FontPicker = new CMetafileFontPicker(_manager);
+		},
+
 		SetBaseTransform : function(_matrix)
 		{
 			this.m_oBaseTransform = _matrix;
@@ -1626,6 +1965,10 @@
 			this.m_arrayPages[this.m_lPagesCount - 1].Memory               = this.Memory;
 			this.m_arrayPages[this.m_lPagesCount - 1].StartOffset          = this.Memory.pos;
 			this.m_arrayPages[this.m_lPagesCount - 1].VectorMemoryForPrint = this.VectorMemoryForPrint;
+            this.m_arrayPages[this.m_lPagesCount - 1].FontPicker		   = this.FontPicker;
+
+            if (this.FontPicker)
+            	this.m_arrayPages[this.m_lPagesCount - 1].FontPicker.Metafile  = this.m_arrayPages[this.m_lPagesCount - 1];
 
 			this.Memory.WriteByte(CommandType.ctPageStart);
 
@@ -1789,7 +2132,7 @@
 			if (0 != this.m_lPagesCount)
 			{
 				if (!srcRect)
-					this.m_arrayPages[this.m_lPagesCount - 1].drawImage(img, x, y, w, h);
+					this.m_arrayPages[this.m_lPagesCount - 1].drawImage(img, x, y, w, h, this.UseOriginImageUrl);
 				else
 				{
 					/*
@@ -1800,6 +2143,7 @@
 					 }
 					 */
 
+					/*
 					var _img = undefined;
 					if (window.editor)
 						_img = window.editor.ImageLoader.map_image_index[img];
@@ -1819,6 +2163,7 @@
 						this.m_arrayPages[this.m_lPagesCount - 1].drawImage(img, x, y, w, h);
 						return;
 					}
+					*/
 
 					var bIsClip = false;
 					if (srcRect.l > 0 || srcRect.t > 0 || srcRect.r < 100 || srcRect.b < 100)
@@ -2363,7 +2708,7 @@
 			this.tx  = 0.0;
 			this.ty  = 0.0;
 		},
-		// ���������
+		// трансформ
 		Multiply        : function(matrix, order)
 		{
 			if (MATRIX_ORDER_PREPEND == order)
@@ -2397,7 +2742,7 @@
 			}
 			return this;
 		},
-		// � ������ ������� ������ ���������� (��� �������� �����������)
+		// а теперь частные случаи трансформа (для удобного пользования)
 		Translate       : function(x, y, order)
 		{
 			var m = new CMatrix();
@@ -2498,7 +2843,7 @@
 				a += 360;
 			return a;
 		},
-		// ������� ���������
+		// сделать дубликата
 		CreateDublicate : function()
 		{
 			var m = new CMatrix();
@@ -2534,6 +2879,15 @@
 				return true;
 			}
 			return false;
+		},
+
+		GetScaleValue : function()
+		{
+			var x1 = this.TransformPointX(0, 0);
+			var y1 = this.TransformPointY(0, 0);
+			var x2 = this.TransformPointX(1, 1);
+			var y2 = this.TransformPointY(1, 1);
+			return Math.sqrt(((x2-x1)*(x2-x1)+(y2-y1)*(y2-y1))/2);
 		}
 	};
 
@@ -2923,36 +3277,7 @@
 
 	var g_fontManager = new AscFonts.CFontManager();
 	g_fontManager.Initialize(true);
-
-	function SetHintsProps(bIsHinting, bIsSubpixHinting)
-	{
-		if (undefined === g_fontManager.m_oLibrary.tt_hint_props)
-			return;
-
-		if (bIsHinting && bIsSubpixHinting)
-		{
-			g_fontManager.m_oLibrary.tt_hint_props.TT_USE_BYTECODE_INTERPRETER       = true;
-			g_fontManager.m_oLibrary.tt_hint_props.TT_CONFIG_OPTION_SUBPIXEL_HINTING = true;
-
-			g_fontManager.LOAD_MODE = 40968;
-		}
-		else if (bIsHinting)
-		{
-			g_fontManager.m_oLibrary.tt_hint_props.TT_USE_BYTECODE_INTERPRETER       = true;
-			g_fontManager.m_oLibrary.tt_hint_props.TT_CONFIG_OPTION_SUBPIXEL_HINTING = false;
-
-			g_fontManager.LOAD_MODE = 40968;
-		}
-		else
-		{
-			g_fontManager.m_oLibrary.tt_hint_props.TT_USE_BYTECODE_INTERPRETER       = true;
-			g_fontManager.m_oLibrary.tt_hint_props.TT_CONFIG_OPTION_SUBPIXEL_HINTING = false;
-
-			g_fontManager.LOAD_MODE = 40970;
-		}
-	}
-
-	SetHintsProps(true, true);
+	g_fontManager.SetHintsProps(true, true);
 
 	var g_dDpiX = 96.0;
 	var g_dDpiY = 96.0;
@@ -2988,7 +3313,6 @@
 	window['AscCommon'].CBrush                   = CBrush;
 	window['AscCommon'].CTableMarkup             = CTableMarkup;
 	window['AscCommon'].CTableOutline            = CTableOutline;
-	window['AscCommon'].SetHintsProps            = SetHintsProps;
 	window['AscCommon']._rect                    = _rect;
 
 	window['AscCommon'].global_MatrixTransformer = new CGlobalMatrixTransformer();
@@ -2999,4 +3323,5 @@
 	window['AscCommon'].GradientGetAngleNoRotate = GradientGetAngleNoRotate;
 
 	window['AscCommon'].DashPatternPresets 		 = DashPatternPresets;
+    window['AscCommon'].CommandType 		 	 = CommandType;
 })(window);

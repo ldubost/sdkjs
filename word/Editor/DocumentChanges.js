@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2019
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -12,8 +12,8 @@
  * warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR  PURPOSE. For
  * details, see the GNU AGPL at: http://www.gnu.org/licenses/agpl-3.0.html
  *
- * You can contact Ascensio System SIA at Lubanas st. 125a-25, Riga, Latvia,
- * EU, LV-1021.
+ * You can contact Ascensio System SIA at 20A-12 Ernesta Birznieka-Upisha
+ * street, Riga, Latvia, EU, LV-1050.
  *
  * The  interactive user interfaces in modified source and object code versions
  * of the Program must display Appropriate Legal Notices, as required under
@@ -43,6 +43,7 @@ AscDFH.changesFactory[AscDFH.historyitem_Document_DefaultTab]        = CChangesD
 AscDFH.changesFactory[AscDFH.historyitem_Document_EvenAndOddHeaders] = CChangesDocumentEvenAndOddHeaders;
 AscDFH.changesFactory[AscDFH.historyitem_Document_DefaultLanguage]   = CChangesDocumentDefaultLanguage;
 AscDFH.changesFactory[AscDFH.historyitem_Document_MathSettings]      = CChangesDocumentMathSettings;
+AscDFH.changesFactory[AscDFH.historyitem_Document_SdtGlobalSettings] = CChangesDocumentSdtGlobalSettings;
 
 //----------------------------------------------------------------------------------------------------------------------
 // Карта зависимости изменений
@@ -59,6 +60,7 @@ AscDFH.changesRelationMap[AscDFH.historyitem_Document_DefaultTab]        = [AscD
 AscDFH.changesRelationMap[AscDFH.historyitem_Document_EvenAndOddHeaders] = [AscDFH.historyitem_Document_EvenAndOddHeaders];
 AscDFH.changesRelationMap[AscDFH.historyitem_Document_DefaultLanguage]   = [AscDFH.historyitem_Document_DefaultLanguage];
 AscDFH.changesRelationMap[AscDFH.historyitem_Document_MathSettings]      = [AscDFH.historyitem_Document_MathSettings];
+AscDFH.changesRelationMap[AscDFH.historyitem_Document_SdtGlobalSettings] = [AscDFH.historyitem_Document_SdtGlobalSettings];
 //----------------------------------------------------------------------------------------------------------------------
 
 /**
@@ -80,6 +82,7 @@ CChangesDocumentAddItem.prototype.Undo = function()
 		var Pos = true !== this.UseArray ? this.Pos : this.PosArray[nIndex];
 		var Elements = oDocument.Content.splice(Pos, 1);
 		oDocument.private_RecalculateNumbering(Elements);
+		oDocument.private_ReindexContent(Pos);
 		if (oDocument.SectionsInfo)
 		{
 			oDocument.SectionsInfo.Update_OnRemove(Pos, 1);
@@ -113,6 +116,7 @@ CChangesDocumentAddItem.prototype.Redo = function()
 
 		oDocument.Content.splice(Pos, 0, Element);
 		oDocument.private_RecalculateNumbering([Element]);
+		oDocument.private_ReindexContent(Pos);
 		if (oDocument.SectionsInfo)
 		{
 			oDocument.SectionsInfo.Update_OnAdd(Pos, [Element]);
@@ -225,6 +229,7 @@ CChangesDocumentRemoveItem.prototype.Undo = function()
 	var Array_end   = oDocument.Content.slice(this.Pos);
 
 	oDocument.private_RecalculateNumbering(this.Items);
+	oDocument.private_ReindexContent(this.Pos);
 	oDocument.Content = Array_start.concat(this.Items, Array_end);
 
 	if(oDocument.SectionsInfo)
@@ -256,6 +261,7 @@ CChangesDocumentRemoveItem.prototype.Redo = function()
 	var oDocument = this.Class;
 	var Elements = oDocument.Content.splice(this.Pos, this.Items.length);
 	oDocument.private_RecalculateNumbering(Elements);
+	oDocument.private_ReindexContent(this.Pos);
 	if(oDocument.SectionsInfo)
 	{
         oDocument.SectionsInfo.Update_OnRemove(this.Pos, this.Items.length);
@@ -509,4 +515,31 @@ CChangesDocumentMathSettings.prototype.ReadFromBinary = function(Reader)
 CChangesDocumentMathSettings.prototype.CreateReverseChange = function()
 {
 	return new CChangesDocumentMathSettings(this.Class, this.New, this.Old);
+};
+/**
+ * @constructor
+ * @extends {AscDFH.CChangesBaseObjectProperty}
+ */
+function CChangesDocumentSdtGlobalSettings(Class, Old, New)
+{
+	AscDFH.CChangesBaseObjectProperty.call(this, Class);
+
+	this.Old = Old;
+	this.New = New;
+}
+CChangesDocumentSdtGlobalSettings.prototype = Object.create(AscDFH.CChangesBaseObjectProperty.prototype);
+CChangesDocumentSdtGlobalSettings.prototype.constructor = CChangesDocumentSdtGlobalSettings;
+CChangesDocumentSdtGlobalSettings.prototype.Type = AscDFH.historyitem_Document_SdtGlobalSettings;
+CChangesDocumentSdtGlobalSettings.prototype.private_SetValue = function(Value)
+{
+	this.Class.Settings.SdtSettings = Value;
+	this.Class.OnChangeSdtGlobalSettings();
+};
+CChangesDocumentSdtGlobalSettings.prototype.private_CreateObject = function()
+{
+	return new CSdtGlobalSettings();
+};
+CChangesDocumentSdtGlobalSettings.prototype.private_IsCreateEmptyObject = function()
+{
+	return true;
 };

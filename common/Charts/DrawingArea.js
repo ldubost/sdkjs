@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2019
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -12,8 +12,8 @@
  * warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR  PURPOSE. For
  * details, see the GNU AGPL at: http://www.gnu.org/licenses/agpl-3.0.html
  *
- * You can contact Ascensio System SIA at Lubanas st. 125a-25, Riga, Latvia,
- * EU, LV-1021.
+ * You can contact Ascensio System SIA at 20A-12 Ernesta Birznieka-Upisha
+ * street, Riga, Latvia, EU, LV-1050.
  *
  * The  interactive user interfaces in modified source and object code versions
  * of the Program must display Appropriate Legal Notices, as required under
@@ -42,6 +42,10 @@ function (window, undefined) {
 //-----------------------------------------------------------------------------------
 // Drawing area manager
 //-----------------------------------------------------------------------------------
+
+	var sFrozenImageUrl = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAKCAYAAAB10jRKAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAAZdEVYdFNvZnR3YXJlAHBhaW50Lm5ldCA0LjAuMTZEaa/1AAAAJElEQVQYV2MAAjUQoQIiFECEDIiQABHCIIIPRHCBCDYgZmACABohANImre1SAAAAAElFTkSuQmCC';
+	//var sFrozenImageUrl = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAADCAQAAAD41K0JAAAAD0lEQVR42mNgEGJmAAJmAACcABmX0vttAAAAAElFTkSuQmCC';
+	var sFrozenImageRotUrl = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAoAAAABCAYAAADn9T9+AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAAZdEVYdFNvZnR3YXJlAHBhaW50Lm5ldCA0LjAuMTZEaa/1AAAAGklEQVQYV2NkYGBQA+J/QPwHCf+GYiif4Q8AnJAJBNqB9DYAAAAASUVORK5CYII=';
 
 // Type
 var FrozenAreaType = {
@@ -73,9 +77,7 @@ function FrozenPlace(ws, type) {
 		row: _this.worksheet.topLeftFrozenCell ? _this.worksheet.topLeftFrozenCell.getRow0() : 0
 	};
 	_this.isValid = true;
-	
-	var convertMetrics = _this.worksheet.objectRender.convertMetric;
-		
+
 	// Methods	
 	_this.initRange = function() {
 		switch (_this.type) {
@@ -443,7 +445,7 @@ function FrozenPlace(ws, type) {
 		// No scroll for Top, LeftTop, RightTop
 		var scroll = 0;
 		var fv = _this.getFirstVisible();
-		var headerPx = _this.worksheet.getCellTop(0, 0);
+		var headerPx = _this.worksheet._getRowTop(0);
 		
 		switch (_this.type) {
 			// Two places
@@ -453,15 +455,13 @@ function FrozenPlace(ws, type) {
 			break;
 			
 			case FrozenAreaType.Bottom: {
-				//scroll = _this.worksheet.getCellTop(fv.row, 0) - _this.worksheet.getCellTop(_this.frozenCell.row, 0) + headerPx;
-				scroll = -convertMetrics((_this.worksheet.rows[fv.row].top - _this.worksheet.rows[_this.frozenCell.row].top), 1, 0) + headerPx;
+				scroll = -(_this.worksheet._getRowTop(fv.row) - _this.worksheet._getRowTop(_this.frozenCell.row)) + headerPx;
 			}
 			break;
 			
 			case FrozenAreaType.Left:
 			case FrozenAreaType.Right: {
-				//scroll = _this.worksheet.getCellTop(fv.row, 0) - headerPx - headerPx;
-				scroll = -convertMetrics((_this.worksheet.rows[fv.row].top - _this.worksheet.cellsTop), 1, 0) + headerPx;
+				scroll = -(_this.worksheet._getRowTop(fv.row) - _this.worksheet.cellsTop) + headerPx;
 			}
 			break;
 			
@@ -474,15 +474,13 @@ function FrozenPlace(ws, type) {
 			
 			case FrozenAreaType.LeftBottom:
 			case FrozenAreaType.RightBottom: {
-				//scroll = _this.worksheet.getCellTop(fv.row, 0) - _this.worksheet.getCellTop(_this.frozenCell.row, 0) + headerPx;
-				scroll = -convertMetrics((_this.worksheet.rows[fv.row].top - _this.worksheet.rows[_this.frozenCell.row].top), 1, 0) + headerPx;
+				scroll = -(_this.worksheet._getRowTop(fv.row) - _this.worksheet._getRowTop(_this.frozenCell.row)) + headerPx;
 			}
 			break;
 			
 			// No frozen areas
 			case FrozenAreaType.Center: {
-				//scroll = _this.worksheet.getCellTop(fv.row, 0);// - headerPx - headerPx;
-				scroll = -convertMetrics((_this.worksheet.rows[fv.row].top - _this.worksheet.cellsTop), 1, 0) + headerPx;
+				scroll = -(_this.worksheet._getRowTop(fv.row) - _this.worksheet.cellsTop) + headerPx;
 			}
 			break;
 		}
@@ -494,14 +492,13 @@ function FrozenPlace(ws, type) {
 		// No scroll for Left, LeftTop, LeftBottom
 		var scroll = 0;
 		var fv = _this.getFirstVisible();
-		var headerPx = _this.worksheet.getCellLeft(0, 0);
+		var headerPx = _this.worksheet._getColLeft(0);
 		
 		switch (_this.type) {
 			// Two places
 			case FrozenAreaType.Top:
 			case FrozenAreaType.Bottom: {
-				//scroll = _this.worksheet.getCellLeft(fv.col, 0) - headerPx - headerPx;
-				scroll = -convertMetrics((_this.worksheet.cols[fv.col].left - _this.worksheet.cellsLeft), 1, 0) + headerPx;
+				scroll = -(_this.worksheet._getColLeft(fv.col) - _this.worksheet.cellsLeft) + headerPx;
 			}
 			break;
 			
@@ -511,8 +508,7 @@ function FrozenPlace(ws, type) {
 			break;
 			
 			case FrozenAreaType.Right: {
-				//scroll = _this.worksheet.getCellLeft(fv.col, 0) - _this.worksheet.getCellLeft(_this.frozenCell.col, 0) + headerPx;
-				scroll = -convertMetrics((_this.worksheet.cols[fv.col].left - _this.worksheet.cols[_this.frozenCell.col].left), 1, 0) + headerPx;
+				scroll = -(_this.worksheet._getColLeft(fv.col) - _this.worksheet._getColLeft(_this.frozenCell.col)) + headerPx;
 			}
 			break;
 			
@@ -525,15 +521,13 @@ function FrozenPlace(ws, type) {
 			
 			case FrozenAreaType.RightTop:
 			case FrozenAreaType.RightBottom: {
-				//scroll = _this.worksheet.getCellLeft(fv.col, 0) - _this.worksheet.getCellLeft(_this.frozenCell.col, 0) + headerPx;
-				scroll = -convertMetrics((_this.worksheet.cols[fv.col].left - _this.worksheet.cols[_this.frozenCell.col].left), 1, 0) + headerPx;
+				scroll = -(_this.worksheet._getColLeft(fv.col) - _this.worksheet._getColLeft(_this.frozenCell.col)) + headerPx;
 			}
 			break;			
 			
 			// No frozen areas
 			case FrozenAreaType.Center: {
-				//scroll = _this.worksheet.getCellLeft(fv.col, 0);// - headerPx - headerPx;
-				scroll = -convertMetrics((_this.worksheet.cols[fv.col].left - _this.worksheet.cellsLeft), 1, 0) + headerPx;
+				scroll = -(_this.worksheet._getColLeft(fv.col) - _this.worksheet.cellsLeft) + headerPx;
 			}
 			break;
 		}
@@ -564,12 +558,17 @@ function FrozenPlace(ws, type) {
 		object.graphicObject.draw(canvas.shapeCtx);
 		
 		// Lock
-		if ( (object.graphicObject.lockType != undefined) && (object.graphicObject.lockType != AscCommon.c_oAscLockTypes.kLockTypeNone) ) {
-			canvas.shapeCtx.SetIntegerGrid(false);
-			canvas.shapeCtx.transform3(object.graphicObject.transform, false);
-			canvas.shapeCtx.DrawLockObjectRect(object.graphicObject.lockType, 0, 0, object.graphicObject.extX, object.graphicObject.extY );
-			canvas.shapeCtx.reset();
-			canvas.shapeCtx.SetIntegerGrid(true);
+		if ( (object.graphicObject.lockType !== undefined) && (object.graphicObject.lockType !== AscCommon.c_oAscLockTypes.kLockTypeNone) ) {
+			var oApi = Asc['editor'];
+			if(oApi){
+				if (!oApi.collaborativeEditing.getFast() || object.graphicObject.lockType !== AscCommon.c_oAscLockTypes.kLockTypeMine){
+					canvas.shapeCtx.SetIntegerGrid(false);
+					canvas.shapeCtx.transform3(object.graphicObject.transform, false);
+					canvas.shapeCtx.DrawLockObjectRect(object.graphicObject.lockType, 0, 0, object.graphicObject.extX, object.graphicObject.extY );
+					canvas.shapeCtx.reset();
+					canvas.shapeCtx.SetIntegerGrid(true);
+				}
+			}
 		}
 					
 		_this.restore(canvas.shapeCtx);
@@ -675,6 +674,9 @@ DrawingArea.prototype.reinitRanges = function() {
 };
 
 DrawingArea.prototype.drawSelection = function(drawingDocument) {
+	if (window["IS_NATIVE_EDITOR"]) {
+		AscCommon.g_oTextMeasurer.Flush();
+	}
 
     var canvas = this.worksheet.objectRender.getDrawingCanvas();
     var shapeCtx = canvas.shapeCtx;
@@ -688,7 +690,7 @@ DrawingArea.prototype.drawSelection = function(drawingDocument) {
 
     this.worksheet.overlayCtx.clear();
     this.worksheet.overlayGraphicCtx.clear();
-    this.worksheet._drawCollaborativeElements();
+    this.worksheet._drawCollaborativeElements(autoShapeTrack);
 
     if ( !this.worksheet.objectRender.controller.selectedObjects.length && !this.api.isStartAddShape )
         this.worksheet._drawSelection();
@@ -700,9 +702,6 @@ DrawingArea.prototype.drawSelection = function(drawingDocument) {
     {
         chart = selected_objects[0];
         this.worksheet.objectRender.selectDrawingObjectRange(chart);
-        //shapeOverlayCtx.ClearMode = true;
-        ////selected_objects[0].draw(shapeOverlayCtx);
-        //shapeOverlayCtx.ClearMode = false;
     }
     for ( var i = 0; i < this.frozenPlaces.length; i++ ) {
 
@@ -711,35 +710,82 @@ DrawingArea.prototype.drawSelection = function(drawingDocument) {
         // Clip
         this.frozenPlaces[i].clip(shapeOverlayCtx);
 
-        if (true) {
-            if (drawingDocument.m_bIsSelection) {
+		if (drawingDocument.m_bIsSelection) {
+			if (!window["IS_NATIVE_EDITOR"]) {
 				drawingDocument.SelectionMatrix = null;
 				trackOverlay.m_oControl.HtmlElement.style.display = "block";
 
-				if (null == trackOverlay.m_oContext)
+				if (null == trackOverlay.m_oContext) {
 					trackOverlay.m_oContext = trackOverlay.m_oControl.HtmlElement.getContext('2d');
+				}
+			}
 
-                drawingDocument.private_StartDrawSelection(trackOverlay);
-                this.worksheet.objectRender.controller.drawTextSelection();
-                drawingDocument.private_EndDrawSelection();
+			drawingDocument.private_StartDrawSelection(trackOverlay);
+			this.worksheet.objectRender.controller.drawTextSelection();
+			drawingDocument.private_EndDrawSelection();
 
-				this.worksheet.handlers.trigger("drawMobileSelection");
-            }
+			this.worksheet.handlers.trigger("drawMobileSelection");
+		}
 
-            ctx.globalAlpha = 1.0;
+		ctx.globalAlpha = 1.0;
 
-            this.worksheet.objectRender.controller.drawSelection(drawingDocument);
-            if ( this.worksheet.objectRender.controller.needUpdateOverlay() ) {
-                trackOverlay.Show();
-                shapeOverlayCtx.put_GlobalAlpha(true, 0.5);
-                this.worksheet.objectRender.controller.drawTracks(shapeOverlayCtx);
-                shapeOverlayCtx.put_GlobalAlpha(true, 1);
-            }
-        }
+		this.worksheet.objectRender.controller.drawSelection(drawingDocument);
+
+
+		if ( this.worksheet.objectRender.controller.needUpdateOverlay() ) {
+			trackOverlay.Show();
+			autoShapeTrack.Graphics.put_GlobalAlpha(true, 0.5);
+			this.worksheet.objectRender.controller.drawTracks(autoShapeTrack);
+			autoShapeTrack.Graphics.put_GlobalAlpha(true, 1);
+			this.frozenPlaces[i].restore(autoShapeTrack);
+		}
+
 
         // Restore
-        this.frozenPlaces[i].restore(shapeOverlayCtx);
+        this.frozenPlaces[i].restore(autoShapeTrack);
+
+
+		var nShadowLength = 10;
+		var fLeft, fTop, fRight, fBottom;
+		if(this.frozenPlaces[i].type === FrozenAreaType.Bottom){
+			//autoShapeTrack.Graphics.put_GlobalAlpha(true, 1);
+			fTop = this.worksheet._getRowTop(this.frozenPlaces[i].frozenCell.row);
+			fLeft = 0;
+			autoShapeTrack.drawImage(sFrozenImageUrl, fLeft, fTop, autoShapeTrack.Graphics.m_lWidthPix, nShadowLength);
+		}
+		else if(this.frozenPlaces[i].type === FrozenAreaType.Right){
+			fTop = 0;
+			fLeft = this.worksheet._getColLeft(this.frozenPlaces[i].frozenCell.col);
+			autoShapeTrack.drawImage(sFrozenImageRotUrl, fLeft, fTop, nShadowLength, autoShapeTrack.Graphics.m_lHeightPix);
+		}
+		else if(this.frozenPlaces[i].type === FrozenAreaType.RightBottom){
+			//autoShapeTrack.Graphics.put_GlobalAlpha(true, 1);
+			fTop = this.worksheet._getRowTop(this.frozenPlaces[i].frozenCell.row);
+			fLeft = this.worksheet._getColLeft(this.frozenPlaces[i].frozenCell.col);
+			autoShapeTrack.drawImage(sFrozenImageUrl, fLeft, fTop, autoShapeTrack.Graphics.m_lWidthPix, nShadowLength);
+			autoShapeTrack.drawImage(sFrozenImageRotUrl, fLeft, fTop, nShadowLength, autoShapeTrack.Graphics.m_lHeightPix);
+		}
+		else if(this.frozenPlaces[i].type === FrozenAreaType.LeftBottom){
+			fTop = this.worksheet._getRowTop(this.frozenPlaces[i].frozenCell.row);
+			fLeft = 0;
+			fRight = this.worksheet._getColLeft(this.frozenPlaces[i].frozenCell.col);
+			autoShapeTrack.drawImage(sFrozenImageUrl, fLeft, fTop, fRight, nShadowLength);
+		}
+		else if(this.frozenPlaces[i].type === FrozenAreaType.RightTop){
+			fTop = 0;
+			fLeft = this.worksheet._getColLeft(this.frozenPlaces[i].frozenCell.col);
+			fBottom = this.worksheet._getRowTop(this.frozenPlaces[i].frozenCell.row);
+			autoShapeTrack.drawImage(sFrozenImageRotUrl, fLeft, fTop, nShadowLength, fBottom);
+		}
+
     }
+
+	if(window['Asc']['editor'].watermarkDraw)
+	{
+		window['Asc']['editor'].watermarkDraw.zoom = 1;//this.worksheet.objectRender.zoom.current;
+		window['Asc']['editor'].watermarkDraw.Generate();
+		window['Asc']['editor'].watermarkDraw.Draw(ctx, ctx.canvas.width, ctx.canvas.height);
+	}
 };
 
 DrawingArea.prototype.getOffsets = function(x, y, bEvents) {
@@ -753,5 +799,9 @@ DrawingArea.prototype.getOffsets = function(x, y, bEvents) {
 
 	//--------------------------------------------------------export----------------------------------------------------
 	window['AscFormat'] = window['AscFormat'] || {};
+	window['AscCommonExcel'] = window['AscCommonExcel'] || {};
 	window['AscFormat'].DrawingArea = DrawingArea;
+
+	window["AscCommonExcel"].sFrozenImageUrl = sFrozenImageUrl;
+	window["AscCommonExcel"].sFrozenImageRotUrl = sFrozenImageRotUrl;
 })(window);

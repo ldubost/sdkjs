@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2019
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -12,8 +12,8 @@
  * warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR  PURPOSE. For
  * details, see the GNU AGPL at: http://www.gnu.org/licenses/agpl-3.0.html
  *
- * You can contact Ascensio System SIA at Lubanas st. 125a-25, Riga, Latvia,
- * EU, LV-1021.
+ * You can contact Ascensio System SIA at 20A-12 Ernesta Birznieka-Upisha
+ * street, Riga, Latvia, EU, LV-1050.
  *
  * The  interactive user interfaces in modified source and object code versions
  * of the Program must display Appropriate Legal Notices, as required under
@@ -166,7 +166,13 @@ var c_oAscRevisionsChangeType = {
 	ParaAdd : 0x03,
 	ParaRem : 0x04,
 	TextPr  : 0x05,
-	ParaPr  : 0x06
+	ParaPr  : 0x06,
+	TablePr : 0x07,
+	RowsAdd : 0x08,
+	RowsRem : 0x09,
+
+	MoveMark       : 0xFE, // специальный внутренний тип, для обозначения меток переноса
+	MoveMarkRemove : 0xFF  // внутреннний тип, для удаления отметок переноса внутри параграфов и таблиц
 };
 
 /** @enum {number} */
@@ -195,15 +201,45 @@ var c_oAscFootnoteRestart = {
 	EachPage   : 0x02  //section_footnote_RestartEachPage
 };
 
-var c_oAscNumberingFormat = {
-	None        : 0x0000, // numbering_numfmt_None
-	Bullet      : 0x1001, // numbering_numfmt_Bullet
-	Decimal     : 0x2002, // numbering_numfmt_Decimal
-	LowerRoman  : 0x2003, // numbering_numfmt_LowerRoman
-	UpperRoman  : 0x2004, // numbering_numfmt_UpperRoman
-	LowerLetter : 0x2005, // numbering_numfmt_LowerLetter
-	UpperLetter : 0x2006, // numbering_numfmt_UpperLetter
-	DecimalZero : 0x2007  // numbering_numfmt_DecimalZero
+var c_oAscSdtLockType = {
+	ContentLocked    : 0x00,
+	SdtContentLocked : 0x01,
+	SdtLocked        : 0x02,
+	Unlocked         : 0x03
+};
+
+var c_oAscSdtLevelType = {
+	Block  : 0x01,
+	Inline : 0x02,
+	Row    : 0x03,
+	Cell   : 0x04
+};
+
+var c_oAscTOCStylesType = {
+	Current  : 0,
+	Simple   : 1,
+	Standard : 2,
+	Modern   : 3,
+	Classic  : 4
+};
+
+var c_oAscStyleType = {
+	Paragraph : 1,
+	Numbering : 2,
+	Table     : 3,
+	Character : 4
+};
+
+var c_oAscHyperlinkAnchor = {
+	Heading       : 1,
+	Bookmark      : 2
+};
+
+
+var c_oAscWatermarkType = {
+	None       : 0,
+	Text       : 1,
+	Image      : 2
 };
 
 window["flat_desine"] = false;
@@ -275,13 +311,17 @@ prot['Column']     = c_oAscSectionBreakType.Column;
 
 
 prot = window['Asc']['c_oAscRevisionsChangeType'] = c_oAscRevisionsChangeType;
-prot['Unknown'] = c_oAscRevisionsChangeType.Unknown;
-prot['TextAdd'] = c_oAscRevisionsChangeType.TextAdd;
-prot['TextRem'] = c_oAscRevisionsChangeType.TextRem;
-prot['ParaAdd'] = c_oAscRevisionsChangeType.ParaAdd;
-prot['ParaRem'] = c_oAscRevisionsChangeType.ParaRem;
-prot['TextPr']  = c_oAscRevisionsChangeType.TextPr;
-prot['ParaPr']  = c_oAscRevisionsChangeType.ParaPr;
+prot['Unknown']  = c_oAscRevisionsChangeType.Unknown;
+prot['TextAdd']  = c_oAscRevisionsChangeType.TextAdd;
+prot['TextRem']  = c_oAscRevisionsChangeType.TextRem;
+prot['ParaAdd']  = c_oAscRevisionsChangeType.ParaAdd;
+prot['ParaRem']  = c_oAscRevisionsChangeType.ParaRem;
+prot['TextPr']   = c_oAscRevisionsChangeType.TextPr;
+prot['ParaPr']   = c_oAscRevisionsChangeType.ParaPr;
+prot['TablePr']  = c_oAscRevisionsChangeType.TablePr;
+prot['RowsAdd']  = c_oAscRevisionsChangeType.RowsAdd;
+prot['RowsRem']  = c_oAscRevisionsChangeType.RowsRem;
+prot['MoveMark'] = c_oAscRevisionsChangeType.MoveMark;
 
 prot = window['Asc']['c_oAscFootnotePos'] = c_oAscFootnotePos;
 prot['BeneathText'] = c_oAscFootnotePos.BeneathText;
@@ -294,17 +334,42 @@ prot['Continuous'] = c_oAscFootnoteRestart.Continuous;
 prot['EachSect']   = c_oAscFootnoteRestart.EachSect;
 prot['EachPage']   = c_oAscFootnoteRestart.EachPage;
 
-prot = window['Asc']['c_oAscNumberingFormat'] = c_oAscNumberingFormat;
-prot['None']        = c_oAscNumberingFormat.None;
-prot['Bullet']      = c_oAscNumberingFormat.Bullet;
-prot['Decimal']     = c_oAscNumberingFormat.Decimal;
-prot['LowerRoman']  = c_oAscNumberingFormat.LowerRoman;
-prot['UpperRoman']  = c_oAscNumberingFormat.UpperRoman;
-prot['LowerLetter'] = c_oAscNumberingFormat.LowerLetter;
-prot['UpperLetter'] = c_oAscNumberingFormat.UpperLetter;
-prot['DecimalZero'] = c_oAscNumberingFormat.DecimalZero;
+prot = window['Asc']['c_oAscSdtLockType'] = c_oAscSdtLockType;
+prot['ContentLocked']    = c_oAscSdtLockType.ContentLocked;
+prot['SdtContentLocked'] = c_oAscSdtLockType.SdtContentLocked;
+prot['SdtLocked']        = c_oAscSdtLockType.SdtLocked;
+prot['Unlocked']         = c_oAscSdtLockType.Unlocked;
 
+prot = window['Asc']['c_oAscSdtLevelType'] = window['Asc'].c_oAscSdtLevelType = c_oAscSdtLevelType;
+prot['Block']  = c_oAscSdtLevelType.Block;
+prot['Inline'] = c_oAscSdtLevelType.Inline;
+prot['Row']    = c_oAscSdtLevelType.Row;
+prot['Cell']   = c_oAscSdtLevelType.Cell;
+
+prot = window['Asc']['c_oAscTOCStylesType'] = window['Asc'].c_oAscTOCStylesType = c_oAscTOCStylesType;
+prot['Current']  = c_oAscTOCStylesType.Current;
+prot['Simple']   = c_oAscTOCStylesType.Simple;
+prot['Standard'] = c_oAscTOCStylesType.Standard;
+prot['Modern']   = c_oAscTOCStylesType.Modern;
+prot['Classic']  = c_oAscTOCStylesType.Classic;
+
+
+prot = window['Asc']['c_oAscStyleType'] = window['Asc'].c_oAscStyleType = c_oAscStyleType;
+prot['Paragraph'] = c_oAscStyleType.Paragraph;
+prot['Numbering'] = c_oAscStyleType.Numbering;
+prot['Table']     = c_oAscStyleType.Table;
+prot['Character'] = c_oAscStyleType.Character;
+
+prot = window['Asc']['c_oAscHyperlinkAnchor'] = window['Asc'].c_oAscHyperlinkAnchor = c_oAscHyperlinkAnchor;
+prot['Heading']       = c_oAscHyperlinkAnchor.Heading;
+prot['Bookmark']      = c_oAscHyperlinkAnchor.Bookmark;
 
 window['AscCommon']                = window['AscCommon'] || {};
 window['AscCommon'].c_oSerFormat   = c_oSerFormat;
 window['AscCommon'].CurFileVersion = c_oSerFormat.Version;
+
+
+prot = window['Asc']['c_oAscWatermarkType'] = window['Asc'].c_oAscWatermarkType = c_oAscWatermarkType;
+prot['None'] = prot.None;
+prot['Text'] = prot.Text;
+prot['Image'] = prot.Image;

@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2019
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -12,8 +12,8 @@
  * warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR  PURPOSE. For
  * details, see the GNU AGPL at: http://www.gnu.org/licenses/agpl-3.0.html
  *
- * You can contact Ascensio System SIA at Lubanas st. 125a-25, Riga, Latvia,
- * EU, LV-1021.
+ * You can contact Ascensio System SIA at 20A-12 Ernesta Birznieka-Upisha
+ * street, Riga, Latvia, EU, LV-1050.
  *
  * The  interactive user interfaces in modified source and object code versions
  * of the Program must display Appropriate Legal Notices, as required under
@@ -77,6 +77,10 @@ CImageShape.prototype.setRecalculateInfo = function()
     this.lockType = AscCommon.c_oAscLockTypes.kLockTypeNone;
 };
 
+    CImageShape.prototype.checkNeedRecalculate = function(){
+        return this.recalcInfo.recalculateTransform === true;
+    };
+
 CImageShape.prototype.recalcBrush = function()
 {
     this.recalcInfo.recalculateBrush = true;
@@ -119,7 +123,6 @@ CImageShape.prototype.handleUpdatePosition = function()
     this.recalcTransform();
 	this.recalcBounds();
     this.addToRecalculate();
-    //delete this.fromSerialize;
 };
 CImageShape.prototype.handleUpdateExtents = function()
 {
@@ -127,29 +130,21 @@ CImageShape.prototype.handleUpdateExtents = function()
     this.recalcBounds();
     this.recalcTransform();
     this.addToRecalculate();
-    //delete this.fromSerialize;
 };
 CImageShape.prototype.handleUpdateRot = function()
 {
     this.recalcTransform();
     this.recalcBounds();
     this.addToRecalculate();
-    //delete this.fromSerialize;
 };
 CImageShape.prototype.handleUpdateFlip = function()
 {
     this.recalcTransform();
     this.addToRecalculate();
-    //delete this.fromSerialize;
 };
 CImageShape.prototype.handleUpdateFill = function()
 {
     this.recalcBrush();
-    this.addToRecalculate();
-};
-CImageShape.prototype.handleUpdateLn = function()
-{
-    this.recalcLine();
     this.addToRecalculate();
 };
 CImageShape.prototype.handleUpdateGeometry = function()
@@ -168,6 +163,11 @@ CImageShape.prototype.recalculate = function ()
     if(this.bDeleted)
         return;
     AscFormat.ExecuteNoHistory(function(){
+        var bRecalcShadow = this.recalcInfo.recalculateBrush ||
+            this.recalcInfo.recalculatePen ||
+            this.recalcInfo.recalculateTransform ||
+            this.recalcInfo.recalculateGeometry ||
+            this.recalcInfo.recalculateBounds;
     if (this.recalcInfo.recalculateBrush) {
         this.recalculateBrush();
         this.recalcInfo.recalculateBrush = false;
@@ -192,6 +192,11 @@ CImageShape.prototype.recalculate = function ()
         this.recalculateBounds();
         this.recalcInfo.recalculateBounds = false;
     }
+    if(bRecalcShadow)
+    {
+        this.recalculateShdw();
+    }
+    this.clearCropObject();
     }, this, []);
 };
 CImageShape.prototype.recalculateBounds = CShape.prototype.recalculateBounds;
@@ -199,8 +204,25 @@ CImageShape.prototype.hitInInnerArea = CShape.prototype.hitInInnerArea;
 CImageShape.prototype.hitInPath = CShape.prototype.hitInPath;
 CImageShape.prototype.hitToHandles = CShape.prototype.hitToHandles;
 CImageShape.prototype.hitInBoundingRect = CShape.prototype.hitInBoundingRect;
-CImageShape.prototype.getNumByCardDirection = CShape.prototype.getNumByCardDirection;
-CImageShape.prototype.getCardDirectionByNum = CShape.prototype.getCardDirectionByNum;
-CImageShape.prototype.getResizeCoefficients = CShape.prototype.getResizeCoefficients;
 CImageShape.prototype.check_bounds = CShape.prototype.check_bounds;
+
+
+    CImageShape.prototype.Clear_ContentChanges = function(){
+        if(this.worksheet && this.worksheet.contentChanges){
+            this.worksheet.contentChanges.Clear();
+        }
+    };
+
+    CImageShape.prototype.Add_ContentChanges = function(Changes){
+        if(this.worksheet && this.worksheet.contentChanges){
+            this.worksheet.contentChanges.Add( Changes );
+        }
+    };
+
+    CImageShape.prototype.Refresh_ContentChanges = function(){
+        if(this.worksheet && this.worksheet.contentChanges){
+            this.worksheet.contentChanges.Refresh();
+        }
+    };
+
 })(window);

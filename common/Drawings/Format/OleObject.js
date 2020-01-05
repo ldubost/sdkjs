@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2019
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -12,8 +12,8 @@
  * warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR  PURPOSE. For
  * details, see the GNU AGPL at: http://www.gnu.org/licenses/agpl-3.0.html
  *
- * You can contact Ascensio System SIA at Lubanas st. 125a-25, Riga, Latvia,
- * EU, LV-1021.
+ * You can contact Ascensio System SIA at 20A-12 Ernesta Birznieka-Upisha
+ * street, Riga, Latvia, EU, LV-1050.
  *
  * The  interactive user interfaces in modified source and object code versions
  * of the Program must display Appropriate Legal Notices, as required under
@@ -56,7 +56,39 @@ function (window, undefined) {
         AscDFH.changesFactory[AscDFH.historyitem_ImageShapeSetData] = AscDFH.CChangesDrawingsString;
         AscDFH.changesFactory[AscDFH.historyitem_ImageShapeSetApplicationId] = AscDFH.CChangesDrawingsString;
         AscDFH.changesFactory[AscDFH.historyitem_ImageShapeSetPixSizes] = AscDFH.CChangesDrawingsObjectNoId;
+		AscDFH.changesFactory[AscDFH.historyitem_ImageShapeSetObjectFile] = AscDFH.CChangesDrawingsString;
+		AscDFH.changesFactory[AscDFH.historyitem_ImageShapeSetOleType] = AscDFH.CChangesDrawingsLong;
 
+
+		function CChangesOleObjectBinary(Class, Old, New, Color){
+            AscDFH.CChangesBaseProperty.call(this, Class, Old, New, Color);
+        }
+
+        CChangesOleObjectBinary.prototype = Object.create(AscDFH.CChangesBaseProperty.prototype);
+        CChangesOleObjectBinary.prototype.Type = AscDFH.historyitem_ImageShapeSetBinaryData;
+        CChangesOleObjectBinary.prototype.private_SetValue = function(Value)
+        {
+            this.Class.m_aBinaryData = Value;
+        };
+
+        CChangesOleObjectBinary.prototype.WriteToBinary = function(Writer)
+        {
+            Writer.WriteBool(this.New !== null);
+            if(this.New !== null)
+            {
+                Writer.WriteLong(this.New.length);
+                Writer.WriteBuffer(this.New, 0, this.New.length);
+            }
+        };
+        CChangesOleObjectBinary.prototype.ReadFromBinary = function(Reader)
+        {
+            if(Reader.GetBool())
+            {
+                var length = Reader.GetLong();
+                this.New = Reader.GetBuffer(length);
+            }
+        };
+        AscDFH.changesFactory[AscDFH.historyitem_ImageShapeSetBinaryData] = CChangesOleObjectBinary;
 
         AscDFH.drawingsChangesMap[AscDFH.historyitem_ImageShapeSetData] = function(oClass, value){oClass.m_sData = value;};
         AscDFH.drawingsChangesMap[AscDFH.historyitem_ImageShapeSetApplicationId] = function(oClass, value){oClass.m_sApplicationId = value;};
@@ -67,6 +99,8 @@ function (window, undefined) {
             }
         };
         AscDFH.drawingsConstructorsMap[AscDFH.historyitem_ImageShapeSetPixSizes] = COleSize;
+		AscDFH.drawingsChangesMap[AscDFH.historyitem_ImageShapeSetObjectFile] = function(oClass, value){oClass.m_sObjectFile = value;};
+		AscDFH.drawingsChangesMap[AscDFH.historyitem_ImageShapeSetOleType] = function(oClass, value){oClass.m_nOleType = value;};
 
     function COleObject()
     {
@@ -77,6 +111,9 @@ function (window, undefined) {
         this.m_nPixHeight = null;
         this.m_fDefaultSizeX = null;
         this.m_fDefaultSizeY = null;
+        this.m_sObjectFile = null;//ole object name in OOX
+        this.m_nOleType = null;
+        this.m_aBinaryData = null;
     }
 
 		COleObject.prototype = Object.create(AscFormat.CImageShape.prototype);
@@ -101,6 +138,21 @@ function (window, undefined) {
         AscCommon.History.Add(new AscDFH.CChangesDrawingsObjectNoId(this, AscDFH.historyitem_ImageShapeSetPixSizes, new COleSize(this.m_nPixWidth, this.m_nPixHeight), new COleSize(nPixWidth, nPixHeight)));
         this.m_nPixWidth = nPixWidth;
         this.m_nPixHeight = nPixHeight;
+    };
+    COleObject.prototype.setObjectFile = function(sObjectFile)
+    {
+        AscCommon.History.Add(new AscDFH.CChangesDrawingsString(this, AscDFH.historyitem_ImageShapeSetObjectFile, this.m_sObjectFile, sObjectFile));
+        this.m_sObjectFile = sObjectFile;
+    };
+    COleObject.prototype.setOleType = function(nOleType)
+    {
+        AscCommon.History.Add(new AscDFH.CChangesDrawingsLong(this, AscDFH.historyitem_ImageShapeSetOleType, this.m_nOleType, nOleType));
+        this.m_nOleType = nOleType;
+    };
+    COleObject.prototype.setBinaryData = function(aBinaryData)
+    {
+        AscCommon.History.Add(new CChangesOleObjectBinary(this, this.m_aBinaryData, aBinaryData, false));
+        this.m_aBinaryData = aBinaryData;
     };
 
     COleObject.prototype.canRotate = function () {
@@ -128,13 +180,15 @@ function (window, undefined) {
             copy.setStyle(this.style.createDuplicate());
         }
         copy.setBDeleted(this.bDeleted);
-        if(this.fromSerialize)
-        {
-            copy.setBFromSerialize(true);
-        }
         copy.setData(this.m_sData);
         copy.setApplicationId(this.m_sApplicationId);
         copy.setPixSizes(this.m_nPixWidth, this.m_nPixHeight);
+        copy.setObjectFile(this.m_sObjectFile);
+        copy.setOleType(this.m_nOleType);
+        if(this.m_aBinaryData !== null)
+        {
+            copy.setBinaryData(this.m_aBinaryData.slice(0, this.m_aBinaryData.length));
+        }
         copy.cachedImage = this.getBase64Img();
         copy.cachedPixH = this.cachedPixH;
         copy.cachedPixW = this.cachedPixW;
@@ -144,7 +198,7 @@ function (window, undefined) {
 
     COleObject.prototype.handleUpdateExtents = function(){
         if(!AscFormat.isRealNumber(this.m_fDefaultSizeX) || !AscFormat.isRealNumber(this.m_fDefaultSizeY)){
-            if(this.spPr && this.spPr.xfrm && AscFormat.isRealNumber(this.spPr.xfrm.extX) && AscFormat.isRealNumber(this.spPr.xfrm.extY)){
+            if(this.spPr && this.spPr.xfrm && AscFormat.isRealNumber(this.spPr.xfrm.extX) && AscFormat.isRealNumber(this.spPr.xfrm.extY) && this.spPr.xfrm.extX > 0 && this.spPr.xfrm.extY > 0){
                 this.m_fDefaultSizeX = this.spPr.xfrm.extX;
                 this.m_fDefaultSizeY = this.spPr.xfrm.extY;
             }

@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2019
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -12,8 +12,8 @@
  * warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR  PURPOSE. For
  * details, see the GNU AGPL at: http://www.gnu.org/licenses/agpl-3.0.html
  *
- * You can contact Ascensio System SIA at Lubanas st. 125a-25, Riga, Latvia,
- * EU, LV-1021.
+ * You can contact Ascensio System SIA at 20A-12 Ernesta Birznieka-Upisha
+ * street, Riga, Latvia, EU, LV-1050.
  *
  * The  interactive user interfaces in modified source and object code versions
  * of the Program must display Appropriate Legal Notices, as required under
@@ -38,7 +38,6 @@
 function (window, undefined)
 {
 	// Import
-	var MATRIX_ORDER_PREPEND = AscCommon.MATRIX_ORDER_PREPEND;
 	var global_mouseEvent = AscCommon.global_mouseEvent;
 	var AscBrowser = AscCommon.AscBrowser;
 
@@ -49,7 +48,7 @@ function (window, undefined)
 	{
 		this.Name = "cell";
 		this.WB = _manager.Api.wb;
-		this.DrawingDocument = this.WB.getWorksheet().objectRender.drawingDocument;
+		this.DrawingDocument = this.WB.model.aWorksheets[0].DrawingDocument;
 
 		this.Offset = { X: 0, Y: 0};
 		this.Size = { W : 0, H : 0 };
@@ -129,8 +128,8 @@ function (window, undefined)
 	CMobileDelegateEditorCell.prototype.GetScrollerSize = function()
 	{
 		return {
-			W : this.WB.element.clientWidth + this.WB.m_dScrollX_max,
-			H : this.WB.element.clientHeight + this.WB.m_dScrollY_max
+			W : this.WB.element.clientWidth + this.WB.controller.hsbMax,
+			H : this.WB.element.clientHeight + this.WB.controller.vsbMax
 		};
 	};
 	CMobileDelegateEditorCell.prototype.GetSelectionTransform = function()
@@ -150,7 +149,7 @@ function (window, undefined)
 			var _coords = this.WB.ConvertLogicToXY(x, y);
 
 			AscCommon.global_mouseEvent.KoefPixToMM = 5;
-			var _cursor = this.WB.getWorksheet().getCursorTypeFromXY(_coords.X, _coords.Y, this.Api.isViewMode);
+			var _cursor = this.WB.getWorksheet().getCursorTypeFromXY(_coords.X, _coords.Y);
 			AscCommon.global_mouseEvent.KoefPixToMM = 1;
 			if (_cursor.target == AscCommonExcel.c_oTargetType.MoveResizeRange)
 				return true;
@@ -193,36 +192,38 @@ function (window, undefined)
 			return _obj;
 		}
 
-		return this.WB.getWorksheet().objectRender.controller.Get_SelectionBounds();
+		return this.WB.getWorksheet().objectRender.controller.GetSelectionBounds();
 	};
 	CMobileDelegateEditorCell.prototype.ScrollTo = function(_scroll)
 	{
+		var pos;
 		var _api = this.WB;
 
-		if (_scroll.directionLocked == "v")
+		if ('v' === _scroll.directionLocked)
 		{
-			var _deltaY = -_scroll.y / _api.controller.settings.hscrollStep;
-			if (_scroll.y == _scroll.maxScrollY)
-				_deltaY += 1;
-			_api._onScrollY(_deltaY);
+			pos = -_scroll.y / _api.controller.settings.hscrollStep;
+			if (-_scroll.y >= -_scroll.maxScrollY)
+				pos += 1;
+			_api._onScrollY(pos);
 		}
-		else if (_scroll.directionLocked == "h")
+		else if ('h' === _scroll.directionLocked)
 		{
-			var _deltaX = -_scroll.x / _api.controller.settings.vscrollStep;
-			if (_scroll.x == _scroll.maxScrollX)
-				_deltaX += 1;
-			_api._onScrollX(_deltaX);
+			pos = -_scroll.x / _api.controller.settings.vscrollStep;
+			if (-_scroll.x >= -_scroll.maxScrollX)
+				pos += 1;
+			_api._onScrollX(pos);
 		}
-		else if (_scroll.directionLocked == "n")
+		else if ('n' === _scroll.directionLocked)
 		{
-			var _deltaY = -_scroll.y / _api.controller.settings.hscrollStep;
-			if (_scroll.y == _scroll.maxScrollY)
-				_deltaY += 1;
-			var _deltaX = -_scroll.x / _api.controller.settings.vscrollStep;
-			if (_scroll.x == _scroll.maxScrollX)
-				_deltaX += 1;
-			_api._onScrollX(_deltaX);
-			_api._onScrollY(_deltaY);
+			pos = -_scroll.y / _api.controller.settings.hscrollStep;
+			if (-_scroll.y >= -_scroll.maxScrollY)
+				pos += 1;
+			_api._onScrollY(pos);
+
+			pos = -_scroll.x / _api.controller.settings.vscrollStep;
+			if (-_scroll.x >= -_scroll.maxScrollX)
+				pos += 1;
+			_api._onScrollX(pos);
 		}
 	};
 	CMobileDelegateEditorCell.prototype.GetContextMenuType = function()
@@ -232,10 +233,10 @@ function (window, undefined)
 		var _controller = this.WB.getWorksheet().objectRender.controller;
 		var _selection = this.WB.GetSelectionRectsBounds();
 
-		if (!_controller.Is_SelectionUse() && !_selection)
+		if (!_controller.IsSelectionUse() && !_selection)
 			_mode = AscCommon.MobileTouchContextMenuType.Target;
 
-		if (_controller.Get_SelectionBounds() || _selection)
+		if (_controller.GetSelectionBounds() || _selection)
 			_mode = AscCommon.MobileTouchContextMenuType.Select;
 
 		if (_mode == 0 && _controller.getSelectedObjectsBounds())
@@ -258,7 +259,7 @@ function (window, undefined)
 		var _y = 0;
 
 		var _controller = this.WB.getWorksheet().objectRender.controller;
-		var _target = _controller.Is_SelectionUse();
+		var _target = _controller.IsSelectionUse();
 		var _selection = this.WB.GetSelectionRectsBounds();
 
 		if (!_target && !_selection)
@@ -282,7 +283,7 @@ function (window, undefined)
 			return;
 		}
 
-		var _select = _controller.Get_SelectionBounds();
+		var _select = _controller.GetSelectionBounds();
 		if (_select)
 		{
 			var _rect1 = _select.Start;
@@ -351,7 +352,7 @@ function (window, undefined)
 
 		var _mode = 0;
 
-		var _target = _controller.Is_SelectionUse();
+		var _target = _controller.IsSelectionUse();
 		var _selection = this.WB.GetSelectionRectsBounds();
 
 		if (!_target && !_selection)
@@ -379,7 +380,7 @@ function (window, undefined)
 			_mode = 1;
 		}
 
-		var _select = _controller.Get_SelectionBounds();
+		var _select = _controller.GetSelectionBounds();
 		if (_select)
 		{
 			var _rect1 = _select.Start;
@@ -514,7 +515,7 @@ function (window, undefined)
 		var _element = this.delegate.GetScrollerParent();
 		this.CreateScrollerDiv(_element);
 
-		this.iScroll = new window.IScroll(_element, {
+		this.iScroll = new window.IScrollMobile(_element, {
 			scrollbars: true,
 			mouseWheel: true,
 			interactiveScrollbars: true,
@@ -659,7 +660,7 @@ function (window, undefined)
 				var _x2 = this.RectSelect2.x + this.RectSelect2.w - 0.5;
 				var _y2 = this.RectSelect2.y + this.RectSelect2.h - 0.5;
 
-				if (this.RectSelectType == Asc.c_oAscSelectionType.RangeCol || this.RectSelectType == Asc.c_oAscSelectionType.RangeRow)
+				if (this.RectSelectType === Asc.c_oAscSelectionType.RangeCol || this.RectSelectType === Asc.c_oAscSelectionType.RangeRow)
 					AscCommon.global_mouseEvent.KoefPixToMM = -10; // чтобы не попасть в движения
 
 				if (1 == this.DragSelect)
@@ -959,7 +960,13 @@ function (window, undefined)
 			isPreventDefault = false;
 
 		if (this.Api.isViewMode || isPreventDefault)
-			AscCommon.g_inputContext.preventVirtualKeyboard(e);
+		{
+			if (!AscCommon.g_inputContext.isHardCheckKeyboard)
+          		AscCommon.g_inputContext.preventVirtualKeyboard(e);
+        }
+
+        if (AscCommon.g_inputContext.isHardCheckKeyboard)
+            isPreventDefault ? AscCommon.g_inputContext.preventVirtualKeyboard_Hard() : AscCommon.g_inputContext.enableVirtualKeyboard_Hard();
 
 		if (true !== this.iScroll.isAnimating && (this.CellEditorType != Asc.c_oAscCellEditorState.editFormula))
 			this.CheckContextMenuTouchEnd(isCheckContextMenuMode, isCheckContextMenuSelect, isCheckContextMenuCursor);
@@ -1040,7 +1047,7 @@ function (window, undefined)
 
 			var _offset = (undefined === color) ? 5 : 0;
 
-			if (this.RectSelectType == Asc.c_oAscSelectionType.RangeCol)
+			if (this.RectSelectType === Asc.c_oAscSelectionType.RangeCol)
 			{
 				pos2.Y = pos4.Y = (pos2.Y - pos1.Y);
 				pos1.Y = pos3.Y = 0;
@@ -1087,7 +1094,7 @@ function (window, undefined)
 				overlay.AddEllipse(_x2C, _yC, _koef * AscCommon.MOBILE_SELECT_TRACK_ROUND / 2);
 				ctx.fill();
 			}
-			else if (this.RectSelectType == Asc.c_oAscSelectionType.RangeRow)
+			else if (this.RectSelectType === Asc.c_oAscSelectionType.RangeRow)
 			{
 				pos3.X = pos4.X = (pos3.X - pos1.X);
 				pos1.X = pos2.X = 0;
@@ -1218,7 +1225,7 @@ function (window, undefined)
 
 	CMobileTouchManager.prototype.CheckSelectTrack = function()
 	{
-		if (this.RectSelectType != Asc.c_oAscSelectionType.RangeRow && this.RectSelectType != Asc.c_oAscSelectionType.RangeCol)
+		if (this.RectSelectType !== Asc.c_oAscSelectionType.RangeRow && this.RectSelectType !== Asc.c_oAscSelectionType.RangeCol)
 			return AscCommon.CMobileTouchManagerBase.prototype.CheckSelectTrack.call(this);
 
 		// проверим на попадание в селект - это может произойти на любом mode
@@ -1229,7 +1236,7 @@ function (window, undefined)
 
 			var _pos = this.delegate.ConvertCoordsToCursor(0, 0, 0, false);
 
-			if (this.RectSelectType == Asc.c_oAscSelectionType.RangeCol)
+			if (this.RectSelectType === Asc.c_oAscSelectionType.RangeCol)
 			{
 				var Y = this.delegate.ConvertCoordsFromCursor(0, this.delegate.Offset.Y + (this.delegate.Size.H + _pos.Y) / 2).Y;
 				pos1 = this.delegate.ConvertCoordsToCursor(this.RectSelect1.x, Y, this.PageSelect1);
@@ -1259,7 +1266,7 @@ function (window, undefined)
 
 	CMobileTouchManager.prototype.CheckSelectTrackObject = function()
 	{
-		if (!this.delegate.WB.Is_SelectionUse())
+		if (!this.delegate.WB.IsSelectionUse())
 			return;
 
 		if (null != this.RectSelect1 && null != this.RectSelect2)
@@ -1267,7 +1274,7 @@ function (window, undefined)
 			var pos1 = this.delegate.ConvertCoordsToCursor(this.RectSelect1.x, this.RectSelect1.y, this.PageSelect1);
 			var pos4 = this.delegate.ConvertCoordsToCursor(this.RectSelect2.x + this.RectSelect2.w, this.RectSelect2.y + this.RectSelect2.h, this.PageSelect2);
 
-			if (this.RectSelectType == Asc.c_oAscSelectionType.RangeCol)
+			if (this.RectSelectType === Asc.c_oAscSelectionType.RangeCol)
 			{
 				// только правая граница
 				if (Math.abs(pos4.X - global_mouseEvent.X) < this.TrackTargetEps)
@@ -1276,7 +1283,7 @@ function (window, undefined)
 						this.Mode = AscCommon.MobileTouchMode.SelectTrack;
 				}
 			}
-			else if (this.RectSelectType == Asc.c_oAscSelectionType.RangeRow)
+			else if (this.RectSelectType === Asc.c_oAscSelectionType.RangeRow)
 			{
 				// только нижняя граница
 				if (Math.abs(pos4.Y - global_mouseEvent.Y) < this.TrackTargetEps)

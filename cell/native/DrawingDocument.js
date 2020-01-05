@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2019
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -12,8 +12,8 @@
  * warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR  PURPOSE. For
  * details, see the GNU AGPL at: http://www.gnu.org/licenses/agpl-3.0.html
  *
- * You can contact Ascensio System SIA at Lubanas st. 125a-25, Riga, Latvia,
- * EU, LV-1021.
+ * You can contact Ascensio System SIA at 20A-12 Ernesta Birznieka-Upisha
+ * street, Riga, Latvia, EU, LV-1050.
  *
  * The  interactive user interfaces in modified source and object code versions
  * of the Program must display Appropriate Legal Notices, as required under
@@ -521,7 +521,7 @@ function CTableOutlineDr()
         var _outline = this.TableOutline;
         var _table = _outline.Table;
 
-        _table.Cursor_MoveToStartPos();
+        _table.MoveCursorToStartPos();
         _table.Document_SetThisElementCurrent();
 
         if (!_table.Is_Inline())
@@ -616,7 +616,7 @@ function CTableOutlineDr()
             }
             this.IsChangeSmall = false;
 
-            this.TableOutline.Table.Selection_Remove();
+            this.TableOutline.Table.RemoveSelection();
             editor.WordControl.m_oLogicDocument.Document_UpdateSelectionState();
         }
 
@@ -775,7 +775,7 @@ function CCacheManager()
 
         _cache_image.image_locked = 0;
         _cache_image.image_unusedCount = 0;
-        // ����� ����� �������� ������ � ���� (_cache_image = null) <- ��� ����������� !!!!!!!
+		// затем нужно сбросить ссылку в ноль (_cache_image = null) <- это обязательно !!!!!!!
     }
 
     this.Lock = function(_w, _h)
@@ -850,7 +850,7 @@ function CPage()
         {
             context.strokeStyle = "#81878F";
             context.strokeRect(xDst, yDst, wDst, hDst);
-            // ����� ���������� �� �������� ���������
+			// потом посмотреть на кусочную отрисовку
             context.drawImage(this.drawingPage.cachedImage.image, xDst, yDst, wDst, hDst);
         }
         else
@@ -1746,7 +1746,7 @@ function CDrawingDocument(drawingObjects)
 //
 //        //var StartTime = new Date().getTime();
 //
-//        // ������ ����� �������
+//        // теперь берем графикс
 //        var g = new CGraphics();
 //        g.init(page.drawingPage.cachedImage.image.ctx, w, h, page.width_mm, page.height_mm);
 //        g.m_oFontManager = g_fontManager;
@@ -2503,7 +2503,7 @@ function CDrawingDocument(drawingObjects)
 //        if (true == pos.Error && (false == bIsPageChanged))
 //            return;
 //
-//        // �������, ����� �� ������ �� ������
+//        // смотрим, виден ли курсор на экране
 //        var boxX = 0;
 //        var boxY = 0;
 //        var boxR = this.m_oWordControl.m_oEditor.HtmlElement.width;
@@ -2652,7 +2652,7 @@ function CDrawingDocument(drawingObjects)
 //
 //            if (!this.TableOutlineDr.TableMatrix || global_MatrixTransformer.IsIdentity(this.TableOutlineDr.TableMatrix))
 //            {
-//                var _x = parseInt(drPage.left + dKoefX * (this.TableOutlineDr.CurPos.X + _table.Get_TableOffsetCorrection())) + 0.5;
+//                var _x = parseInt(drPage.left + dKoefX * (this.TableOutlineDr.CurPos.X + _table.GetTableOffsetCorrection())) + 0.5;
 //                var _y = parseInt(drPage.top + dKoefY * this.TableOutlineDr.CurPos.Y) + 0.5;
 //
 //                var _r = _x + parseInt(dKoefX * this.TableOutlineDr.TableOutline.W);
@@ -2726,7 +2726,7 @@ function CDrawingDocument(drawingObjects)
 //            }
 //            else
 //            {
-//                var _x = this.TableOutlineDr.CurPos.X + _table.Get_TableOffsetCorrection();
+//                var _x = this.TableOutlineDr.CurPos.X + _table.GetTableOffsetCorrection();
 //                var _y = this.TableOutlineDr.CurPos.Y;
 //                var _r = _x + this.TableOutlineDr.TableOutline.W;
 //                var _b = _y + this.TableOutlineDr.TableOutline.H;
@@ -3110,7 +3110,7 @@ function CDrawingDocument(drawingObjects)
 //        if (this.m_oWordControl.MobileTouchManager)
 //        {
 //            this.m_oWordControl.MobileTouchManager.TableStartTrack_Check = true;
-//            markup.Table.Start_TrackTable();
+//            markup.Table.StartTrackTable();
 //            this.m_oWordControl.MobileTouchManager.TableStartTrack_Check = false;
 //        }
     }
@@ -3575,7 +3575,7 @@ function CDrawingDocument(drawingObjects)
             if (!_style || _style.Type != styletype_Table)
                 continue;
 
-            var table = new CTable(this, logicDoc, true, 0, _x_mar, _y_mar, 1000, 1000, Rows, Cols, Grid);
+            var table = new CTable(this, logicDoc, true, Rows, Cols, Grid);
             table.Set_Props({TableStyle : i, TableLook : tableLook});
 
             for (var j = 0; j < Rows; j++)
@@ -3589,13 +3589,15 @@ function CDrawingDocument(drawingObjects)
             graphics.m_oFontManager = AscCommon.g_fontManager;
             graphics.transform(1,0,0,1,0,0);
 
+            table.Reset(_x_mar, _y_mar, 1000, 1000, 0, 0, 1);
             table.Recalculate_Page(0);
             table.Draw(0, graphics);
 
-            var _styleD = new Asc.CAscTableStyle();
-            _styleD.Type = 0;
-            _styleD.Image = _canvas.toDataURL("image/png");
-            _styleD.Id = i;
+            var _styleD = new AscCommon.CStyleImage();
+            _styleD.type = AscCommon.c_oAscStyleImage.Default;
+            _styleD.image = _canvas.toDataURL("image/png");
+            _styleD.name = i;
+            _styleD.displayName = _style.Name;
             _dst_styles.push(_styleD);
         }
         AscCommon.History.TurnOn();

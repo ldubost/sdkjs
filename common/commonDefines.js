@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2019
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -12,8 +12,8 @@
  * warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR  PURPOSE. For
  * details, see the GNU AGPL at: http://www.gnu.org/licenses/agpl-3.0.html
  *
- * You can contact Ascensio System SIA at Lubanas st. 125a-25, Riga, Latvia,
- * EU, LV-1021.
+ * You can contact Ascensio System SIA at 20A-12 Ernesta Birznieka-Upisha
+ * street, Riga, Latvia, EU, LV-1050.
  *
  * The  interactive user interfaces in modified source and object code versions
  * of the Program must display Appropriate Legal Notices, as required under
@@ -42,14 +42,18 @@
 	var g_cGeneralFormat      = 'General';
 	var FONT_THUMBNAIL_HEIGHT = (7 * 96.0 / 25.4) >> 0;
 	var c_oAscMaxColumnWidth  = 255;
-	var c_oAscMaxRowHeight    = 409;
+	var c_oAscMaxRowHeight    = 409.5;
 	var c_nMaxConversionTime  = 900000;//depends on config
 	var c_nMaxDownloadTitleLen= 255;
+	var c_nVersionNoBase64 = 10;
+	var c_dMaxParaRunContentLength = 256;
+	var c_rUneditableTypes = /^(?:(pdf|djvu|xps))$/;
 
 	//files type for Saving & DownloadAs
 	var c_oAscFileType = {
 		UNKNOWN : 0,
 		PDF     : 0x0201,
+		PDFA    : 0x0901,
 		HTML    : 0x0803,
 
 		// Word
@@ -62,6 +66,11 @@
 		EPUB : 0x0048,
 		FB2  : 0x0049,
 		MOBI : 0x004a,
+		DOCM : 0x004b,
+		DOTX : 0x004c,
+		DOTM : 0x004d,
+		FODT : 0x004e,
+		OTT  : 0x004f,
 		DOCY : 0x1001,
 		CANVAS_WORD : 0x2001,
 		JSON : 0x0808,	// Для mail-merge
@@ -71,12 +80,24 @@
 		XLS  : 0x0102,
 		ODS  : 0x0103,
 		CSV  : 0x0104,
+		XLSM : 0x0105,
+		XLTX : 0x0106,
+		XLTM : 0x0107,
+		FODS : 0x0108,
+		OTS  : 0x0109,
 		XLSY : 0x1002,
 
 		// PowerPoint
 		PPTX : 0x0081,
 		PPT  : 0x0082,
-		ODP  : 0x0083
+		ODP  : 0x0083,
+		PPSX : 0x0084,
+		PPTM : 0x0085,
+		PPSM : 0x0086,
+		POTX : 0x0087,
+		POTM : 0x0088,
+		FODP : 0x0089,
+		OTP  : 0x008a
 	};
 
 	var c_oAscError = {
@@ -103,6 +124,8 @@
 			NoSupportClipdoard   : -12,
 			UplImageUrl          : -13,
 
+
+			MaxDataPointsError    : -16,
 			StockChartError       : -17,
 			CoAuthoringDisconnect : -18,
 			ConvertationPassword  : -19,
@@ -110,6 +133,8 @@
 			KeyExpire             : -21,
 			UserCountExceed       : -22,
 			AccessDeny            : -23,
+			LoadingScriptError    : -24,
+			EditingError          :	-25,
 
 			SplitCellMaxRows     : -30,
 			SplitCellMaxCols     : -31,
@@ -120,6 +145,9 @@
 			// Mail Merge
 			MailMergeLoadFile : -40,
 			MailMergeSaveFile : -41,
+
+			// Data Validate
+			DataValidate : -45,
 
 			// for AutoFilter
 			AutoFilterDataRangeError         : -50,
@@ -146,6 +174,7 @@
 
 			UserDrop : -100,
 			Warning  : -101,
+			UpdateVersion : -102,
 
 			PrintMaxPagesCount					: -110,
 
@@ -154,6 +183,7 @@
 			SessionToken: -122,
 
 			/* для формул */
+			FrmlMaxTextLength           : -299,
 			FrmlWrongCountParentheses   : -300,
 			FrmlWrongOperator           : -301,
 			FrmlWrongMaxArgument        : -302,
@@ -168,7 +198,23 @@
 			InvalidReferenceOrName : -310,
 			LockCreateDefName      : -311,
 
-			OpenWarning : 500
+			LockedCellPivot				: -312,
+
+			ForceSaveButton: -331,
+			ForceSaveTimeout: -332,
+
+			OpenWarning : 500,
+
+            DataEncrypted : -600,
+
+			CannotChangeFormulaArray: -450,
+			MultiCellsInTablesFormulaArray: -451,
+
+			MailToClientMissing	: -452,
+
+			NoDataToParse : -601,
+
+			CannotUngroupError : -700
 		}
 	};
 
@@ -191,7 +237,8 @@
 		DownloadMerge     : 14, // cкачать файл с mail merge
 		SendMailMerge     : 15,  // рассылка mail merge по почте
 		ForceSaveButton   : 16,
-		ForceSaveTimeout  : 17
+		ForceSaveTimeout  : 17,
+		Waiting	: 18
 	};
 
 	var c_oAscAdvancedOptionsID = {
@@ -204,6 +251,16 @@
 		None : 0,
 		Open : 1,
 		Save : 2
+	};
+
+	var c_oAscRestrictionType = {
+		None           : 0,
+		OnlyForms      : 1,
+		OnlyComments   : 2,
+		OnlySignatures : 3,
+		View           : 0xFF // Отличие данного ограничения от обычного ViewMode в том, что редактор открывается
+		                      // как полноценный редактор, просто мы запрещаем ЛЮБОЕ редактирование. А во ViewMode
+		                      // открывается именно просмотрщик.
 	};
 
 	// Режимы отрисовки
@@ -275,17 +332,18 @@
 	};
 
 	var c_oAscTypeSelectElement = {
-		Paragraph  : 0,
-		Table      : 1,
-		Image      : 2,
-		Header     : 3,
-		Hyperlink  : 4,
-		SpellCheck : 5,
-		Shape      : 6,
-		Slide      : 7,
-		Chart      : 8,
-		Math       : 9,
-		MailMerge  : 10
+		Paragraph      : 0,
+		Table          : 1,
+		Image          : 2,
+		Header         : 3,
+		Hyperlink      : 4,
+		SpellCheck     : 5,
+		Shape          : 6,
+		Slide          : 7,
+		Chart          : 8,
+		Math           : 9,
+		MailMerge      : 10,
+		ContentControl : 11
 	};
 
 	var c_oAscLineDrawingRule = {
@@ -314,6 +372,10 @@
 	var vertalign_SubScript   = 2;
 	var hdrftr_Header         = 0x01;
 	var hdrftr_Footer         = 0x02;
+
+	var vaKSize  =  0.65;  // Коэффициент изменения размера текста для верхнего и нижнего индексов
+	var vaKSuper =  0.35;  // Позиция верхнего индекса (относительно размера текста)
+	var vaKSub   = -0.141; // Позиция нижнего индекса (относительно размера текста)
 
 	var c_oAscDropCap = {
 		None   : 0x00,
@@ -365,34 +427,12 @@
 		t       : 9
 	};
 
-	var c_oAscChartCatAxisSettings = {
-		none        : 0,
-		leftToRight : 1,
-		rightToLeft : 2,
-		noLabels    : 3
-	};
-
-	var c_oAscChartValAxisSettings = {
-		none      : 0,
-		byDefault : 1,
-		thousands : 2,
-		millions  : 3,
-		billions  : 4,
-		log       : 5
-	};
-
-	var c_oAscAxisTypeSettings = {
-		vert : 0,
-		hor  : 1
-	};
-
 	var c_oAscGridLinesSettings = {
 		none       : 0,
 		major      : 1,
 		minor      : 2,
 		majorMinor : 3
 	};
-
 
 	var c_oAscChartTypeSettings = {
 		barNormal              : 0,
@@ -436,7 +476,6 @@
 		unknown                : 38
 	};
 
-
 	var c_oAscValAxisRule = {
 		auto  : 0,
 		fixed : 1
@@ -478,12 +517,6 @@
 		minValue : 3
 	};
 
-	var c_oAscHorAxisType = {
-		auto : 0,
-		date : 1,
-		text : 2
-	};
-
 	var c_oAscBetweenLabelsRule = {
 		auto   : 0,
 		manual : 1
@@ -493,7 +526,6 @@
 		byDivisions      : 0,
 		betweenDivisions : 1
 	};
-
 
 	var c_oAscAxisType = {
 		auto : 0,
@@ -796,7 +828,6 @@
 		DeleteTable             : 5
 	};
 
-
 	// Print default options (in mm)
 	var c_oAscPrintDefaultSettings = {
 		// Размеры страницы при печати
@@ -809,6 +840,8 @@
 		PageRightField  : 17.8,
 		PageTopField    : 19.1,
 		PageBottomField : 19.1,
+		PageHeaderField : 7.62,
+		PageFooterField : 7.62,
 		MinPageLeftField	: 0.17,
 		MinPageRightField	: 0.17,
 		MinPageTopField		: 0.17,
@@ -816,6 +849,13 @@
 
 		PageGridLines : 0,
 		PageHeadings  : 0
+	};
+
+	// Тип печати
+	var c_oAscPrintType = {
+		ActiveSheets: 0,	// Активные листы
+		EntireWorkbook: 1,	// Всю книгу
+		Selection: 2		// Выделенный фрагмент
 	};
 
 	var c_oZoomType = {
@@ -830,18 +870,19 @@
 		Move: 2,
 		Delete: 3,
 		RenameTableColumn: 4,
-		Changed: 5,
-		ChangeDefName: 6,
-		ChangeSheet: 7,
-		DelColumnTable: 8
+		ChangeDefName: 5,
+		ChangeSheet: 6,
+		DelColumnTable: 7,
+		Prepare: 8
 	};
 
 	var c_oNotifyParentType = {
-		CanDo: 0,
-		Change: 1,
-		ChangeFormula: 2,
-		EndCalculate: 3,
-		GetRangeCell: 4
+		Change: 0,
+		ChangeFormula: 1,
+		EndCalculate: 2,
+		GetRangeCell: 3,
+		IsDefName: 4,
+		Shared: 5
 	};
 
 	var c_oDashType = {
@@ -944,6 +985,15 @@
 		Bottom : 1
 	};
 
+	var c_oAscTabLeader = {
+		Dot        : 0x00,
+		Heavy      : 0x01,
+		Hyphen     : 0x02,
+		MiddleDot  : 0x03,
+		None       : 0x04,
+		Underscore : 0x05
+	};
+
 	var c_oAscEncodings    = [
 		[0, 28596, "ISO-8859-6", "Arabic (ISO 8859-6)"],
 		[1, 720, "DOS-720", "Arabic (OEM 720)"],
@@ -982,6 +1032,7 @@
 		[26, 1255, "windows-1255", "Hebrew (Windows)"],
 
 		[27, 932, "Shift_JIS", "Japanese (Shift-JIS)"],
+		[52, 950, "EUC-JP", "Japanese (EUC-JP)"],
 
 		[28, 949, "KS_C_5601-1987", "Korean (Windows)"],
 		[29, 51949, "EUC-KR", "Korean (EUC)"],
@@ -1010,22 +1061,29 @@
 		[46, 65001, "UTF-8", "Unicode (UTF-8)"],
 		[47, 65000, "UTF-7", "Unicode (UTF-7)"],
 
-		[48, 1200, "UTF-16", "Unicode (UTF-16)"],
+		[48, 1200, "UTF-16LE", "Unicode (UTF-16)"],
 		[49, 1201, "UTF-16BE", "Unicode (UTF-16 Big Endian)"],
 
-		[50, 12000, "UTF-32", "Unicode (UTF-32)"],
+		[50, 12000, "UTF-32LE", "Unicode (UTF-32)"],
 		[51, 12001, "UTF-32BE", "Unicode (UTF-32 Big Endian)"]
 	];
 	var c_oAscEncodingsMap = {
 		"437"   : 43, "720" : 1, "737" : 21, "775" : 5, "850" : 39, "852" : 15, "855" : 12, "857" : 35, "858" : 40, "860" : 41, "861" : 30, "862" : 25, "863" : 42, "865" : 31, "866" : 13, "869" : 22, "874" : 32, "932" : 27, "936" : 18, "949" : 28, "950" : 17, "1200" : 48, "1201" : 49, "1250" : 16, "1251" : 14, "1252" : 44, "1253" : 23, "1254" : 36, "1255" : 26, "1256" : 2, "1257" : 6, "1258" : 45, "10007" : 11, "12000" : 50, "12001" : 51, "20866" : 9, "21866" : 10, "28591" : 37, "28592" : 19,
 		"28593" : 33, "28594" : 3, "28595" : 8, "28596" : 0, "28597" : 20, "28598" : 24, "28599" : 34, "28603" : 4, "28604" : 7, "28605" : 38, "51949" : 29, "65000" : 47, "65001" : 46
 	};
+	var c_oAscCodePageNone = -1;
+	var c_oAscCodePageUtf7 = 47;//65000
 	var c_oAscCodePageUtf8 = 46;//65001
+	var c_oAscCodePageUtf16 = 48;//1200
+	var c_oAscCodePageUtf16BE = 49;//1201
+	var c_oAscCodePageUtf32 = 50;//12000
+	var c_oAscCodePageUtf32BE = 51;//12001
 
 	// https://support.office.com/en-us/article/Excel-specifications-and-limits-16c69c74-3d6a-4aaf-ba35-e6eb276e8eaa?ui=en-US&rs=en-US&ad=US&fromAR=1
 	var c_oAscMaxTooltipLength       = 256;
 	var c_oAscMaxCellOrCommentLength = 32767;
 	var c_oAscMaxFormulaLength       = 8192;
+	var c_oAscMaxHeaderFooterLength  = 256;
 
 	var locktype_None   = 1; // никто не залочил данный объект
 	var locktype_Mine   = 2; // данный объект залочен текущим пользователем
@@ -1033,34 +1091,42 @@
 	var locktype_Other2 = 4; // данный объект залочен другим(не текущим) пользователем (обновления уже пришли)
 	var locktype_Other3 = 5; // данный объект был залочен (обновления пришли) и снова стал залочен
 
-	var changestype_None                 = 0; // Ничего не происходит с выделенным элементом (проверка идет через дополнительный параметр)
-	var changestype_Paragraph_Content    = 1; // Добавление/удаление элементов в параграф
-	var changestype_Paragraph_Properties = 2; // Изменение свойств параграфа
-	var changestype_Document_Content     = 10; // Добавление/удаление элементов в Document или в DocumentContent
-	var changestype_Document_Content_Add = 11; // Добавление элемента в класс Document или в класс DocumentContent
-	var changestype_Document_SectPr      = 12; // Изменения свойств данной секции (размер страницы, поля и ориентация)
-	var changestype_Document_Styles      = 13; // Изменяем стили документа (добавление/удаление/модифицирование)
-	var changestype_Table_Properties     = 20; // Любые изменения в таблице
-	var changestype_Table_RemoveCells    = 21; // Удаление ячеек (строк или столбцов)
-	var changestype_Image_Properties     = 23; // Изменения настроек картинки
-	var changestype_HdrFtr               = 30; // Изменения в колонтитуле (любые изменения)
-	var changestype_Remove               = 40; // Удаление, через кнопку backspace (Удаление назад)
-	var changestype_Delete               = 41; // Удаление, через кнопку delete (Удаление вперед)
-	var changestype_Drawing_Props        = 51; // Изменение свойств фигуры
-	var changestype_ColorScheme          = 60; // Изменение свойств фигуры
-	var changestype_Text_Props           = 61; // Изменение свойств фигуры
-	var changestype_RemoveSlide          = 62; // Изменение свойств фигуры
-	var changestype_PresentationProps    = 63; // Изменение темы, цветовой схемы, размера слайда;
-	var changestype_Theme                = 64; // Изменение темы;
-	var changestype_SlideSize            = 65; // Изменение цветовой схемы;
-	var changestype_SlideBg              = 66; // Изменение цветовой схемы;
-	var changestype_SlideTiming          = 67; // Изменение цветовой схемы;
-	var changestype_MoveComment          = 68;
-	var changestype_AddSp                = 69;
-	var changestype_AddComment           = 70;
-	var changestype_Layout               = 71;
-	var changestype_AddShape             = 72;
-	var changestype_AddShapes            = 73;
+	var changestype_None                      = 0; // Ничего не происходит с выделенным элементом (проверка идет через дополнительный параметр)
+	var changestype_Paragraph_Content         = 1; // Добавление/удаление элементов в параграф
+	var changestype_Paragraph_Properties      = 2; // Изменение свойств параграфа
+	var changestype_Paragraph_AddText         = 3; // Добавление текста
+	var changestype_Paragraph_TextProperties  = 4; // Изменение настроек текста
+	var changestype_Document_Content          = 10; // Добавление/удаление элементов в Document или в DocumentContent
+	var changestype_Document_Content_Add      = 11; // Добавление элемента в класс Document или в класс DocumentContent
+	var changestype_Document_SectPr           = 12; // Изменения свойств данной секции (размер страницы, поля и ориентация)
+	var changestype_Document_Styles           = 13; // Изменяем стили документа (добавление/удаление/модифицирование)
+	var changestype_Table_Properties          = 20; // Любые изменения в таблице
+	var changestype_Table_RemoveCells         = 21; // Удаление ячеек (строк или столбцов)
+	var changestype_Image_Properties          = 23; // Изменения настроек картинки
+	var changestype_ContentControl_Remove     = 24; // Удаление контейнера целиком
+	var changestype_ContentControl_Properties = 25; // Изменение свойств контейнера
+	var changestype_ContentControl_Add        = 26; // Добавление контейнера
+	var changestype_HdrFtr                    = 30; // Изменения в колонтитуле (любые изменения)
+	var changestype_Remove                    = 40; // Удаление, через кнопку backspace (Удаление назад)
+	var changestype_Delete                    = 41; // Удаление, через кнопку delete (Удаление вперед)
+	var changestype_Drawing_Props             = 51; // Изменение свойств фигуры
+	var changestype_ColorScheme               = 60; // Изменение свойств фигуры
+	var changestype_Text_Props                = 61; // Изменение свойств фигуры
+	var changestype_RemoveSlide               = 62; // Изменение свойств фигуры
+	var changestype_PresentationProps         = 63; // Изменение темы, цветовой схемы, размера слайда;
+	var changestype_Theme                     = 64; // Изменение темы;
+	var changestype_SlideSize                 = 65; // Изменение цветовой схемы;
+	var changestype_SlideBg                   = 66; // Изменение цветовой схемы;
+	var changestype_SlideTiming               = 67; // Изменение цветовой схемы;
+	var changestype_MoveComment               = 68;
+	var changestype_AddSp                     = 69;
+	var changestype_AddComment                = 70;
+	var changestype_Layout                    = 71;
+	var changestype_AddShape                  = 72;
+	var changestype_AddShapes                 = 73;
+	var changestype_PresDefaultLang           = 74;
+	var changestype_SlideHide                 = 75;
+	var changestype_CorePr                    = 76;
 
 	var changestype_2_InlineObjectMove       = 1; // Передвигаем объект в заданную позцию (проверяем место, в которое пытаемся передвинуть)
 	var changestype_2_HdrFtr                 = 2; // Изменения с колонтитулом
@@ -1068,12 +1134,341 @@
 	var changestype_2_Element_and_Type       = 4; // Проверяем возможно ли сделать изменение заданного типа с заданным элементом(а не с текущим)
 	var changestype_2_ElementsArray_and_Type = 5; // Аналогично предыдущему, только идет массив элементов
 	var changestype_2_AdditionalTypes        = 6; // Дополнительные проверки типа 1
+	var changestype_2_Element_and_Type_Array = 7; // Проверяем возможно ли сделать изменения заданного типа с заданными элементами (для каждого элемента свое изменение)
 
 	var contentchanges_Add    = 1;
 	var contentchanges_Remove = 2;
 
+	var PUNCTUATION_FLAG_BASE               = 0x0001;
+	var PUNCTUATION_FLAG_CANT_BE_AT_BEGIN   = 0x0010;
+	var PUNCTUATION_FLAG_CANT_BE_AT_END     = 0x0020;
+	var PUNCTUATION_FLAG_EAST_ASIAN         = 0x0100;
+	var PUNCTUATION_FLAG_CANT_BE_AT_BEGIN_E = 0x0002;
+	var PUNCTUATION_FLAG_CANT_BE_AT_END_E   = 0x0004;
+
+	var g_aPunctuation = [];
+	g_aPunctuation[0x0021] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN_E; // !
+	g_aPunctuation[0x0022] = PUNCTUATION_FLAG_BASE;                                     // "
+	g_aPunctuation[0x0023] = PUNCTUATION_FLAG_BASE;                                     // #
+	g_aPunctuation[0x0024] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_CANT_BE_AT_END;   // $
+	g_aPunctuation[0x0025] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN_E; // %
+	g_aPunctuation[0x0026] = PUNCTUATION_FLAG_BASE;                                     // &
+	g_aPunctuation[0x0027] = PUNCTUATION_FLAG_BASE;                                     // '
+	g_aPunctuation[0x0028] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_CANT_BE_AT_END | PUNCTUATION_FLAG_CANT_BE_AT_END_E;   // (
+	g_aPunctuation[0x0029] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN_E; // )
+	g_aPunctuation[0x002A] = PUNCTUATION_FLAG_BASE;                                     // *
+	g_aPunctuation[0x002B] = PUNCTUATION_FLAG_BASE;                                     // +
+	g_aPunctuation[0x002C] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN_E; // ,
+	g_aPunctuation[0x002D] = PUNCTUATION_FLAG_BASE;                                     // -
+	g_aPunctuation[0x002E] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN_E; // .
+	g_aPunctuation[0x002F] = PUNCTUATION_FLAG_BASE;                                     // /
+	g_aPunctuation[0x003A] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN_E; // :
+	g_aPunctuation[0x003B] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN_E; // ;
+	g_aPunctuation[0x003C] = PUNCTUATION_FLAG_BASE;                                     // <
+	g_aPunctuation[0x003D] = PUNCTUATION_FLAG_BASE;                                     // =
+	g_aPunctuation[0x003E] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN; // >
+	g_aPunctuation[0x003F] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN_E; // ?
+	g_aPunctuation[0x0040] = PUNCTUATION_FLAG_BASE;                                     // @
+	g_aPunctuation[0x005B] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_CANT_BE_AT_END | PUNCTUATION_FLAG_CANT_BE_AT_END_E;   // [
+	g_aPunctuation[0x005C] = PUNCTUATION_FLAG_BASE;                                     // \
+	g_aPunctuation[0x005D] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN_E; // ]
+	g_aPunctuation[0x005E] = PUNCTUATION_FLAG_BASE;                                     // ^
+	g_aPunctuation[0x005F] = PUNCTUATION_FLAG_BASE;                                     // _
+	g_aPunctuation[0x0060] = PUNCTUATION_FLAG_BASE;                                     // `
+	g_aPunctuation[0x007B] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_CANT_BE_AT_END | PUNCTUATION_FLAG_CANT_BE_AT_END_E;   // {
+	g_aPunctuation[0x007C] = PUNCTUATION_FLAG_BASE;                                     // |
+	g_aPunctuation[0x007D] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN; // }
+	g_aPunctuation[0x007E] = PUNCTUATION_FLAG_BASE;                                     // ~
+
+	g_aPunctuation[0x00A1] = PUNCTUATION_FLAG_BASE;                                     // ¡
+	g_aPunctuation[0x00A2] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN; // ¢
+	g_aPunctuation[0x00A3] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_CANT_BE_AT_END;   // £
+	g_aPunctuation[0x00A4] = PUNCTUATION_FLAG_BASE;                                     // ¤
+	g_aPunctuation[0x00A5] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_CANT_BE_AT_END;   // ¥
+	g_aPunctuation[0x00A6] = PUNCTUATION_FLAG_BASE;                                     // ¦
+	g_aPunctuation[0x00A7] = PUNCTUATION_FLAG_BASE;                                     // §
+	g_aPunctuation[0x00A8] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN; // ¨
+	g_aPunctuation[0x00A9] = PUNCTUATION_FLAG_BASE;                                     // ©
+	g_aPunctuation[0x00AA] = PUNCTUATION_FLAG_BASE;                                     // ª
+	g_aPunctuation[0x00AB] = PUNCTUATION_FLAG_BASE;                                     // «
+	g_aPunctuation[0x00AC] = PUNCTUATION_FLAG_BASE;                                     // ¬
+	g_aPunctuation[0x00AD] = PUNCTUATION_FLAG_BASE;                                     // ­
+	g_aPunctuation[0x00AE] = PUNCTUATION_FLAG_BASE;                                     // ®
+	g_aPunctuation[0x00AF] = PUNCTUATION_FLAG_BASE;                                     // ¯
+	g_aPunctuation[0x00B0] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN; // °
+	g_aPunctuation[0x00B1] = PUNCTUATION_FLAG_BASE;                                     // ±
+	g_aPunctuation[0x00B4] = PUNCTUATION_FLAG_BASE;                                     // ´
+	g_aPunctuation[0x00B6] = PUNCTUATION_FLAG_BASE;                                     // ¶
+	g_aPunctuation[0x00B7] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN; // ·
+	g_aPunctuation[0x00B8] = PUNCTUATION_FLAG_BASE;                                     // ¸
+	g_aPunctuation[0x00BA] = PUNCTUATION_FLAG_BASE;                                     // º
+	g_aPunctuation[0x00BB] = PUNCTUATION_FLAG_BASE;                                     // »
+	g_aPunctuation[0x00BB] = PUNCTUATION_FLAG_BASE;                                     // »
+	g_aPunctuation[0x00BF] = PUNCTUATION_FLAG_BASE;                                     // ¿
+
+	g_aPunctuation[0x2010] = PUNCTUATION_FLAG_BASE;                                     // ‐
+	g_aPunctuation[0x2011] = PUNCTUATION_FLAG_BASE;                                     // ‑
+	g_aPunctuation[0x2012] = PUNCTUATION_FLAG_BASE;                                     // ‒
+	g_aPunctuation[0x2013] = PUNCTUATION_FLAG_BASE;                                     // –
+	g_aPunctuation[0x2014] = PUNCTUATION_FLAG_BASE;                                     // —
+	g_aPunctuation[0x2015] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN; // ―
+	g_aPunctuation[0x2016] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN; // ‖
+	g_aPunctuation[0x2017] = PUNCTUATION_FLAG_BASE;                                     // ‗
+	g_aPunctuation[0x2018] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_CANT_BE_AT_END;   // ‘
+	g_aPunctuation[0x2019] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN; // ’
+	g_aPunctuation[0x201A] = PUNCTUATION_FLAG_BASE;                                     // ‚
+	g_aPunctuation[0x201B] = PUNCTUATION_FLAG_BASE;                                     // ‛
+	g_aPunctuation[0x201C] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_CANT_BE_AT_END;   // “
+	g_aPunctuation[0x201D] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN; // ”
+	g_aPunctuation[0x201E] = PUNCTUATION_FLAG_BASE;                                     // „
+	g_aPunctuation[0x201F] = PUNCTUATION_FLAG_BASE;                                     // ‟
+	g_aPunctuation[0x2020] = PUNCTUATION_FLAG_BASE;                                     // †
+	g_aPunctuation[0x2021] = PUNCTUATION_FLAG_BASE;                                     // ‡
+	g_aPunctuation[0x2022] = PUNCTUATION_FLAG_BASE;                                     // •
+	g_aPunctuation[0x2023] = PUNCTUATION_FLAG_BASE;                                     // ‣
+	g_aPunctuation[0x2024] = PUNCTUATION_FLAG_BASE;                                     // ․
+	g_aPunctuation[0x2025] = PUNCTUATION_FLAG_BASE;                                     // ‥
+	g_aPunctuation[0x2026] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN; // …
+	g_aPunctuation[0x2027] = PUNCTUATION_FLAG_BASE;                                     // ‧
+	g_aPunctuation[0x2030] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN; // ‰
+	g_aPunctuation[0x2031] = PUNCTUATION_FLAG_BASE;                                     // ‱
+	g_aPunctuation[0x2032] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN; // ′
+	g_aPunctuation[0x2033] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN; // ″
+	g_aPunctuation[0x2034] = PUNCTUATION_FLAG_BASE;                                     // ‴
+	g_aPunctuation[0x2035] = PUNCTUATION_FLAG_BASE;                                     // ‵
+	g_aPunctuation[0x2036] = PUNCTUATION_FLAG_BASE;                                     // ‶
+	g_aPunctuation[0x2037] = PUNCTUATION_FLAG_BASE;                                     // ‷
+	g_aPunctuation[0x2038] = PUNCTUATION_FLAG_BASE;                                     // ‸
+	g_aPunctuation[0x2039] = PUNCTUATION_FLAG_BASE;                                     // ‹
+	g_aPunctuation[0x203A] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN; // ›
+	g_aPunctuation[0x203B] = PUNCTUATION_FLAG_BASE;                                     // ※
+	g_aPunctuation[0x203C] = PUNCTUATION_FLAG_BASE;                                     // ‼
+	g_aPunctuation[0x203D] = PUNCTUATION_FLAG_BASE;                                     // ‽
+	g_aPunctuation[0x203E] = PUNCTUATION_FLAG_BASE;                                     // ‾
+	g_aPunctuation[0x203F] = PUNCTUATION_FLAG_BASE;                                     // ‿
+	g_aPunctuation[0x2040] = PUNCTUATION_FLAG_BASE;                                     // ⁀
+	g_aPunctuation[0x2041] = PUNCTUATION_FLAG_BASE;                                     // ⁁
+	g_aPunctuation[0x2042] = PUNCTUATION_FLAG_BASE;                                     // ⁂
+	g_aPunctuation[0x2043] = PUNCTUATION_FLAG_BASE;                                     // ⁃
+	g_aPunctuation[0x2044] = PUNCTUATION_FLAG_BASE;                                     // ⁄
+	g_aPunctuation[0x2045] = PUNCTUATION_FLAG_BASE;                                     // ⁅
+	g_aPunctuation[0x2046] = PUNCTUATION_FLAG_BASE;                                     // ⁆
+	g_aPunctuation[0x2047] = PUNCTUATION_FLAG_BASE;                                     // ⁇
+	g_aPunctuation[0x2048] = PUNCTUATION_FLAG_BASE;                                     // ⁈
+	g_aPunctuation[0x2049] = PUNCTUATION_FLAG_BASE;                                     // ⁉
+	g_aPunctuation[0x204A] = PUNCTUATION_FLAG_BASE;                                     // ⁊
+	g_aPunctuation[0x204B] = PUNCTUATION_FLAG_BASE;                                     // ⁋
+	g_aPunctuation[0x204C] = PUNCTUATION_FLAG_BASE;                                     // ⁌
+	g_aPunctuation[0x204D] = PUNCTUATION_FLAG_BASE;                                     // ⁍
+	g_aPunctuation[0x204E] = PUNCTUATION_FLAG_BASE;                                     // ⁎
+	g_aPunctuation[0x204F] = PUNCTUATION_FLAG_BASE;                                     // ⁏
+	g_aPunctuation[0x2050] = PUNCTUATION_FLAG_BASE;                                     // ⁐
+	g_aPunctuation[0x2051] = PUNCTUATION_FLAG_BASE;                                     // ⁑
+	g_aPunctuation[0x2052] = PUNCTUATION_FLAG_BASE;                                     // ⁒
+	g_aPunctuation[0x2053] = PUNCTUATION_FLAG_BASE;                                     // ⁓
+	g_aPunctuation[0x2054] = PUNCTUATION_FLAG_BASE;                                     // ⁔
+	g_aPunctuation[0x2055] = PUNCTUATION_FLAG_BASE;                                     // ⁕
+	g_aPunctuation[0x2056] = PUNCTUATION_FLAG_BASE;                                     // ⁖
+	g_aPunctuation[0x2057] = PUNCTUATION_FLAG_BASE;                                     // ⁗
+	g_aPunctuation[0x2058] = PUNCTUATION_FLAG_BASE;                                     // ⁘
+	g_aPunctuation[0x2059] = PUNCTUATION_FLAG_BASE;                                     // ⁙
+	g_aPunctuation[0x205A] = PUNCTUATION_FLAG_BASE;                                     // ⁚
+	g_aPunctuation[0x205B] = PUNCTUATION_FLAG_BASE;                                     // ⁛
+	g_aPunctuation[0x205C] = PUNCTUATION_FLAG_BASE;                                     // ⁜
+	g_aPunctuation[0x205D] = PUNCTUATION_FLAG_BASE;                                     // ⁝
+	g_aPunctuation[0x205E] = PUNCTUATION_FLAG_BASE;                                     // ⁞
+
+	// Не смотря на то что следующий набор символов идет в блоке CJK Symbols and Punctuation
+	// Word не считает их как EastAsian script (w:lang->w:eastAsian)
+
+	g_aPunctuation[0x3001] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN; // 、
+	g_aPunctuation[0x3002] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN; // 。
+	g_aPunctuation[0x3003] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN; // 〃
+	g_aPunctuation[0x3004] = PUNCTUATION_FLAG_BASE;                                     // 〄
+	g_aPunctuation[0x3005] = PUNCTUATION_FLAG_BASE;                                     // 々
+	g_aPunctuation[0x3006] = PUNCTUATION_FLAG_BASE;                                     // 〆
+	g_aPunctuation[0x3007] = PUNCTUATION_FLAG_BASE;                                     // 〇
+	g_aPunctuation[0x3008] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_CANT_BE_AT_END;   // 〈
+	g_aPunctuation[0x3009] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN; // 〉
+	g_aPunctuation[0x300A] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_CANT_BE_AT_END;   // 《
+	g_aPunctuation[0x300B] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN; // 》
+	g_aPunctuation[0x300C] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_CANT_BE_AT_END;   // 「
+	g_aPunctuation[0x300D] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN; // 」
+	g_aPunctuation[0x300E] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_CANT_BE_AT_END;   // 『
+	g_aPunctuation[0x300F] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN; // 』
+	g_aPunctuation[0x3010] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_CANT_BE_AT_END;   // 【
+	g_aPunctuation[0x3011] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN; // 】
+	g_aPunctuation[0x3012] = PUNCTUATION_FLAG_BASE;                                     // 〒
+	g_aPunctuation[0x3013] = PUNCTUATION_FLAG_BASE;                                     // 〓
+	g_aPunctuation[0x3014] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_CANT_BE_AT_END;   //〔
+	g_aPunctuation[0x3015] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN; // 〕
+	g_aPunctuation[0x3016] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_CANT_BE_AT_END;   //〖
+	g_aPunctuation[0x3017] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN; // 〗
+	g_aPunctuation[0x3018] = PUNCTUATION_FLAG_BASE;                                     // 〘
+	g_aPunctuation[0x3019] = PUNCTUATION_FLAG_BASE;                                     // 〙
+	g_aPunctuation[0x301A] = PUNCTUATION_FLAG_BASE;                                     // 〚
+	g_aPunctuation[0x301B] = PUNCTUATION_FLAG_BASE;                                     // 〛
+	g_aPunctuation[0x301C] = PUNCTUATION_FLAG_BASE;                                     // 〜
+	g_aPunctuation[0x301D] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_CANT_BE_AT_END;   // 〝
+	g_aPunctuation[0x301E] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN; // 〞
+	g_aPunctuation[0x301F] = PUNCTUATION_FLAG_BASE;                                     // 〟
+
+	g_aPunctuation[0xFF01] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_EAST_ASIAN | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN_E; // ！
+	g_aPunctuation[0xFF02] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_EAST_ASIAN | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN; // ＂
+	g_aPunctuation[0xFF03] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_EAST_ASIAN;                                     // ＃
+	g_aPunctuation[0xFF04] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_EAST_ASIAN | PUNCTUATION_FLAG_CANT_BE_AT_END;   // ＄
+	g_aPunctuation[0xFF05] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_EAST_ASIAN | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN_E; // ％
+	g_aPunctuation[0xFF06] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_EAST_ASIAN;                                     // ＆
+	g_aPunctuation[0xFF07] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_EAST_ASIAN | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN; // ＇
+	g_aPunctuation[0xFF08] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_EAST_ASIAN | PUNCTUATION_FLAG_CANT_BE_AT_END | PUNCTUATION_FLAG_CANT_BE_AT_END_E;   // （
+	g_aPunctuation[0xFF09] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_EAST_ASIAN | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN_E; // )
+	g_aPunctuation[0xFF0A] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_EAST_ASIAN;                                     // ＊
+	g_aPunctuation[0xFF0B] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_EAST_ASIAN;                                     // ＋
+	g_aPunctuation[0xFF0C] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_EAST_ASIAN | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN_E; // ，
+	g_aPunctuation[0xFF0D] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_EAST_ASIAN;                                     // －
+	g_aPunctuation[0xFF0E] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_EAST_ASIAN | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN_E; // ．
+	g_aPunctuation[0xFF0F] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_EAST_ASIAN;                                     // ／
+	g_aPunctuation[0xFF1A] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_EAST_ASIAN | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN_E; // ：
+	g_aPunctuation[0xFF1B] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_EAST_ASIAN | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN_E; // ；
+	g_aPunctuation[0xFF1C] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_EAST_ASIAN;                                     // ＜
+	g_aPunctuation[0xFF1D] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_EAST_ASIAN;                                     // ＝
+	g_aPunctuation[0xFF1E] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_EAST_ASIAN;                                     // ＞
+	g_aPunctuation[0xFF1F] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_EAST_ASIAN | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN_E; // ？
+	g_aPunctuation[0xFF20] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_EAST_ASIAN;                                     // ＠
+	g_aPunctuation[0xFF3B] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_EAST_ASIAN | PUNCTUATION_FLAG_CANT_BE_AT_END | PUNCTUATION_FLAG_CANT_BE_AT_END_E;   // ［
+	g_aPunctuation[0xFF3C] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_EAST_ASIAN;                                     // ＼
+	g_aPunctuation[0xFF3D] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_EAST_ASIAN | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN_E; // ］
+	g_aPunctuation[0xFF3E] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_EAST_ASIAN;                                     // ＾
+	g_aPunctuation[0xFF3F] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_EAST_ASIAN;                                     // ＿
+	g_aPunctuation[0xFF40] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_EAST_ASIAN | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN; // ｀
+	g_aPunctuation[0xFF5B] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_EAST_ASIAN | PUNCTUATION_FLAG_CANT_BE_AT_END | PUNCTUATION_FLAG_CANT_BE_AT_END_E;   // ｛
+	g_aPunctuation[0xFF5C] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_EAST_ASIAN | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN; // ｜
+	g_aPunctuation[0xFF5D] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_EAST_ASIAN | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN_E; // ｝
+	g_aPunctuation[0xFF5E] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_EAST_ASIAN | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN; // ～
+	g_aPunctuation[0xFF5F] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_EAST_ASIAN;                                     // ｟
+	g_aPunctuation[0xFF60] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_EAST_ASIAN;                                     // ｠
+	g_aPunctuation[0xFF61] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_EAST_ASIAN;                                     // ｡
+	g_aPunctuation[0xFF62] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_EAST_ASIAN;                                     // ｢
+	g_aPunctuation[0xFF63] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_EAST_ASIAN;                                     // ｣
+	g_aPunctuation[0xFF64] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_EAST_ASIAN;                                     // ､
+	g_aPunctuation[0xFF65] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_EAST_ASIAN;                                     // ･
+	g_aPunctuation[0xFFE0] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_EAST_ASIAN | PUNCTUATION_FLAG_CANT_BE_AT_BEGIN; // ￠
+	g_aPunctuation[0xFFE1] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_EAST_ASIAN | PUNCTUATION_FLAG_CANT_BE_AT_END;   // ￡
+	g_aPunctuation[0xFFE2] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_EAST_ASIAN;                                     // ￢
+	g_aPunctuation[0xFFE3] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_EAST_ASIAN;                                     // ￣
+	g_aPunctuation[0xFFE4] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_EAST_ASIAN;                                     // ￤
+	g_aPunctuation[0xFFE5] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_EAST_ASIAN | PUNCTUATION_FLAG_CANT_BE_AT_END;   // ￥
+	g_aPunctuation[0xFFE6] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_EAST_ASIAN;                                     // ￦
+	g_aPunctuation[0xFFE8] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_EAST_ASIAN;                                     // ￨
+	g_aPunctuation[0xFFE9] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_EAST_ASIAN;                                     // ￩
+	g_aPunctuation[0xFFEA] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_EAST_ASIAN;                                     // ￪
+	g_aPunctuation[0xFFEB] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_EAST_ASIAN;                                     // ￫
+	g_aPunctuation[0xFFEC] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_EAST_ASIAN;                                     // ￬
+	g_aPunctuation[0xFFED] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_EAST_ASIAN;                                     // ￭
+	g_aPunctuation[0xFFEE] = PUNCTUATION_FLAG_BASE | PUNCTUATION_FLAG_EAST_ASIAN;                                     // ￮
+
 
 	var offlineMode = '_offline_';
+	var chartMode = '_chart_';
+	
+	var c_oSpecialPasteProps = {
+		paste: 0,
+		pasteOnlyFormula: 1,
+		formulaNumberFormat: 2,
+		formulaAllFormatting: 3,
+		formulaWithoutBorders: 4, 
+		formulaColumnWidth: 5,
+		mergeConditionalFormating: 6, 
+		pasteOnlyValues: 7,
+		valueNumberFormat: 8,
+		valueAllFormating: 9,
+		pasteOnlyFormating: 10,
+		transpose: 11,
+		link: 12,
+		picture: 13,
+		linkedPicture: 14,
+
+		sourceformatting: 15,
+		destinationFormatting: 16,
+		
+		mergeFormatting: 17,
+
+		uniteList: 18,
+		doNotUniteList: 19,
+
+		insertAsNestedTable: 20,
+		uniteIntoTable: 21,
+		insertAsNewRows: 22,
+		keepTextOnly: 23,
+		overwriteCells : 24,
+
+		useTextImport: 25
+	};
+
+	/** @enum {number} */
+	var c_oAscNumberingFormat = {
+		None        : 0x0000,
+		Bullet      : 0x1001,
+		Decimal     : 0x2002,
+		LowerRoman  : 0x2003,
+		UpperRoman  : 0x2004,
+		LowerLetter : 0x2005,
+		UpperLetter : 0x2006,
+		DecimalZero : 0x2007,
+
+
+		BulletFlag   : 0x1000,
+		NumberedFlag : 0x2000
+	};
+
+	/** enum {number} */
+	var c_oAscNumberingSuff = {
+		Tab   : 0x01,
+		Space : 0x02,
+		None  : 0x03
+	};
+
+	var c_oAscNumberingLvlTextType = {
+		Text : 0x00,
+		Num  : 0x01
+	};
+
+	var c_oAscSdtAppearance = {
+		Frame  : 1,
+		Hidden : 2
+	};
+
+
+	var c_oAscObjectsAlignType = {
+		Selected: 0,
+		Slide: 1,
+		Page: 2,
+		Margin: 3
+	};
+
+	var c_oAscItemType = {
+		Default: 0,
+		Avg: 1,
+		Count: 2,
+		CountA: 3,
+		Max: 4,
+		Min: 5,
+		Product: 6,
+		StdDev: 7,
+		StdDevP: 8,
+		Sum: 9,
+		Var: 10,
+		VarP: 11,
+		Data: 12,
+		Grand: 13,
+		Blank: 14
+	};
+
+	var c_oAscRevisionsMove = {
+		NoMove   : 0,
+		MoveTo   : 1,
+		MoveFrom : 2
+	};
 
 	//------------------------------------------------------------export--------------------------------------------------
 	var prot;
@@ -1083,10 +1478,14 @@
 	window['Asc']['c_oAscMaxRowHeight'] = window['Asc'].c_oAscMaxRowHeight = c_oAscMaxRowHeight;
     window['Asc']['c_nMaxConversionTime'] = window['Asc'].c_nMaxConversionTime = c_nMaxConversionTime;
 	window['Asc']['c_nMaxDownloadTitleLen'] = window['Asc'].c_nMaxDownloadTitleLen = c_nMaxDownloadTitleLen;
+	window['Asc']['c_nVersionNoBase64'] = window['Asc'].c_nVersionNoBase64 = c_nVersionNoBase64;
+	window['Asc']['c_dMaxParaRunContentLength'] = window['Asc'].c_dMaxParaRunContentLength = c_dMaxParaRunContentLength;
+	window['Asc']['c_rUneditableTypes'] = window['Asc'].c_rUneditableTypes = c_rUneditableTypes;
 	window['Asc']['c_oAscFileType'] = window['Asc'].c_oAscFileType = c_oAscFileType;
 	prot                         = c_oAscFileType;
 	prot['UNKNOWN']              = prot.UNKNOWN;
 	prot['PDF']                  = prot.PDF;
+	prot['PDFA']                 = prot.PDFA;
 	prot['HTML']                 = prot.HTML;
 	prot['DOCX']                 = prot.DOCX;
 	prot['DOC']                  = prot.DOC;
@@ -1097,16 +1496,33 @@
 	prot['EPUB']                 = prot.EPUB;
 	prot['FB2']                  = prot.FB2;
 	prot['MOBI']                 = prot.MOBI;
+	prot['DOCM']                 = prot.DOCM;
+	prot['DOTX']                 = prot.DOTX;
+	prot['DOTM']                 = prot.DOTM;
+	prot['FODT']                 = prot.FODT;
+	prot['OTT']                  = prot.OTT;
 	prot['DOCY']                 = prot.DOCY;
 	prot['JSON']                 = prot.JSON;
 	prot['XLSX']                 = prot.XLSX;
 	prot['XLS']                  = prot.XLS;
 	prot['ODS']                  = prot.ODS;
 	prot['CSV']                  = prot.CSV;
+	prot['XLSM']                 = prot.XLSM;
+	prot['XLTX']                 = prot.XLTX;
+	prot['XLTM']                 = prot.XLTM;
+	prot['FODS']                 = prot.FODS;
+	prot['OTS']                  = prot.OTS;
 	prot['XLSY']                 = prot.XLSY;
 	prot['PPTX']                 = prot.PPTX;
 	prot['PPT']                  = prot.PPT;
 	prot['ODP']                  = prot.ODP;
+	prot['PPSX']                 = prot.PPSX;
+	prot['PPTM']                 = prot.PPTM;
+	prot['PPSM']                 = prot.PPSM;
+	prot['POTX']                 = prot.POTX;
+	prot['POTM']                 = prot.POTM;
+	prot['FODP']                 = prot.FODP;
+	prot['OTP']                  = prot.OTP;
 	window['Asc']['c_oAscError'] = window['Asc'].c_oAscError = c_oAscError;
 	prot                                     = c_oAscError;
 	prot['Level']                            = prot.Level;
@@ -1121,8 +1537,6 @@
 	prot['No']                               = prot.No;
 	prot['Unknown']                          = prot.Unknown;
 	prot['ConvertationTimeout']              = prot.ConvertationTimeout;
-	prot['ConvertationOpenError']            = prot.ConvertationOpenError;
-	prot['ConvertationSaveError']            = prot.ConvertationSaveError;
 	prot['DownloadError']                    = prot.DownloadError;
 	prot['UnexpectedGuid']                   = prot.UnexpectedGuid;
 	prot['Database']                         = prot.Database;
@@ -1133,6 +1547,7 @@
 	prot['UplImageFileCount']                = prot.UplImageFileCount;
 	prot['NoSupportClipdoard']               = prot.NoSupportClipdoard;
 	prot['UplImageUrl']                      = prot.UplImageUrl;
+	prot['MaxDataPointsError']               = prot.MaxDataPointsError;
 	prot['StockChartError']                  = prot.StockChartError;
 	prot['CoAuthoringDisconnect']            = prot.CoAuthoringDisconnect;
 	prot['ConvertationPassword']             = prot.ConvertationPassword;
@@ -1140,12 +1555,15 @@
 	prot['KeyExpire']                        = prot.KeyExpire;
 	prot['UserCountExceed']                  = prot.UserCountExceed;
 	prot['AccessDeny']                       = prot.AccessDeny;
+	prot['LoadingScriptError']               = prot.LoadingScriptError;
+	prot['EditingError']                     = prot.EditingError;
 	prot['SplitCellMaxRows']                 = prot.SplitCellMaxRows;
 	prot['SplitCellMaxCols']                 = prot.SplitCellMaxCols;
 	prot['SplitCellRowsDivider']             = prot.SplitCellRowsDivider;
 	prot['MobileUnexpectedCharCount']        = prot.MobileUnexpectedCharCount;
 	prot['MailMergeLoadFile']                = prot.MailMergeLoadFile;
 	prot['MailMergeSaveFile']                = prot.MailMergeSaveFile;
+	prot['DataValidate']                     = prot.DataValidate;
 	prot['AutoFilterDataRangeError']         = prot.AutoFilterDataRangeError;
 	prot['AutoFilterChangeFormatTableError'] = prot.AutoFilterChangeFormatTableError;
 	prot['AutoFilterChangeError']            = prot.AutoFilterChangeError;
@@ -1161,12 +1579,15 @@
 	prot['CannotMoveRange']                  = prot.CannotMoveRange;
 	prot['MaxDataSeriesError']               = prot.MaxDataSeriesError;
 	prot['CannotFillRange']                  = prot.CannotFillRange;
+	prot['ConvertationOpenError']            = prot.ConvertationOpenError;
+	prot['ConvertationSaveError']            = prot.ConvertationSaveError;
 	prot['UserDrop']                         = prot.UserDrop;
 	prot['Warning']                          = prot.Warning;
 	prot['PrintMaxPagesCount']               = prot.PrintMaxPagesCount;
 	prot['SessionAbsolute']                  = prot.SessionAbsolute;
 	prot['SessionIdle']                      = prot.SessionIdle;
 	prot['SessionToken']                     = prot.SessionToken;
+	prot['FrmlMaxTextLength']                = prot.FrmlMaxTextLength;
 	prot['FrmlWrongCountParentheses']        = prot.FrmlWrongCountParentheses;
 	prot['FrmlWrongOperator']                = prot.FrmlWrongOperator;
 	prot['FrmlWrongMaxArgument']             = prot.FrmlWrongMaxArgument;
@@ -1179,7 +1600,16 @@
 	prot['FrmlWrongReferences']              = prot.FrmlWrongReferences;
 	prot['InvalidReferenceOrName']           = prot.InvalidReferenceOrName;
 	prot['LockCreateDefName']                = prot.LockCreateDefName;
+	prot['LockedCellPivot']                  = prot.LockedCellPivot;
+	prot['ForceSaveButton']                  = prot.ForceSaveButton;
+	prot['ForceSaveTimeout']                 = prot.ForceSaveTimeout;
+	prot['CannotChangeFormulaArray']         = prot.CannotChangeFormulaArray;
+	prot['MultiCellsInTablesFormulaArray']   = prot.MultiCellsInTablesFormulaArray;
+	prot['MailToClientMissing']				 = prot.MailToClientMissing;
 	prot['OpenWarning']                      = prot.OpenWarning;
+	prot['DataEncrypted']                    = prot.DataEncrypted;
+	prot['NoDataToParse']                    = prot.NoDataToParse;
+	prot['CannotUngroupError']               = prot.CannotUngroupError;
 	window['Asc']['c_oAscAsyncAction']       = window['Asc'].c_oAscAsyncAction = c_oAscAsyncAction;
 	prot                                     = c_oAscAsyncAction;
 	prot['Open']                             = prot.Open;
@@ -1533,6 +1963,7 @@
 	prot['Point']                           = prot.Point;
 	window['Asc']['c_oAscMaxTooltipLength'] = window['Asc'].c_oAscMaxTooltipLength = c_oAscMaxTooltipLength;
 	window['Asc']['c_oAscMaxCellOrCommentLength'] = window['Asc'].c_oAscMaxCellOrCommentLength = c_oAscMaxCellOrCommentLength;
+	window['Asc']['c_oAscMaxHeaderFooterLength']  = window['Asc'].c_oAscMaxHeaderFooterLength  = c_oAscMaxHeaderFooterLength;
 	window['Asc']['c_oAscSelectionType'] = window['Asc'].c_oAscSelectionType = c_oAscSelectionType;
 	prot                                 = c_oAscSelectionType;
 	prot['RangeCells']                   = prot.RangeCells;
@@ -1562,6 +1993,12 @@
 	prot['DeleteColumns']           = prot.DeleteColumns;
 	prot['DeleteRows']              = prot.DeleteRows;
 	prot['DeleteTable']             = prot.DeleteTable;
+
+	window['Asc']['c_oAscPrintType'] = window['Asc'].c_oAscPrintType = c_oAscPrintType;
+	prot = c_oAscPrintType;
+	prot['ActiveSheets'] = prot.ActiveSheets;
+	prot['EntireWorkbook'] = prot.EntireWorkbook;
+	prot['Selection'] = prot.Selection;
 
 	window['Asc']['c_oDashType'] = window['Asc'].c_oDashType = c_oDashType;
 	prot                  = c_oDashType;
@@ -1645,6 +2082,21 @@
 	prot['Top']    = c_oAscMathInterfaceGroupCharPos.Top;
 	prot['Bottom'] = c_oAscMathInterfaceGroupCharPos.Bottom;
 
+	prot = window['Asc']['c_oAscTabLeader'] = window['Asc'].c_oAscTabLeader = c_oAscTabLeader;
+	prot["None"]       = c_oAscTabLeader.None;
+	prot["Heavy"]      = c_oAscTabLeader.Heavy;
+	prot["Dot"]        = c_oAscTabLeader.Dot;
+	prot["Hyphen"]     = c_oAscTabLeader.Hyphen;
+	prot["MiddleDot"]  = c_oAscTabLeader.MiddleDot;
+	prot["Underscore"] = c_oAscTabLeader.Underscore;
+
+	prot = window['Asc']['c_oAscRestrictionType'] = window['Asc'].c_oAscRestrictionType = c_oAscRestrictionType;
+	prot['None']           = c_oAscRestrictionType.None;
+	prot['OnlyForms']      = c_oAscRestrictionType.OnlyForms;
+	prot['OnlyComments']   = c_oAscRestrictionType.OnlyComments;
+	prot['OnlySignatures'] = c_oAscRestrictionType.OnlySignatures;
+	prot['View']           = c_oAscRestrictionType.View;
+
     window['AscCommon']                             = window['AscCommon'] || {};
 	window["AscCommon"].g_cCharDelimiter            = g_cCharDelimiter;
 	window["AscCommon"].g_cGeneralFormat            = g_cGeneralFormat;
@@ -1656,15 +2108,14 @@
 	window["AscCommon"].c_oAscChartDefines          = c_oAscChartDefines;
 	window["AscCommon"].c_oAscStyleImage            = c_oAscStyleImage;
 	window["AscCommon"].c_oAscLineDrawingRule       = c_oAscLineDrawingRule;
-	window["AscCommon"].align_Right                 = align_Right;
-	window["AscCommon"].align_Left                  = align_Left;
-	window["AscCommon"].align_Center                = align_Center;
-	window["AscCommon"].align_Justify               = align_Justify;
 	window["AscCommon"].vertalign_Baseline          = vertalign_Baseline;
 	window["AscCommon"].vertalign_SuperScript       = vertalign_SuperScript;
 	window["AscCommon"].vertalign_SubScript         = vertalign_SubScript;
 	window["AscCommon"].hdrftr_Header               = hdrftr_Header;
 	window["AscCommon"].hdrftr_Footer               = hdrftr_Footer;
+	window["AscCommon"].vaKSize                     = vaKSize;
+	window["AscCommon"].vaKSuper                    = vaKSuper;
+	window["AscCommon"].vaKSub                      = vaKSub;
 	window["AscCommon"].c_oAscSizeRelFromH          = c_oAscSizeRelFromH;
 	window["AscCommon"].c_oAscSizeRelFromV          = c_oAscSizeRelFromV;
 	window["AscCommon"].c_oAscWrapStyle             = c_oAscWrapStyle;
@@ -1684,7 +2135,13 @@
 	window["AscCommon"].c_oNotifyParentType         = c_oNotifyParentType;
 	window["AscCommon"].c_oAscEncodings             = c_oAscEncodings;
 	window["AscCommon"].c_oAscEncodingsMap          = c_oAscEncodingsMap;
+	window["AscCommon"].c_oAscCodePageNone          = c_oAscCodePageNone;
+	window["AscCommon"].c_oAscCodePageUtf7          = c_oAscCodePageUtf7;
 	window["AscCommon"].c_oAscCodePageUtf8          = c_oAscCodePageUtf8;
+	window["AscCommon"].c_oAscCodePageUtf16         = c_oAscCodePageUtf16;
+	window["AscCommon"].c_oAscCodePageUtf16BE       = c_oAscCodePageUtf16BE;
+	window["AscCommon"].c_oAscCodePageUtf32         = c_oAscCodePageUtf32;
+	window["AscCommon"].c_oAscCodePageUtf32BE       = c_oAscCodePageUtf32BE;
 	window["AscCommon"].c_oAscMaxFormulaLength      = c_oAscMaxFormulaLength;
 
 	window["AscCommon"].locktype_None   = locktype_None;
@@ -1693,327 +2150,152 @@
 	window["AscCommon"].locktype_Other2 = locktype_Other2;
 	window["AscCommon"].locktype_Other3 = locktype_Other3;
 
-	window["AscCommon"].changestype_None                     = changestype_None;
-	window["AscCommon"].changestype_Paragraph_Content        = changestype_Paragraph_Content;
-	window["AscCommon"].changestype_Paragraph_Properties     = changestype_Paragraph_Properties;
-	window["AscCommon"].changestype_Document_Content         = changestype_Document_Content;
-	window["AscCommon"].changestype_Document_Content_Add     = changestype_Document_Content_Add;
-	window["AscCommon"].changestype_Document_SectPr          = changestype_Document_SectPr;
-	window["AscCommon"].changestype_Document_Styles          = changestype_Document_Styles;
-	window["AscCommon"].changestype_Table_Properties         = changestype_Table_Properties;
-	window["AscCommon"].changestype_Table_RemoveCells        = changestype_Table_RemoveCells;
-	window["AscCommon"].changestype_Image_Properties         = changestype_Image_Properties;
-	window["AscCommon"].changestype_HdrFtr                   = changestype_HdrFtr;
-	window["AscCommon"].changestype_Remove                   = changestype_Remove;
-	window["AscCommon"].changestype_Delete                   = changestype_Delete;
-	window["AscCommon"].changestype_Drawing_Props            = changestype_Drawing_Props;
-	window["AscCommon"].changestype_ColorScheme              = changestype_ColorScheme;
-	window["AscCommon"].changestype_Text_Props               = changestype_Text_Props;
-	window["AscCommon"].changestype_RemoveSlide              = changestype_RemoveSlide;
-	window["AscCommon"].changestype_Theme                    = changestype_Theme;
-	window["AscCommon"].changestype_SlideSize                = changestype_SlideSize;
-	window["AscCommon"].changestype_SlideBg                  = changestype_SlideBg;
-	window["AscCommon"].changestype_SlideTiming              = changestype_SlideTiming;
-	window["AscCommon"].changestype_MoveComment              = changestype_MoveComment;
-	window["AscCommon"].changestype_AddComment               = changestype_AddComment;
-	window["AscCommon"].changestype_Layout                   = changestype_Layout;
-	window["AscCommon"].changestype_AddShape                 = changestype_AddShape;
-	window["AscCommon"].changestype_AddShapes                = changestype_AddShapes;
-	window["AscCommon"].changestype_2_InlineObjectMove       = changestype_2_InlineObjectMove;
-	window["AscCommon"].changestype_2_HdrFtr                 = changestype_2_HdrFtr;
-	window["AscCommon"].changestype_2_Comment                = changestype_2_Comment;
-	window["AscCommon"].changestype_2_Element_and_Type       = changestype_2_Element_and_Type;
-	window["AscCommon"].changestype_2_ElementsArray_and_Type = changestype_2_ElementsArray_and_Type;
-	window["AscCommon"].changestype_2_AdditionalTypes        = changestype_2_AdditionalTypes;
-	window["AscCommon"].contentchanges_Add                   = contentchanges_Add;
-	window["AscCommon"].contentchanges_Remove                = contentchanges_Remove;
+	window["AscCommon"].changestype_None                      = changestype_None;
+	window["AscCommon"].changestype_Paragraph_Content         = changestype_Paragraph_Content;
+	window["AscCommon"].changestype_Paragraph_Properties      = changestype_Paragraph_Properties;
+	window["AscCommon"].changestype_Paragraph_AddText         = changestype_Paragraph_AddText;
+	window["AscCommon"].changestype_Paragraph_TextProperties  = changestype_Paragraph_TextProperties;
+	window["AscCommon"].changestype_Document_Content          = changestype_Document_Content;
+	window["AscCommon"].changestype_Document_Content_Add      = changestype_Document_Content_Add;
+	window["AscCommon"].changestype_Document_SectPr           = changestype_Document_SectPr;
+	window["AscCommon"].changestype_Document_Styles           = changestype_Document_Styles;
+	window["AscCommon"].changestype_Table_Properties          = changestype_Table_Properties;
+	window["AscCommon"].changestype_Table_RemoveCells         = changestype_Table_RemoveCells;
+	window["AscCommon"].changestype_Image_Properties          = changestype_Image_Properties;
+	window["AscCommon"].changestype_ContentControl_Remove     = changestype_ContentControl_Remove;
+	window["AscCommon"].changestype_ContentControl_Properties = changestype_ContentControl_Properties;
+	window["AscCommon"].changestype_ContentControl_Add        = changestype_ContentControl_Add;
+	window["AscCommon"].changestype_HdrFtr                    = changestype_HdrFtr;
+	window["AscCommon"].changestype_Remove                    = changestype_Remove;
+	window["AscCommon"].changestype_Delete                    = changestype_Delete;
+	window["AscCommon"].changestype_Drawing_Props             = changestype_Drawing_Props;
+	window["AscCommon"].changestype_ColorScheme               = changestype_ColorScheme;
+	window["AscCommon"].changestype_Text_Props                = changestype_Text_Props;
+	window["AscCommon"].changestype_RemoveSlide               = changestype_RemoveSlide;
+	window["AscCommon"].changestype_Theme                     = changestype_Theme;
+	window["AscCommon"].changestype_SlideSize                 = changestype_SlideSize;
+	window["AscCommon"].changestype_SlideBg                   = changestype_SlideBg;
+	window["AscCommon"].changestype_SlideTiming               = changestype_SlideTiming;
+	window["AscCommon"].changestype_MoveComment               = changestype_MoveComment;
+	window["AscCommon"].changestype_AddComment                = changestype_AddComment;
+	window["AscCommon"].changestype_Layout                    = changestype_Layout;
+	window["AscCommon"].changestype_AddShape                  = changestype_AddShape;
+	window["AscCommon"].changestype_AddShapes                 = changestype_AddShapes;
+	window["AscCommon"].changestype_PresDefaultLang           = changestype_PresDefaultLang;
+	window["AscCommon"].changestype_SlideHide                 = changestype_SlideHide;
+	window["AscCommon"].changestype_CorePr                    = changestype_CorePr;
+	window["AscCommon"].changestype_2_InlineObjectMove        = changestype_2_InlineObjectMove;
+	window["AscCommon"].changestype_2_HdrFtr                  = changestype_2_HdrFtr;
+	window["AscCommon"].changestype_2_Comment                 = changestype_2_Comment;
+	window["AscCommon"].changestype_2_Element_and_Type        = changestype_2_Element_and_Type;
+	window["AscCommon"].changestype_2_ElementsArray_and_Type  = changestype_2_ElementsArray_and_Type;
+	window["AscCommon"].changestype_2_AdditionalTypes         = changestype_2_AdditionalTypes;
+	window["AscCommon"].changestype_2_Element_and_Type_Array  = changestype_2_Element_and_Type_Array;
+	window["AscCommon"].contentchanges_Add                    = contentchanges_Add;
+	window["AscCommon"].contentchanges_Remove                 = contentchanges_Remove;
+
+	window["AscCommon"].PUNCTUATION_FLAG_BASE                 = PUNCTUATION_FLAG_BASE;
+	window["AscCommon"].PUNCTUATION_FLAG_CANT_BE_AT_BEGIN     = PUNCTUATION_FLAG_CANT_BE_AT_BEGIN;
+	window["AscCommon"].PUNCTUATION_FLAG_CANT_BE_AT_END       = PUNCTUATION_FLAG_CANT_BE_AT_END;
+	window["AscCommon"].PUNCTUATION_FLAG_EAST_ASIAN           = PUNCTUATION_FLAG_EAST_ASIAN;
+	window["AscCommon"].PUNCTUATION_FLAG_CANT_BE_AT_BEGIN_E   = PUNCTUATION_FLAG_CANT_BE_AT_BEGIN_E;
+	window["AscCommon"].PUNCTUATION_FLAG_CANT_BE_AT_END_E     = PUNCTUATION_FLAG_CANT_BE_AT_END_E;
+	window["AscCommon"].g_aPunctuation                        = g_aPunctuation;
 
 	window["AscCommon"].offlineMode = offlineMode;
+	window["AscCommon"].chartMode = chartMode;
 
-	// ----------------------------- plugins ------------------------------- //
-	var EPluginDataType =
-		{
-			none : "none",
-			text : "text",
-			ole  : "ole",
-			html : "html"
-		};
-
-	window["Asc"]["EPluginDataType"] = window["Asc"].EPluginDataType = EPluginDataType;
-	prot         = EPluginDataType;
-	prot['none'] = prot.none;
-	prot['text'] = prot.text;
-	prot['ole']  = prot.ole;
-	prot['html'] = prot.html;
-
-	function CPluginVariation()
-	{
-		this.description = "";
-		this.url         = "";
-		this.baseUrl     = "";
-		this.index       = 0;     // сверху не выставляем. оттуда в каком порядке пришли - в таком порядке и работают
-
-		this.icons          = ["1x", "2x"];
-		this.isViewer       = false;
-		this.EditorsSupport = ["word", "cell", "slide"];
-
-		this.isVisual     = false;      // визуальный ли
-		this.isModal      = false;      // модальное ли окно (используется только для визуального)
-		this.isInsideMode = false;      // отрисовка не в окне а внутри редактора (в панели) (используется только для визуального немодального)
-
-		this.initDataType = EPluginDataType.none;
-		this.initData     = "";
-
-		this.isUpdateOleOnResize = false;
-
-		this.buttons = [{"text" : "Ok", "primary" : true}, {"text" : "Cancel", "primary" : false}];
-
-		this.size = undefined;
-		this.initOnSelectionChanged = undefined;
-	}
-
-	CPluginVariation.prototype["get_Description"] = function()
-	{
-		return this.description;
-	};
-	CPluginVariation.prototype["set_Description"] = function(value)
-	{
-		this.description = value;
-	};
-	CPluginVariation.prototype["get_Url"]         = function()
-	{
-		return this.url;
-	};
-	CPluginVariation.prototype["set_Url"]         = function(value)
-	{
-		this.url = value;
-	};
-
-	CPluginVariation.prototype["get_Icons"] = function()
-	{
-		return this.icons;
-	};
-	CPluginVariation.prototype["set_Icons"] = function(value)
-	{
-		this.icons = value;
-	};
-
-	CPluginVariation.prototype["get_Viewer"]         = function()
-	{
-		return this.isViewer;
-	};
-	CPluginVariation.prototype["set_Viewer"]         = function(value)
-	{
-		this.isViewer = value;
-	};
-	CPluginVariation.prototype["get_EditorsSupport"] = function()
-	{
-		return this.EditorsSupport;
-	};
-	CPluginVariation.prototype["set_EditorsSupport"] = function(value)
-	{
-		this.EditorsSupport = value;
-	};
+	window['AscCommon']['align_Right'] = window['AscCommon'].align_Right = align_Right;
+	window['AscCommon']['align_Left'] = window['AscCommon'].align_Left = align_Left;
+	window['AscCommon']['align_Center'] = window['AscCommon'].align_Center = align_Center;
+	window['AscCommon']['align_Justify'] = window['AscCommon'].align_Justify = align_Justify;
 
 
-	CPluginVariation.prototype["get_Visual"]     = function()
-	{
-		return this.isVisual;
-	};
-	CPluginVariation.prototype["set_Visual"]     = function(value)
-	{
-		this.isVisual = value;
-	};
-	CPluginVariation.prototype["get_Modal"]      = function()
-	{
-		return this.isModal;
-	};
-	CPluginVariation.prototype["set_Modal"]      = function(value)
-	{
-		this.isModal = value;
-	};
-	CPluginVariation.prototype["get_InsideMode"] = function()
-	{
-		return this.isInsideMode;
-	};
-	CPluginVariation.prototype["set_InsideMode"] = function(value)
-	{
-		this.isInsideMode = value;
-	};
+	window["AscCommon"]["c_oAscFormatPainterState"]    = c_oAscFormatPainterState;
+	c_oAscFormatPainterState["kOff"] = c_oAscFormatPainterState.kOff;
+	c_oAscFormatPainterState["kOn"] = c_oAscFormatPainterState.kOn;
+	c_oAscFormatPainterState["kMultiple"] = c_oAscFormatPainterState.kMultiple;
 
-	CPluginVariation.prototype["get_InitDataType"] = function()
-	{
-		return this.initDataType;
-	};
-	CPluginVariation.prototype["set_InitDataType"] = function(value)
-	{
-		this.initDataType = value;
-	};
-	CPluginVariation.prototype["get_InitData"]     = function()
-	{
-		return this.initData;
-	};
-	CPluginVariation.prototype["set_InitData"]     = function(value)
-	{
-		this.initData = value;
-	};
+	
+	window['Asc']['c_oSpecialPasteProps'] = window['Asc'].c_oSpecialPasteProps = c_oSpecialPasteProps;
+	prot = c_oSpecialPasteProps;
+	prot['paste'] = prot.paste;
+	prot['pasteOnlyFormula'] = prot.pasteOnlyFormula;
+	prot['formulaNumberFormat'] = prot.formulaNumberFormat;
+	prot['formulaAllFormatting'] = prot.formulaAllFormatting;
+	prot['formulaWithoutBorders'] = prot.formulaWithoutBorders;
+	prot['formulaColumnWidth'] = prot.formulaColumnWidth;
+	prot['mergeConditionalFormating'] = prot.mergeConditionalFormating;
+	prot['pasteOnlyValues'] = prot.pasteOnlyValues;
+	prot['valueNumberFormat'] = prot.valueNumberFormat;
+	prot['valueAllFormating'] = prot.valueAllFormating;
+	prot['pasteOnlyFormating'] = prot.pasteOnlyFormating;
+	prot['transpose'] = prot.transpose;
+	prot['link'] = prot.link;
+	prot['picture'] = prot.picture;
+	prot['linkedPicture'] = prot.linkedPicture;
+	prot['sourceformatting'] = prot.sourceformatting;
+	prot['destinationFormatting'] = prot.destinationFormatting;
+	prot['mergeFormatting'] = prot.mergeFormatting;
+	prot['uniteList'] = prot.uniteList;
+	prot['doNotUniteList'] = prot.doNotUniteList;
+	prot['keepTextOnly'] = prot.keepTextOnly;
+	prot['insertAsNestedTable'] = prot.insertAsNestedTable;
+	prot['overwriteCells'] = prot.overwriteCells;
+	prot['useTextImport'] = prot.useTextImport;
 
-	CPluginVariation.prototype["get_UpdateOleOnResize"] = function()
-	{
-		return this.isUpdateOleOnResize;
-	};
-	CPluginVariation.prototype["set_UpdateOleOnResize"] = function(value)
-	{
-		this.isUpdateOleOnResize = value;
-	};
-	CPluginVariation.prototype["get_Buttons"]           = function()
-	{
-		return this.buttons;
-	};
-	CPluginVariation.prototype["set_Buttons"]           = function(value)
-	{
-		this.buttons = value;
-	};
-	CPluginVariation.prototype["get_Size"]           = function()
-	{
-		return this.size;
-	};
-	CPluginVariation.prototype["set_Size"]           = function(value)
-	{
-		this.size = value;
-	};
-	CPluginVariation.prototype["get_InitOnSelectionChanged"]           = function()
-	{
-		return this.initOnSelectionChanged;
-	};
-	CPluginVariation.prototype["set_InitOnSelectionChanged"]           = function(value)
-	{
-		this.initOnSelectionChanged = value;
-	};
+	window['Asc']['c_oAscNumberingFormat'] = window['Asc'].c_oAscNumberingFormat = c_oAscNumberingFormat;
+	prot = c_oAscNumberingFormat;
+	prot['None']        = c_oAscNumberingFormat.None;
+	prot['Bullet']      = c_oAscNumberingFormat.Bullet;
+	prot['Decimal']     = c_oAscNumberingFormat.Decimal;
+	prot['LowerRoman']  = c_oAscNumberingFormat.LowerRoman;
+	prot['UpperRoman']  = c_oAscNumberingFormat.UpperRoman;
+	prot['LowerLetter'] = c_oAscNumberingFormat.LowerLetter;
+	prot['UpperLetter'] = c_oAscNumberingFormat.UpperLetter;
+	prot['DecimalZero'] = c_oAscNumberingFormat.DecimalZero;
 
-	CPluginVariation.prototype["serialize"]   = function()
-	{
-		var _object            = {};
-		_object["description"] = this.description;
-		_object["url"]         = this.url;
-		_object["index"]       = this.index;
+	window['Asc']['c_oAscNumberingSuff'] = window['Asc'].c_oAscNumberingSuff = c_oAscNumberingSuff;
+	prot = c_oAscNumberingSuff;
+	prot['Tab']   = c_oAscNumberingSuff.Tab;
+	prot['Space'] = c_oAscNumberingSuff.Space;
+	prot['None']  = c_oAscNumberingSuff.None;
 
-		_object["icons"]          = this.icons;
-		_object["isViewer"]       = this.isViewer;
-		_object["EditorsSupport"] = this.EditorsSupport;
+	window['Asc']['c_oAscNumberingLvlTextType'] = window['Asc'].c_oAscNumberingLvlTextType = c_oAscNumberingLvlTextType;
+	prot = c_oAscNumberingLvlTextType;
+	prot['Text'] = c_oAscNumberingLvlTextType.Text;
+	prot['Num']  = c_oAscNumberingLvlTextType.Num;
 
-		_object["isVisual"]     = this.isVisual;
-		_object["isModal"]      = this.isModal;
-		_object["isInsideMode"] = this.isInsideMode;
+	prot = window['Asc']['c_oAscSdtAppearance'] = window['Asc'].c_oAscSdtAppearance = c_oAscSdtAppearance;
+	prot['Frame']  = c_oAscSdtAppearance.Frame;
+	prot['Hidden'] = c_oAscSdtAppearance.Hidden;
 
-		_object["initDataType"] = this.initDataType;
-		_object["initData"]     = this.initData;
 
-		_object["isUpdateOleOnResize"] = this.isUpdateOleOnResize;
+	prot = window['Asc']['c_oAscObjectsAlignType'] = window['Asc'].c_oAscObjectsAlignType = c_oAscObjectsAlignType;
+	prot['Selected'] = c_oAscObjectsAlignType.Selected;
+	prot['Slide'] = c_oAscObjectsAlignType.Slide;
+	prot['Page'] = c_oAscObjectsAlignType.Page;
+	prot['Margin'] = c_oAscObjectsAlignType.Margin;
 
-		_object["buttons"] = this.buttons;
+	prot = window['Asc']['c_oAscItemType'] = window['Asc'].c_oAscItemType = c_oAscItemType;
+	prot['Data'] = prot.Data;
+	prot['Default'] = prot.Default;
+	prot['Sum'] = prot.Sum;
+	prot['CountA'] = prot.CountA;
+	prot['Avg'] = prot.Avg;
+	prot['Max'] = prot.Max;
+	prot['Min'] = prot.Min;
+	prot['Product'] = prot.Product;
+	prot['Count'] = prot.Count;
+	prot['StdDev'] = prot.StdDev;
+	prot['StdDevP'] = prot.StdDevP;
+	prot['Var'] = prot.Var;
+	prot['VarP'] = prot.VarP;
+	prot['Grand'] = prot.Grand;
+	prot['Blank'] = prot.Blank;
 
-		_object["size"] = this.size;
-		_object["initOnSelectionChanged"] = this.initOnSelectionChanged;
-
-		return _object;
-	};
-	CPluginVariation.prototype["deserialize"] = function(_object)
-	{
-		this.description = (_object["description"] != null) ? _object["description"] : this.description;
-		this.url         = (_object["url"] != null) ? _object["url"] : this.url;
-		this.index       = (_object["index"] != null) ? _object["index"] : this.index;
-
-		this.icons          = (_object["icons"] != null) ? _object["icons"] : this.icons;
-		this.isViewer       = (_object["isViewer"] != null) ? _object["isViewer"] : this.isViewer;
-		this.EditorsSupport = (_object["EditorsSupport"] != null) ? _object["EditorsSupport"] : this.EditorsSupport;
-
-		this.isVisual     = (_object["isVisual"] != null) ? _object["isVisual"] : this.isVisual;
-		this.isModal      = (_object["isModal"] != null) ? _object["isModal"] : this.isModal;
-		this.isInsideMode = (_object["isInsideMode"] != null) ? _object["isInsideMode"] : this.isInsideMode;
-
-		this.initDataType = (_object["initDataType"] != null) ? _object["initDataType"] : this.initDataType;
-		this.initData     = (_object["initData"] != null) ? _object["initData"] : this.initData;
-
-		this.isUpdateOleOnResize = (_object["isUpdateOleOnResize"] != null) ? _object["isUpdateOleOnResize"] : this.isUpdateOleOnResize;
-
-		this.buttons = (_object["buttons"] != null) ? _object["buttons"] : this.buttons;
-
-		this.size = (_object["size"] != null) ? _object["size"] : this.size;
-		this.initOnSelectionChanged = (_object["initOnSelectionChanged"] != null) ? _object["initOnSelectionChanged"] : this.initOnSelectionChanged;
-	};
-
-	function CPlugin()
-	{
-		this.name    = "";
-		this.guid    = "";
-		this.baseUrl = "";
-
-		this.variations = [];
-	}
-
-	CPlugin.prototype["get_Name"]    = function()
-	{
-		return this.name;
-	};
-	CPlugin.prototype["set_Name"]    = function(value)
-	{
-		this.name = value;
-	};
-	CPlugin.prototype["get_Guid"]    = function()
-	{
-		return this.guid;
-	};
-	CPlugin.prototype["set_Guid"]    = function(value)
-	{
-		this.guid = value;
-	};
-	CPlugin.prototype["get_BaseUrl"] = function()
-	{
-		return this.baseUrl;
-	};
-	CPlugin.prototype["set_BaseUrl"] = function(value)
-	{
-		this.baseUrl = value;
-	};
-
-	CPlugin.prototype["get_Variations"] = function()
-	{
-		return this.variations;
-	};
-	CPlugin.prototype["set_Variations"] = function(value)
-	{
-		this.variations = value;
-	};
-
-	CPlugin.prototype["serialize"]   = function()
-	{
-		var _object           = {};
-		_object["name"]       = this.name;
-		_object["guid"]       = this.guid;
-		_object["baseUrl"]    = this.baseUrl;
-		_object["variations"] = [];
-		for (var i = 0; i < this.variations.length; i++)
-		{
-			_object["variations"].push(this.variations[i].serialize());
-		}
-		return _object;
-	};
-	CPlugin.prototype["deserialize"] = function(_object)
-	{
-		this.name       = (_object["name"] != null) ? _object["name"] : this.name;
-		this.guid       = (_object["guid"] != null) ? _object["guid"] : this.guid;
-		this.baseUrl    = (_object["baseUrl"] != null) ? _object["baseUrl"] : this.baseUrl;
-		this.variations = [];
-		for (var i = 0; i < _object["variations"].length; i++)
-		{
-			var _variation = new CPluginVariation();
-			_variation["deserialize"](_object["variations"][i]);
-			this.variations.push(_variation);
-		}
-	};
-
-	window["Asc"]["CPluginVariation"] = window["Asc"].CPluginVariation = CPluginVariation;
-	window["Asc"]["CPlugin"] = window["Asc"].CPlugin = CPlugin;
-	// --------------------------------------------------------------------- //
+	prot = window['Asc']['c_oAscRevisionsMove'] = window['Asc'].c_oAscRevisionsMove = c_oAscRevisionsMove;
+	prot['NoMove']   = c_oAscRevisionsMove.NoMove;
+	prot['MoveTo']   = c_oAscRevisionsMove.MoveTo;
+	prot['MoveFrom'] = c_oAscRevisionsMove.MoveFrom;
 })(window);

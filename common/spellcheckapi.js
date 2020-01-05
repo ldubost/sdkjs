@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2019
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -12,8 +12,8 @@
  * warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR  PURPOSE. For
  * details, see the GNU AGPL at: http://www.gnu.org/licenses/agpl-3.0.html
  *
- * You can contact Ascensio System SIA at Lubanas st. 125a-25, Riga, Latvia,
- * EU, LV-1021.
+ * You can contact Ascensio System SIA at 20A-12 Ernesta Birznieka-Upisha
+ * street, Riga, Latvia, EU, LV-1050.
  *
  * The  interactive user interfaces in modified source and object code versions
  * of the Program must display Appropriate Legal Notices, as required under
@@ -32,229 +32,267 @@
 
 "use strict";
 
-(function(window) {
-  'use strict';
+(function (window) {
+	'use strict';
 
-  // Класс надстройка, для online и offline работы
-  var CSpellCheckApi = function(options) {
-    this._SpellCheckApi = new SpellCheckApi();
-    this._onlineWork = false;
+	// Класс надстройка, для online и offline работы
+	var CSpellCheckApi = function () {
+		this._SpellCheckApi = new SpellCheckApi();
+		this._onlineWork = false;
 
-    if (options) {
-      this.onDisconnect = options.onDisconnect;
-      this.onSpellCheck = options.onSpellCheck;
-    }
-  };
+		this.onDisconnect = null;
+		this.onSpellCheck = null;
+	};
 
-  CSpellCheckApi.prototype.init = function(docid) {
-    if (this._SpellCheckApi && this._SpellCheckApi.isRightURL()) {
-      var t = this;
-      this._SpellCheckApi.onDisconnect = function(e, isDisconnectAtAll, isCloseCoAuthoring) {
-        t.callback_OnDisconnect(e, isDisconnectAtAll, isCloseCoAuthoring);
-      };
-      this._SpellCheckApi.onSpellCheck = function(e) {
-        t.callback_OnSpellCheck(e);
-      };
+	CSpellCheckApi.prototype.init = function (docid) {
+		if (this._SpellCheckApi && this._SpellCheckApi.isRightURL()) {
+			var t = this;
+			this._SpellCheckApi.onDisconnect = function (e, isDisconnectAtAll, isCloseCoAuthoring) {
+				t.callback_OnDisconnect(e, isDisconnectAtAll, isCloseCoAuthoring);
+			};
+			this._SpellCheckApi.onSpellCheck = function (e) {
+				t.callback_OnSpellCheck(e);
+			};
+			this._SpellCheckApi.onInit = function (e) {
+				t.callback_OnInit(e);
+			};
 
-      this._SpellCheckApi.init(docid);
-      this._onlineWork = true;
-    }
-  };
+			this._SpellCheckApi.init(docid);
+			this._onlineWork = true;
+		}
+	};
 
-  CSpellCheckApi.prototype.set_url = function(url) {
-    if (this._SpellCheckApi) {
-      this._SpellCheckApi.set_url(url);
-    }
-  };
+	CSpellCheckApi.prototype.set_url = function (url) {
+		if (this._SpellCheckApi) {
+			this._SpellCheckApi.set_url(url);
+		}
+	};
 
-  CSpellCheckApi.prototype.get_state = function() {
-    if (this._SpellCheckApi) {
-      return this._SpellCheckApi.get_state();
-    }
+	CSpellCheckApi.prototype.get_state = function () {
+		if (this._SpellCheckApi) {
+			return this._SpellCheckApi.get_state();
+		}
 
-    return 0;
-  };
+		return 0;
+	};
 
-  CSpellCheckApi.prototype.disconnect = function() {
-    if (this._SpellCheckApi && this._onlineWork) {
-      this._SpellCheckApi.disconnect();
-    }
-  };
+	CSpellCheckApi.prototype.disconnect = function () {
+		if (this._SpellCheckApi && this._onlineWork) {
+			this._SpellCheckApi.disconnect();
+		}
+	};
 
-  CSpellCheckApi.prototype.spellCheck = function(spellCheckData) {
-    if (this._SpellCheckApi && this._onlineWork) {
-      this._SpellCheckApi.spellCheck(spellCheckData);
-    }
-  };
+	CSpellCheckApi.prototype.spellCheck = function (spellCheckData) {
+		if (this._SpellCheckApi && this._onlineWork) {
+			this._SpellCheckApi.spellCheck(spellCheckData);
+		}
+	};
 
-  CSpellCheckApi.prototype.callback_OnSpellCheck = function(e) {
-    if (this.onSpellCheck) {
-      return this.onSpellCheck(e);
-    }
-  };
+	CSpellCheckApi.prototype.checkDictionary = function (lang) {
+		if (this._SpellCheckApi && this._onlineWork) {
+			return this._SpellCheckApi.checkDictionary(lang);
+		}
+		return true;
+	};
 
-  /**
-   * Event об отсоединении от сервера
-   * @param {jQuery} e  event об отсоединении с причиной
-   * @param {Bool} isDisconnectAtAll  окончательно ли отсоединяемся(true) или будем пробовать сделать reconnect(false) + сами отключились
-   */
-  CSpellCheckApi.prototype.callback_OnDisconnect = function(e, isDisconnectAtAll, isCloseCoAuthoring) {
-    if (this.onDisconnect) {
-      return this.onDisconnect(e, isDisconnectAtAll, isCloseCoAuthoring);
-    }
-  };
+	CSpellCheckApi.prototype.callback_OnSpellCheck = function (e) {
+		if (this.onSpellCheck) {
+			return this.onSpellCheck(e);
+		}
+	};
+	CSpellCheckApi.prototype.callback_OnInit = function (e) {
+		if (this.onInit) {
+			return this.onInit(e);
+		}
+	};
 
-  /** States
-   * -1 - reconnect state
-   *  0 - not initialized
-   *  1 - opened
-   *  3 - closed
-   */
-  var SpellCheckApi = function(options) {
-    if (options) {
-      this.onDisconnect = options.onDisconnect;
-      this.onConnect = options.onConnect;
-      this.onSpellCheck = options.onSpellCheck;
-    }
-    this._state = 0;
-    // Мы сами отключились от совместного редактирования
-    this.isCloseCoAuthoring = false;
+	/**
+	 * Event об отсоединении от сервера
+	 * @param {jQuery} e  event об отсоединении с причиной
+	 * @param {Bool} isDisconnectAtAll  окончательно ли отсоединяемся(true) или будем пробовать сделать reconnect(false) + сами отключились
+	 */
+	CSpellCheckApi.prototype.callback_OnDisconnect = function (e, isDisconnectAtAll, isCloseCoAuthoring) {
+		if (this.onDisconnect) {
+			return this.onDisconnect(e, isDisconnectAtAll, isCloseCoAuthoring);
+		}
+	};
 
-    // Массив данных, который стоит отправить как только подключимся
-    this.dataNeedSend = [];
+	/** States
+	 * -1 - reconnect state
+	 *  0 - not initialized
+	 *  1 - opened
+	 *  3 - closed
+	 */
+	var SpellCheckApi = function () {
+		this.onDisconnect = null;
+		this.onConnect = null;
+		this.onSpellCheck = null;
+		this.onInit = null;
 
-    this._url = "";
-  };
+		this._state = 0;
+		// Мы сами отключились от совместного редактирования
+		this.isCloseCoAuthoring = false;
+		this.isInit = false;
 
-  SpellCheckApi.prototype.isRightURL = function() {
-    return ("" != this._url);
-  };
+		this.languages = null;
 
-  SpellCheckApi.prototype.set_url = function(url) {
-    this._url = url;
-  };
+		// Массив данных, который стоит отправить как только подключимся
+		this.dataNeedSend = [];
 
-  SpellCheckApi.prototype.get_state = function() {
-    return this._state;
-  };
+		this._url = "";
+	};
 
-  SpellCheckApi.prototype.spellCheck = function(spellCheckData) {
-    this._send({"type": "spellCheck", "spellCheckData": spellCheckData});
-  };
+	SpellCheckApi.prototype.isRightURL = function () {
+		return ("" !== this._url);
+	};
 
-  SpellCheckApi.prototype.disconnect = function() {
-    // Отключаемся сами
-    this.isCloseCoAuthoring = true;
-    return this.sockjs.close();
-  };
+	SpellCheckApi.prototype.set_url = function (url) {
+		this._url = url;
+	};
 
-  SpellCheckApi.prototype._send = function(data) {
-    if (data !== null && typeof data === "object") {
-      if (this._state > 0) {
-        this.sockjs.send(JSON.stringify(data));
-      } else {
-        this.dataNeedSend.push(data);
-      }
-    }
-  };
+	SpellCheckApi.prototype.get_state = function () {
+		return this._state;
+	};
 
-  SpellCheckApi.prototype._sendAfterConnect = function() {
-    var data;
-    while (this._state > 0 && undefined !== (data = this.dataNeedSend.shift()))
-      this._send(data);
-  };
+	SpellCheckApi.prototype.spellCheck = function (spellCheckData) {
+		this._send({"type": "spellCheck", "spellCheckData": spellCheckData});
+	};
 
-  SpellCheckApi.prototype._onSpellCheck = function(data) {
-    if (undefined !== data["spellCheckData"] && this.onSpellCheck) {
-      this.onSpellCheck(data["spellCheckData"]);
-    }
-  };
+	SpellCheckApi.prototype.checkDictionary = function (lang) {
+		// Check init. May arrive earlier than initialization
+		return !this.isInit || !!this.languages[lang];
+	};
 
-  var reconnectTimeout, attemptCount = 0;
+	SpellCheckApi.prototype.disconnect = function () {
+		// Отключаемся сами
+		this.isCloseCoAuthoring = true;
+		return this.sockjs.close();
+	};
 
-  function initSocksJs(url, docsCoApi) {
-	//ограничиваем transports WebSocket и XHR / JSONP polling, как и engine.io https://github.com/socketio/engine.io
-    //при переборе streaming transports у клиента с wirewall происходило зацикливание(не повторялось в версии sock.js 0.3.4)
-    var sockjs = new (_getSockJs())(url, null, {transports: ['websocket', 'xdr-polling', 'xhr-polling', 'iframe-xhr-polling', 'jsonp-polling']});
+	SpellCheckApi.prototype._send = function (data) {
+		if (data !== null && typeof data === "object") {
+			if (this._state > 0) {
+				this.sockjs.send(JSON.stringify(data));
+			} else {
+				this.dataNeedSend.push(data);
+			}
+		}
+	};
 
-    sockjs.onopen = function() {
-      if (reconnectTimeout) {
-        clearTimeout(reconnectTimeout);
-        attemptCount = 0;
-      }
-      docsCoApi._state = 1; // Opened state
-      if (docsCoApi.onConnect) {
-        docsCoApi.onConnect();
-      }
+	SpellCheckApi.prototype._sendAfterConnect = function () {
+		var data;
+		while (this._state > 0 && undefined !== (data = this.dataNeedSend.shift()))
+			this._send(data);
+	};
 
-      // Отправляем все данные, которые пришли до соединения с сервером
-      docsCoApi._sendAfterConnect();
-    };
+	SpellCheckApi.prototype._onSpellCheck = function (data) {
+		if (data["spellCheckData"] && this.onSpellCheck) {
+			this.onSpellCheck(data["spellCheckData"]);
+		}
+	};
+	SpellCheckApi.prototype._onInit = function (data) {
+		if (!this.isInit && data["languages"]) {
+			if (this.onInit) {
+				this.onInit(data["languages"]);
+			}
+			this.languages = data["languages"].reduce(function(map, value) {
+				map[value] = 1;
+				return map;
+			}, {});
+			this.isInit = true;
+		}
+	};
 
-    sockjs.onmessage = function(e) {
-      //TODO: add checks and error handling
-      //Get data type
-      var dataObject = JSON.parse(e.data);
-      var type = dataObject.type;
-      switch (type) {
-        case 'spellCheck'  :
-          docsCoApi._onSpellCheck(dataObject);
-          break;
-      }
-    };
-    sockjs.onclose = function(evt) {
-      docsCoApi._state = -1; // Reconnect state
-      var bIsDisconnectAtAll = attemptCount >= 20 || docsCoApi.isCloseCoAuthoring;
-      if (bIsDisconnectAtAll) {
-        docsCoApi._state = 3;
-      } // Closed state
-      if (docsCoApi.onDisconnect) {
-        docsCoApi.onDisconnect(evt.reason, bIsDisconnectAtAll, docsCoApi.isCloseCoAuthoring);
-      }
-      if (docsCoApi.isCloseCoAuthoring) {
-        return;
-      }
-      //Try reconect
-      if (attemptCount < 20) {
-        tryReconnect();
-      }
-    };
+	var reconnectTimeout, attemptCount = 0;
 
-    function tryReconnect() {
-      if (reconnectTimeout) {
-        clearTimeout(reconnectTimeout);
-      }
-      attemptCount++;
-      reconnectTimeout = setTimeout(function() {
-        delete docsCoApi.sockjs;
-        docsCoApi.sockjs = initSocksJs(url, docsCoApi);
-      }, 500 * attemptCount);
+	function initSocksJs(url, docsCoApi) {
+		if (window['IS_NATIVE_EDITOR']) {
+			return;
+		}
 
-    }
+		//ограничиваем transports WebSocket и XHR / JSONP polling, как и engine.io https://github.com/socketio/engine.io
+		//при переборе streaming transports у клиента с wirewall происходило зацикливание(не повторялось в версии sock.js 0.3.4)
+		var sockjs = new (AscCommon.getSockJs())(url, null,
+			{'transports': ['websocket', 'xdr-polling', 'xhr-polling', 'iframe-xhr-polling', 'jsonp-polling']});
 
-    return sockjs;
-  }
+		sockjs.onopen = function () {
+			if (reconnectTimeout) {
+				clearTimeout(reconnectTimeout);
+				attemptCount = 0;
+			}
+			docsCoApi._state = 1; // Opened state
+			if (docsCoApi.onConnect) {
+				docsCoApi.onConnect();
+			}
 
-  function _getSockJs() {
-    return window['SockJS'] ? window['SockJS'] : require('sockjs');
-  }
+			// Отправляем все данные, которые пришли до соединения с сервером
+			docsCoApi._sendAfterConnect();
+		};
 
-  SpellCheckApi.prototype.init = function(docid) {
-    this._docid = docid;
-    var re = /^https?:\/\//;
-    var spellcheckUrl = this._url + '/doc/' + docid + '/c'
+		sockjs.onmessage = function (e) {
+			//TODO: add checks and error handling
+			//Get data type
+			var dataObject = JSON.parse(e.data);
+			var type = dataObject.type;
+			switch (type) {
+				case 'spellCheck'  :
+					docsCoApi._onSpellCheck(dataObject);
+					break;
+				case 'init':
+					docsCoApi._onInit(dataObject);
+					break;
+			}
+		};
+		sockjs.onclose = function (evt) {
+			docsCoApi._state = -1; // Reconnect state
+			var bIsDisconnectAtAll = attemptCount >= 20 || docsCoApi.isCloseCoAuthoring;
+			if (bIsDisconnectAtAll) {
+				docsCoApi._state = 3;
+			} // Closed state
+			if (docsCoApi.onDisconnect) {
+				docsCoApi.onDisconnect(evt.reason, bIsDisconnectAtAll, docsCoApi.isCloseCoAuthoring);
+			}
+			if (docsCoApi.isCloseCoAuthoring) {
+				return;
+			}
+			//Try reconect
+			if (attemptCount < 20) {
+				tryReconnect();
+			}
+		};
 
-    if(re.test(this._url))
-      this.sockjs_url = spellcheckUrl;
-    else
-      this.sockjs_url = AscCommon.getBaseUrl() + "../../../.." + spellcheckUrl;
+		function tryReconnect() {
+			if (reconnectTimeout) {
+				clearTimeout(reconnectTimeout);
+			}
+			attemptCount++;
+			reconnectTimeout = setTimeout(function () {
+				delete docsCoApi.sockjs;
+				docsCoApi.sockjs = initSocksJs(url, docsCoApi);
+			}, 500 * attemptCount);
 
-    //Begin send auth
-    this.sockjs = initSocksJs(this.sockjs_url, this);
-  };
+		}
 
-  //-----------------------------------------------------------export---------------------------------------------------
-  window['AscCommon'] = window['AscCommon'] || {};
-  window["AscCommon"].CSpellCheckApi = CSpellCheckApi;
+		return sockjs;
+	}
+
+	SpellCheckApi.prototype.init = function (docid) {
+		this._docid = docid;
+		var re = /^https?:\/\//;
+		var spellcheckUrl = this._url + '/doc/' + docid + '/c';
+
+		if (re.test(this._url)) {
+			this.sockjs_url = spellcheckUrl;
+		} else {
+			this.sockjs_url = AscCommon.getBaseUrl() + "../../../.." + spellcheckUrl;
+		}
+
+		//Begin send auth
+		this.sockjs = initSocksJs(this.sockjs_url, this);
+	};
+
+	//-----------------------------------------------------------export---------------------------------------------------
+	window['AscCommon'] = window['AscCommon'] || {};
+	window["AscCommon"].CSpellCheckApi = CSpellCheckApi;
 })(window);
 

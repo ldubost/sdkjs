@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2019
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -12,8 +12,8 @@
  * warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR  PURPOSE. For
  * details, see the GNU AGPL at: http://www.gnu.org/licenses/agpl-3.0.html
  *
- * You can contact Ascensio System SIA at Lubanas st. 125a-25, Riga, Latvia,
- * EU, LV-1021.
+ * You can contact Ascensio System SIA at 20A-12 Ernesta Birznieka-Upisha
+ * street, Riga, Latvia, EU, LV-1050.
  *
  * The  interactive user interfaces in modified source and object code versions
  * of the Program must display Appropriate Legal Notices, as required under
@@ -39,12 +39,15 @@
 
 function MoveShapeImageTrack(originalObject)
 {
+    this.bIsTracked = false;
     this.originalObject = originalObject;
     this.transform = new CMatrix();
     this.x = null;
     this.y = null;
     this.pageIndex = null;
     this.originalShape = originalObject;
+    this.lastDx = 0;
+    this.lastDy = 0;
 
     if(!originalObject.isChart())
     {
@@ -65,7 +68,15 @@ function MoveShapeImageTrack(originalObject)
         this.brush = pen_brush.brush;
         this.pen = pen_brush.pen;
     }
-    this.overlayObject = new AscFormat.OverlayObject(!(this.originalObject.getObjectType() === AscDFH.historyitem_type_ChartSpace)&& this.originalObject.spPr && this.originalObject.spPr.geometry, this.originalObject.extX, this.originalObject.extY, this.brush, this.pen, this.transform);
+    if(this.originalObject.cropObject && this.brush)
+    {
+        this.brush = this.brush.createDuplicate();
+    }
+    if(this.originalObject.cropObject)
+    {
+        this.cropObject = this.originalObject.cropObject;
+    }
+    this.overlayObject = new AscFormat.OverlayObject(originalObject.getGeom(), this.originalObject.extX, this.originalObject.extY, this.brush, this.pen, this.transform);
 
     this.groupInvertMatrix = null;
     if(this.originalObject.group)
@@ -75,13 +86,11 @@ function MoveShapeImageTrack(originalObject)
         this.groupInvertMatrix.ty = 0;
     }
 
-    this.getOriginalBoundsRect = function()
-    {
-        return this.originalObject.getRectBounds();
-    };
-
     this.track = function(dx, dy, pageIndex)
     {
+        this.bIsTracked = true;
+        this.lastDx = dx;
+        this.lastDy = dy;
         var original = this.originalObject;
         var dx2, dy2;
         if(this.groupInvertMatrix)
@@ -114,6 +123,18 @@ function MoveShapeImageTrack(originalObject)
         }
         if(AscFormat.isRealNumber(pageIndex))
             this.pageIndex = pageIndex;
+
+
+
+        if(this.originalObject.cropObject)
+        {
+
+            var oShapeDrawer = new AscCommon.CShapeDrawer();
+            oShapeDrawer.bIsCheckBounds = true;
+            oShapeDrawer.Graphics = new AscFormat.CSlideBoundsChecker();
+            this.originalObject.check_bounds(oShapeDrawer);
+            this.brush.fill.srcRect = AscFormat.CalculateSrcRect(this.transform, oShapeDrawer, global_MatrixTransformer.Invert(this.originalObject.cropObject.transform), this.originalObject.cropObject.extX, this.originalObject.cropObject.extY);
+        }
     };
 
     this.draw = function(overlay)
@@ -122,18 +143,133 @@ function MoveShapeImageTrack(originalObject)
         {
             overlay.SetCurrentPage(this.pageIndex);
         }
+        if(this.originalObject.isCrop)
+        {
+            var dOldAlpha = null;
+            var oGraphics = overlay.Graphics ? overlay.Graphics : overlay;
+            if(AscFormat.isRealNumber(oGraphics.globalAlpha) && oGraphics.put_GlobalAlpha)
+            {
+                dOldAlpha = oGraphics.globalAlpha;
+                oGraphics.put_GlobalAlpha(false, 1);
+            }
+            this.overlayObject.draw(overlay);
+            var oldFill = this.brush.fill;
+            this.brush.fill = this.originalObject.cropBrush.fill;
+            this.overlayObject.shapeDrawer.Clear();
+            this.overlayObject.draw(overlay);
+            this.brush.fill = oldFill;
+            var oldSrcRect, oldPen;
+            var parentCrop = this.originalObject.parentCrop;
+
+
+            var oShapeDrawer = new AscCommon.CShapeDrawer();
+            oShapeDrawer.bIsCheckBounds = true;
+            oShapeDrawer.Graphics = new AscFormat.CSlideBoundsChecker();
+            parentCrop.check_bounds(oShapeDrawer);
+            var srcRect = AscFormat.CalculateSrcRect(parentCrop.transform, oShapeDrawer, global_MatrixTransformer.Invert(this.transform), this.originalObject.extX, this.originalObject.extY);
+            oldPen = this.originalObject.parentCrop.pen;
+            this.originalObject.parentCrop.pen = AscFormat.CreatePenBrushForChartTrack().pen;
+            if(this.originalObject.parentCrop.blipFill)
+            {
+                oldSrcRect = this.originalObject.parentCrop.blipFill.srcRect;
+                this.originalObject.parentCrop.blipFill.srcRect = srcRect;
+                this.originalObject.parentCrop.draw(overlay);
+                this.originalObject.parentCrop.blipFill.srcRect = oldSrcRect;
+            }
+            else
+            {
+                oldSrcRect = this.originalObject.parentCrop.brush.fill.srcRect;
+                this.originalObject.parentCrop.brush.fill.srcRect = srcRect;
+                this.originalObject.parentCrop.draw(overlay);
+                this.originalObject.parentCrop.brush.fill.srcRect = oldSrcRect;
+            }
+            this.originalObject.parentCrop.pen = oldPen;
+            if(AscFormat.isRealNumber(dOldAlpha) && oGraphics.put_GlobalAlpha)
+            {
+                oGraphics.put_GlobalAlpha(true, dOldAlpha);
+            }
+            return;
+        }
+        if(this.originalObject.cropObject)
+        {
+            var dOldAlpha = null;
+            var oGraphics = overlay.Graphics ? overlay.Graphics : overlay;
+            if(AscFormat.isRealNumber(oGraphics.globalAlpha) && oGraphics.put_GlobalAlpha)
+            {
+                dOldAlpha = oGraphics.globalAlpha;
+                oGraphics.put_GlobalAlpha(false, 1);
+            }
+            this.originalObject.cropObject.draw(overlay);
+            var oldCropObj = this.originalObject.cropObject;
+            var oldSrcRect, oldTransform, oldPen;
+            var parentCrop = this.originalObject;
+            oldTransform = parentCrop.transform;
+            parentCrop.transform = this.transform;
+            var oShapeDrawer = new AscCommon.CShapeDrawer();
+            oShapeDrawer.bIsCheckBounds = true;
+            oShapeDrawer.Graphics = new AscFormat.CSlideBoundsChecker();
+            parentCrop.check_bounds(oShapeDrawer);
+            var srcRect = AscFormat.CalculateSrcRect(this.transform, oShapeDrawer, global_MatrixTransformer.Invert(oldCropObj.transform), oldCropObj.extX, oldCropObj.extY);
+
+            oldPen = this.originalObject.pen;
+            this.originalObject.pen = AscFormat.CreatePenBrushForChartTrack().pen;
+            if(this.originalObject.blipFill)
+            {
+                oldSrcRect = this.originalObject.blipFill.srcRect;
+                this.originalObject.blipFill.srcRect = srcRect;
+                this.originalObject.draw(overlay);
+                this.originalObject.blipFill.srcRect = oldSrcRect;
+            }
+            else
+            {
+                oldSrcRect = this.originalObject.brush.fill.srcRect;
+                this.originalObject.brush.fill.srcRect = srcRect;
+                this.originalObject.draw(overlay);
+                this.originalObject.brush.fill.srcRect = oldSrcRect;
+            }
+            this.originalObject.pen = oldPen;
+            parentCrop.transform = oldTransform;
+            if(AscFormat.isRealNumber(dOldAlpha) && oGraphics.put_GlobalAlpha)
+            {
+                oGraphics.put_GlobalAlpha(true, dOldAlpha);
+            }
+            return;
+        }
         this.overlayObject.draw(overlay);
     };
 
-    this.trackEnd = function(bWord)
+    this.trackEnd = function(bWord, bNoResetCnx)
     {
+        if(!this.bIsTracked)
+        {
+            return;
+        }
         if(bWord)
         {
             if(this.originalObject.selectStartPage !== this.pageIndex)
                 this.originalObject.selectStartPage = this.pageIndex;
         }
         var scale_coefficients, ch_off_x, ch_off_y;
-        AscFormat.CheckSpPrXfrm(this.originalObject);
+        if(this.originalObject.isCrop)
+        {
+            AscFormat.ExecuteNoHistory(
+                function () {
+                    AscFormat.CheckSpPrXfrm(this.originalObject);
+                },
+                this, []
+            );
+        }
+        else
+        {
+            if(!this.originalObject.group)
+            {
+                AscFormat.CheckSpPrXfrm3(this.originalObject, true);
+            }
+            else
+            {
+                AscFormat.CheckSpPrXfrm(this.originalObject, true);
+            }
+        }
         if(this.originalObject.group)
         {
             scale_coefficients = this.originalObject.group.getResultScaleCoefficients();
@@ -142,23 +278,123 @@ function MoveShapeImageTrack(originalObject)
         }
         else
         {
-            if(bWord)
+            if(bWord && !this.originalObject.isCrop)
             {
                 if(this.originalObject.spPr.xfrm.offX === 0 && this.originalObject.spPr.xfrm.offY === 0)
+                {
+                    if(this.originalObject.cropObject)
+                    {
+                        this.originalObject.transform = this.transform;
+                        this.originalObject.invertTransform = AscCommon.global_MatrixTransformer.Invert(this.transform);
+                        this.originalObject.calculateSrcRect();
+                    }
                     return;
+                }
             }
             scale_coefficients = {cx: 1, cy: 1};
             ch_off_x = 0;
             ch_off_y = 0;
-            if(bWord)
+            if(bWord && !this.originalObject.isCrop)
             {
                 this.x = 0;
                 this.y = 0;
             }
         }
-        this.originalObject.spPr.xfrm.setOffX(this.x/scale_coefficients.cx + ch_off_x);
-        this.originalObject.spPr.xfrm.setOffY(this.y/scale_coefficients.cy + ch_off_y);
-        this.originalObject.checkDrawingBaseCoords();
+        var _xfrm = this.originalObject.spPr.xfrm;
+        var _x = _xfrm.offX;
+        var _y = _xfrm.offY;
+        if(this.originalObject.isCrop)
+        {
+            AscFormat.ExecuteNoHistory(
+                function () {
+                    this.originalObject.spPr.xfrm.setOffX(this.x/scale_coefficients.cx + ch_off_x);
+                    this.originalObject.spPr.xfrm.setOffY(this.y/scale_coefficients.cy + ch_off_y);
+                },
+                this, []
+            );
+        }
+        else
+        {
+            this.originalObject.spPr.xfrm.setOffX(this.x/scale_coefficients.cx + ch_off_x);
+            this.originalObject.spPr.xfrm.setOffY(this.y/scale_coefficients.cy + ch_off_y);
+        }
+
+        if(this.originalObject.getObjectType() === AscDFH.historyitem_type_Cnx){
+            if(!AscFormat.fApproxEqual(_x, _xfrm.offX) || !AscFormat.fApproxEqual(_y, _xfrm.offY)){
+                var nvUniSpPr = this.originalObject.nvSpPr.nvUniSpPr;
+
+                var bResetBegin = false, bResetEnd = false;
+                var oBeginShape = AscCommon.g_oTableId.Get_ById(nvUniSpPr.stCnxId);
+                var oEndShape = AscCommon.g_oTableId.Get_ById(nvUniSpPr.endCnxId);
+                if(oBeginShape){
+                    if(oBeginShape.bDeleted){
+                        bResetBegin = true;
+                    }
+                    else{
+                        if(!oBeginShape.selected){
+                            bResetBegin = true;
+                        }
+                    }
+                }
+                if(oEndShape){
+                    if(oEndShape.bDeleted){
+                        bResetEnd = true;
+                    }
+                    else{
+                        if(!oEndShape.selected){
+                            bResetEnd = true;
+                        }
+                    }
+                }
+
+                if((bResetEnd || bResetBegin) && (bNoResetCnx !== false)){
+                    var _copy_nv_sp_pr = nvUniSpPr.copy();
+                    if(bResetBegin){
+                        _copy_nv_sp_pr.stCnxId = null;
+                        _copy_nv_sp_pr.stCnxIdx = null;
+                    }
+                    if(bResetEnd){
+                        _copy_nv_sp_pr.endCnxId = null;
+                        _copy_nv_sp_pr.endCnxIdx = null;
+                    }
+                    this.originalObject.nvSpPr.setUniSpPr(_copy_nv_sp_pr);
+                }
+            }
+        }
+
+        if(this.originalObject.isCrop)
+        {
+            AscFormat.ExecuteNoHistory(
+                function () {
+                    this.originalObject.checkDrawingBaseCoords();
+                },
+                this, []
+            );
+            this.originalObject.transform = this.transform;
+            this.originalObject.invertTransform = AscCommon.global_MatrixTransformer.Invert(this.transform);
+        }
+        else
+        {
+            this.originalObject.checkDrawingBaseCoords();
+        }
+        if(this.originalObject.isCrop)
+        {
+            if(!this.originalObject.parentCrop.cropObject)
+            {
+                this.originalObject.parentCrop.cropObject = this.originalObject;
+            }
+            this.originalObject.parentCrop.calculateSrcRect();
+        }
+        if(this.cropObject && !this.originalObject.cropObject)
+        {
+            this.originalObject.cropObject = this.cropObject;
+        }
+        if(this.originalObject.cropObject)
+        {
+            this.originalObject.transform = this.transform;
+            this.originalObject.invertTransform = AscCommon.global_MatrixTransformer.Invert(this.transform);
+            this.originalObject.calculateSrcRect();
+        }
     };
 }
 
@@ -194,82 +430,9 @@ MoveShapeImageTrack.prototype.getBounds = function()
     return boundsChecker.Bounds;
 };
 
-function MoveShapeImageTrackInGroup(originalObject)
-{
-    this.originalObject = originalObject;
-    this.x = null;
-    this.y = null;
-    this.transform = new CMatrix();
-    if(!originalObject.isChart())
-    {
-        this.brush = originalObject.brush;
-        this.pen = originalObject.pen;
-    }
-    else
-    {
-        var pen_brush = AscFormat.CreatePenBrushForChartTrack();
-        this.brush = pen_brush.brush;
-        this.pen = pen_brush.pen;
-    }
-    this.overlayObject = new AscFormat.OverlayObject(!(this.originalObject.getObjectType() === AscDFH.historyitem_type_ChartSpace)&& this.originalObject.spPr && this.originalObject.spPr.geometry, this.originalObject.extX, this.originalObject.extY, this.brush, this.pen, this.transform);
-    this.inv = global_MatrixTransformer.Invert(originalObject.group.transform);
-    this.inv.tx = 0;
-    this.inv.ty = 0;
-    this.draw = function(overlay)
-    {
-        if(AscFormat.isRealNumber(this.pageIndex) && overlay.SetCurrentPage)
-        {
-            overlay.SetCurrentPage(this.pageIndex);
-        }
-        this.overlayObject.draw(overlay);
-    };
-
-    this.track = function(dx, dy)
-    {
-        var dx_t = this.inv.TransformPointX(dx, dy);
-        var dy_t = this.inv.TransformPointY(dx, dy);
-        this.x = this.originalObject.x + dx_t;
-        this.y = this.originalObject.y + dy_t;
-        this.calculateTransform();
-    };
-
-    this.getOriginalBoundsRect = function()
-    {
-        return this.originalObject.getRectBounds();
-    };
-
-    this.calculateTransform = function()
-    {
-        var t = this.transform;
-        t.Reset();
-        global_MatrixTransformer.TranslateAppend(t, -this.originalObject.extX*0.5, -this.originalObject.extY*0.5);
-        if(this.originalObject.flipH)
-        {
-            global_MatrixTransformer.ScaleAppend(t, -1, 1);
-        }
-        if(this.originalObject.flipV)
-        {
-            global_MatrixTransformer.ScaleAppend(t, 1, -1);
-        }
-        global_MatrixTransformer.RotateRadAppend(t, -this.originalObject.rot);
-        global_MatrixTransformer.TranslateAppend(t, this.x + this.originalObject.extX*0.5, this.y + this.originalObject.extY*0.5);
-        global_MatrixTransformer.MultiplyAppend(t, this.originalObject.group.getTransformMatrix());
-    };
-
-    this.trackEnd = function()
-    {
-        var scale_scale_coefficients = this.originalObject.group.getResultScaleCoefficients();
-        var xfrm = this.originalObject.group.spPr.xfrm;
-
-        AscFormat.CheckSpPrXfrm(this.originalObject);
-        var shape_xfrm = this.originalObject.spPr.xfrm;
-        shape_xfrm.setOffX(this.x/scale_scale_coefficients.cx + xfrm.chOffX);
-        shape_xfrm.setOffY(this.y/scale_scale_coefficients.cy + xfrm.chOffY);
-    }
-}
-
 function MoveGroupTrack(originalObject)
 {
+    this.bIsTracked = false;
     this.x = null;
     this.y = null;
     this.originalObject = originalObject;
@@ -286,18 +449,15 @@ function MoveGroupTrack(originalObject)
         var gr_obj_transform_copy = arr_graphic_objects[i].transform.CreateDublicate();
         global_MatrixTransformer.MultiplyAppend(gr_obj_transform_copy, group_invert_transform);
         this.arrTransforms2[i] = gr_obj_transform_copy;
-        this.overlayObjects[i] = new AscFormat.OverlayObject(!( arr_graphic_objects[i].getObjectType() === AscDFH.historyitem_type_ChartSpace)&& arr_graphic_objects[i].spPr.geometry, arr_graphic_objects[i].extX, arr_graphic_objects[i].extY,
+        this.overlayObjects[i] = new AscFormat.OverlayObject(arr_graphic_objects[i].getGeom(), arr_graphic_objects[i].extX, arr_graphic_objects[i].extY,
             arr_graphic_objects[i].brush,  arr_graphic_objects[i].pen, new CMatrix());
     }
 
 
-    this.getOriginalBoundsRect = function()
-    {
-        return this.originalObject.getRectBounds();
-    };
 
     this.track = function(dx, dy, pageIndex)
     {
+        this.bIsTracked = true;
         this.pageIndex = pageIndex;
         var original = this.originalObject;
         this.x = original.x + dx;
@@ -350,15 +510,21 @@ function MoveGroupTrack(originalObject)
 
     this.trackEnd = function(bWord)
     {
+        if(!this.bIsTracked){
+            return;
+        }
         if(bWord)
         {
             this.x = 0;
             this.y = 0;
         }
-        AscFormat.CheckSpPrXfrm(this.originalObject);
+        AscFormat.CheckSpPrXfrm3(this.originalObject);
         var xfrm = this.originalObject.spPr.xfrm;
+
+
         xfrm.setOffX(this.x);
         xfrm.setOffY(this.y);
+
         if(bWord)
         {
             if(this.originalObject.selectStartPage !== this.pageIndex)
@@ -370,16 +536,14 @@ function MoveGroupTrack(originalObject)
 
 function MoveComment(comment)
 {
+    this.bIsTracked = false;
     this.comment = comment;
     this.x = comment.x;
     this.y = comment.y;
 
-    this.getOriginalBoundsRect = function()
-    {
-    };
-
     this.track = function(dx, dy)
     {
+        this.bIsTracked = true;
         var original = this.comment;
         this.x = original.x + dx;
         this.y = original.y + dy;
@@ -400,6 +564,9 @@ function MoveComment(comment)
 
     this.trackEnd = function()
     {
+        if(!this.bIsTracked){
+            return;
+        }
         this.comment.setPosition(this.x, this.y);
     };
 }

@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2019
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -12,8 +12,8 @@
  * warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR  PURPOSE. For
  * details, see the GNU AGPL at: http://www.gnu.org/licenses/agpl-3.0.html
  *
- * You can contact Ascensio System SIA at Lubanas st. 125a-25, Riga, Latvia,
- * EU, LV-1021.
+ * You can contact Ascensio System SIA at 20A-12 Ernesta Birznieka-Upisha
+ * street, Riga, Latvia, EU, LV-1050.
  *
  * The  interactive user interfaces in modified source and object code versions
  * of the Program must display Appropriate Legal Notices, as required under
@@ -60,7 +60,7 @@
 		var _element = this.delegate.GetScrollerParent();
 		this.CreateScrollerDiv(_element);
 
-		this.iScroll = new window.IScroll(_element, {
+		this.iScroll = new window.IScrollMobile(_element, {
 			scrollbars: true,
 			mouseWheel: true,
 			interactiveScrollbars: true,
@@ -196,7 +196,7 @@
 				var _x2 = this.RectSelect2.x + this.RectSelect2.w;
 				var _y2 = this.RectSelect2.y + this.RectSelect2.h / 2;
 
-				this.delegate.LogicDocument.Selection_Remove();
+				this.delegate.LogicDocument.RemoveSelection();
 				if (1 == this.DragSelect)
 				{
 					global_mouseEvent.Button = 0;
@@ -278,7 +278,7 @@
 			}
 		}
 
-		if (AscCommon.AscBrowser.isAndroid)
+		if (AscCommon.AscBrowser.isAndroid && !AscCommon.AscBrowser.isSailfish)
 			isPreventDefault = false;
 
 		if (this.Api.isViewMode || isPreventDefault)
@@ -465,6 +465,7 @@
 		var isPreventDefault = false;
 		switch (this.Mode)
 		{
+            case AscCommon.MobileTouchMode.None:
 			case AscCommon.MobileTouchMode.Scroll:
 			case AscCommon.MobileTouchMode.InlineObj:
 			case AscCommon.MobileTouchMode.FlowObj:
@@ -612,9 +613,10 @@
 
 					if ( false === HtmlPage.m_oLogicDocument.Document_Is_SelectionLocked(AscCommon.changestype_Table_Properties) )
 					{
-						HtmlPage.m_oLogicDocument.Create_NewHistoryPoint(AscDFH.historydescription_Document_SetTableMarkup_Hor);
+						HtmlPage.m_oLogicDocument.StartAction(AscDFH.historydescription_Document_SetTableMarkup_Hor);
 						_markup.Table.Update_TableMarkupFromRuler(_markup, true, this.TableCurrentMovePos + 1);
-						HtmlPage.m_oLogicDocument.Document_UpdateInterfaceState();
+						HtmlPage.m_oLogicDocument.UpdateInterface();
+						HtmlPage.m_oLogicDocument.FinalizeAction();
 					}
 				}
 				else
@@ -637,9 +639,10 @@
 
 					if ( false === this.delegate.HtmlPage.m_oLogicDocument.Document_Is_SelectionLocked(AscCommon.changestype_Table_Properties) )
 					{
-						HtmlPage.m_oLogicDocument.Create_NewHistoryPoint(AscDFH.historydescription_Document_SetTableMarkup_Hor);
+						HtmlPage.m_oLogicDocument.StartAction(AscDFH.historydescription_Document_SetTableMarkup_Hor);
 						_markup.Table.Update_TableMarkupFromRuler(_markup, false, this.TableCurrentMovePos + 1);
-						HtmlPage.m_oLogicDocument.Document_UpdateInterfaceState();
+						HtmlPage.m_oLogicDocument.UpdateInterface();
+						HtmlPage.m_oLogicDocument.FinalizeAction();
 					}
 				}
 
@@ -655,10 +658,13 @@
 		this.checkPointerMultiTouchRemove(e);
 
 		if (this.Api.isViewMode || isPreventDefault)
-			AscCommon.g_inputContext.preventVirtualKeyboard(e);
+			AscCommon.stopEvent(e);//AscCommon.g_inputContext.preventVirtualKeyboard(e);
 
 		if (true !== this.iScroll.isAnimating)
 			this.CheckContextMenuTouchEnd(isCheckContextMenuMode, isCheckContextMenuSelect, isCheckContextMenuCursor, isCheckContextMenuTableRuler);
+
+		if (AscCommon.g_inputContext.isHardCheckKeyboard)
+			isPreventDefault ? AscCommon.g_inputContext.preventVirtualKeyboard_Hard() : AscCommon.g_inputContext.enableVirtualKeyboard_Hard();
 
 		return false;
 	};
@@ -751,7 +757,7 @@
 		// создаем делегата. инициализация его - ПОСЛЕ создания iScroll
 		this.delegate = new CMobileDelegateEditorReader(this);
 
-		this.iScroll = new window.IScroll(this.delegate.GetScrollerParent(), {
+		this.iScroll = new window.IScrollMobile(this.delegate.GetScrollerParent(), {
 			scrollbars: true,
 			mouseWheel: true,
 			interactiveScrollbars: true,

@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2019
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -12,8 +12,8 @@
  * warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR  PURPOSE. For
  * details, see the GNU AGPL at: http://www.gnu.org/licenses/agpl-3.0.html
  *
- * You can contact Ascensio System SIA at Lubanas st. 125a-25, Riga, Latvia,
- * EU, LV-1021.
+ * You can contact Ascensio System SIA at 20A-12 Ernesta Birznieka-Upisha
+ * street, Riga, Latvia, EU, LV-1050.
  *
  * The  interactive user interfaces in modified source and object code versions
  * of the Program must display Appropriate Legal Notices, as required under
@@ -61,7 +61,9 @@ var c_oSerPropLenType = {
     Three:3,
     Long:4,
     Double:5,
-    Variable:6
+    Variable:6,
+	Double64: 7,
+	Long64: 8
 };
 var c_oSer_ColorObjectType =
 {
@@ -79,7 +81,9 @@ var c_oSerBorderType = {
     Space: 1,
     Size: 2,
     Value: 3,
-	ColorTheme: 4
+	ColorTheme: 4,
+	SpacePoint: 5,
+	Size8Point: 6
 };
 var c_oSerBordersType = {
     left: 0,
@@ -99,7 +103,11 @@ var c_oSerPaddingType = {
     left: 0,
     top: 1,
     right: 2,
-    bottom: 3
+    bottom: 3,
+	leftTwips: 4,
+	topTwips: 5,
+	rightTwips: 6,
+	bottomTwips: 7
 };
 var c_oSerShdType = {
     Value: 0,
@@ -112,6 +120,13 @@ var c_oSerShdType = {
     Tint: 2,
     Shade: 3
   };
+	var c_oSerBookmark = {
+		Id: 0,
+		Name: 1,
+		DisplacedByCustomXml: 2,
+		ColFirst: 3,
+		ColLast: 4
+	};
 
 function BinaryCommonWriter(memory)
 {
@@ -123,7 +138,7 @@ BinaryCommonWriter.prototype.WriteItem = function(type, fWrite)
     this.memory.WriteByte(type);
     this.WriteItemWithLength(fWrite);
 };
-BinaryCommonWriter.prototype.WriteItemStart = function(type)
+BinaryCommonWriter.prototype.WriteItemStart = function(type, fWrite)
 {
 	this.memory.WriteByte(type);
     return this.WriteItemWithLengthStart(fWrite);
@@ -162,22 +177,22 @@ BinaryCommonWriter.prototype.WriteBorder = function(border)
         if (null != border.Color)
             color = border.Color;
         else if (null != border.Unifill) {
-            var doc = editor.WordControl.m_oLogicDocument;
+            var doc = window.editor.WordControl.m_oLogicDocument;
             border.Unifill.check(doc.Get_Theme(), doc.Get_ColorMap());
             var RGBA = border.Unifill.getRGBAColor();
-            color = new AscCommonWord.CDocumentColor(RGBA.R, RGBA.G, RGBA.B);
+            color = new window['AscCommonWord'].CDocumentColor(RGBA.R, RGBA.G, RGBA.B);
         }
         if (null != color && !color.Auto)
             this.WriteColor(c_oSerBorderType.Color, color);
         if (null != border.Space) {
-            this.memory.WriteByte(c_oSerBorderType.Space);
-            this.memory.WriteByte(c_oSerPropLenType.Double);
-            this.memory.WriteDouble(border.Space);
+            this.memory.WriteByte(c_oSerBorderType.SpacePoint);
+            this.memory.WriteByte(c_oSerPropLenType.Long);
+            this.writeMmToPt(border.Space);
         }
         if (null != border.Size) {
-            this.memory.WriteByte(c_oSerBorderType.Size);
-            this.memory.WriteByte(c_oSerPropLenType.Double);
-            this.memory.WriteDouble(border.Size);
+            this.memory.WriteByte(c_oSerBorderType.Size8Point);
+            this.memory.WriteByte(c_oSerPropLenType.Long);
+            this.writeMmToPt(8 * border.Size);
         }
         if (null != border.Unifill || (null != border.Color && border.Color.Auto)) {
             this.memory.WriteByte(c_oSerBorderType.ColorTheme);
@@ -257,30 +272,30 @@ BinaryCommonWriter.prototype.WritePaddings = function(Paddings)
     //left
     if(null != Paddings.L)
     {
-        this.memory.WriteByte(c_oSerPaddingType.left);
-        this.memory.WriteByte(c_oSerPropLenType.Double);
-        this.memory.WriteDouble(Paddings.L);
+        this.memory.WriteByte(c_oSerPaddingType.leftTwips);
+        this.memory.WriteByte(c_oSerPropLenType.Long);
+        this.writeMmToTwips(Paddings.L);
     }
     //top
     if(null != Paddings.T)
     {
-        this.memory.WriteByte(c_oSerPaddingType.top);
-        this.memory.WriteByte(c_oSerPropLenType.Double);
-        this.memory.WriteDouble(Paddings.T);
+        this.memory.WriteByte(c_oSerPaddingType.topTwips);
+        this.memory.WriteByte(c_oSerPropLenType.Long);
+        this.writeMmToTwips(Paddings.T);
     }
     //Right
     if(null != Paddings.R)
     {
-        this.memory.WriteByte(c_oSerPaddingType.right);
-        this.memory.WriteByte(c_oSerPropLenType.Double);
-        this.memory.WriteDouble(Paddings.R);
+        this.memory.WriteByte(c_oSerPaddingType.rightTwips);
+        this.memory.WriteByte(c_oSerPropLenType.Long);
+        this.writeMmToTwips(Paddings.R);
     }
     //bottom
     if(null != Paddings.B)
     {
-        this.memory.WriteByte(c_oSerPaddingType.bottom);
-        this.memory.WriteByte(c_oSerPropLenType.Double);
-        this.memory.WriteDouble(Paddings.B);
+        this.memory.WriteByte(c_oSerPaddingType.bottomTwips);
+        this.memory.WriteByte(c_oSerPropLenType.Long);
+        this.writeMmToTwips(Paddings.B);
     }
 };
 BinaryCommonWriter.prototype.WriteColorSpreadsheet = function(color)
@@ -358,6 +373,33 @@ BinaryCommonWriter.prototype.WriteColorTheme = function(unifill, color)
 		}
 	}
 };
+BinaryCommonWriter.prototype.WriteBookmark = function(bookmark) {
+	var oThis = this;
+	if (null !== bookmark.BookmarkId) {
+		this.WriteItem(c_oSerBookmark.Id, function() {
+			oThis.memory.WriteLong(bookmark.BookmarkId);
+		});
+	}
+	if (bookmark.IsStart() && null !== bookmark.BookmarkName) {
+		this.memory.WriteByte(c_oSerBookmark.Name);
+		this.memory.WriteString2(bookmark.BookmarkName);
+	}
+};
+BinaryCommonWriter.prototype.mmToTwips = function(val) {
+	return Math.round(AscCommonWord.g_dKoef_mm_to_twips * val);
+};
+BinaryCommonWriter.prototype.writeMmToTwips = function(val) {
+	return this.memory.WriteLong(this.mmToTwips(val));
+};
+BinaryCommonWriter.prototype.writeMmToPt = function(val) {
+	return this.memory.WriteLong(Math.round(AscCommonWord.g_dKoef_mm_to_pt * val));
+};
+BinaryCommonWriter.prototype.writeMmToEmu = function(val) {
+	return this.memory.WriteLong(Math.round(AscCommonWord.g_dKoef_mm_to_emu * val));
+};
+BinaryCommonWriter.prototype.writeMmToUEmu = function(val) {
+	return this.memory.WriteULong(Math.round(AscCommonWord.g_dKoef_mm_to_emu * val));
+};
 function Binary_CommonReader(stream)
 {
     this.stream = stream;
@@ -421,6 +463,8 @@ Binary_CommonReader.prototype.Read2 = function(stLen, fRead)
             case c_oSerPropLenType.Three: nRealLen = 3;break;
             case c_oSerPropLenType.Long:
             case c_oSerPropLenType.Double: nRealLen = 4;break;
+			case c_oSerPropLenType.Double64: nRealLen = 8;break;
+			case c_oSerPropLenType.Long: nRealLen = 8;break;
             case c_oSerPropLenType.Variable:
                 nRealLen = this.stream.GetULongLE();
                 nCurPosShift += 4;
@@ -459,6 +503,8 @@ Binary_CommonReader.prototype.Read2Spreadsheet = function(stLen, fRead)
             case c_oSerPropLenType.Three: nRealLen = 3;break;
             case c_oSerPropLenType.Long: nRealLen = 4;break;
             case c_oSerPropLenType.Double: nRealLen = 8;break;
+			case c_oSerPropLenType.Double64: nRealLen = 8;break;
+			case c_oSerPropLenType.Long: nRealLen = 8;break;
             case c_oSerPropLenType.Variable:
                 nRealLen = this.stream.GetULongLE();
                 nCurPosShift += 4;
@@ -544,6 +590,17 @@ Binary_CommonReader.prototype.ReadColorTheme = function(type, length, color)
         res = c_oSerConstants.ReadUnknown;
     return res;
 };
+Binary_CommonReader.prototype.ReadBookmark = function(type, length, bookmark) {
+	var res = c_oSerConstants.ReadOk;
+	if (c_oSerBookmark.Id === type) {
+		bookmark.BookmarkId = this.stream.GetULongLE();
+	} else if (c_oSerBookmark.Name === type) {
+		bookmark.BookmarkName = this.stream.GetString2LE(length);
+	} else {
+		res = c_oSerConstants.ReadUnknown;
+	}
+	return res;
+};
 /** @constructor */
 function FT_Stream2(data, size) {
     this.obj = null;
@@ -604,6 +661,9 @@ FT_Stream2.prototype.GetUShortLE = function() {
 		return 0;
 	return (this.data[this.cur++] | this.data[this.cur++] << 8);
 };
+FT_Stream2.prototype.GetShortLE = function() {
+	return AscFonts.FT_Common.UShort_To_Short(this.GetUShortLE());
+}
 // 4 byte
 FT_Stream2.prototype.GetULongLE = function() {
 	if (this.cur + 3 >= this.size)
@@ -611,14 +671,30 @@ FT_Stream2.prototype.GetULongLE = function() {
 	return (this.data[this.cur++] | this.data[this.cur++] << 8 | this.data[this.cur++] << 16 | this.data[this.cur++] << 24);
 };
 FT_Stream2.prototype.GetLongLE = function() {
-	return this.GetULongLE();
+	return AscFonts.FT_Common.UintToInt(this.GetULongLE());
 };
 FT_Stream2.prototype.GetLong = function() {
 	return this.GetULongLE();
 };
+FT_Stream2.prototype.GetULong = function() {
+	return this.GetULongLE();
+}
+	var tempHelp = new ArrayBuffer(8);
+	var tempHelpUnit = new Uint8Array(tempHelp);
+	var tempHelpFloat = new Float64Array(tempHelp);
 FT_Stream2.prototype.GetDoubleLE = function() {
 	if (this.cur + 7 >= this.size)
 		return 0;
+	tempHelpUnit[0] = this.GetUChar();
+	tempHelpUnit[1] = this.GetUChar();
+	tempHelpUnit[2] = this.GetUChar();
+	tempHelpUnit[3] = this.GetUChar();
+	tempHelpUnit[4] = this.GetUChar();
+	tempHelpUnit[5] = this.GetUChar();
+	tempHelpUnit[6] = this.GetUChar();
+	tempHelpUnit[7] = this.GetUChar();
+	return tempHelpFloat[0];
+
 	var arr = [];
 	for(var i = 0; i < 8; ++i)
 		arr.push(this.GetUChar());
@@ -706,6 +782,51 @@ FT_Stream2.prototype.GetDouble = function() {
 	dRes /= 100000;
 	return dRes;
 };
+FT_Stream2.prototype.GetBuffer = function(length) {
+	var res = new Array(length);
+	for(var i = 0 ; i < length ;++i){
+		res[i] = this.data[this.cur++]
+	}
+	return res;
+};
+FT_Stream2.prototype.ToFileStream = function() {
+	var res = new AscCommon.FileStream();
+	res.obj = this.obj;
+	res.data = this.data;
+	res.size = this.size;
+	res.pos = this.pos;
+	res.cur= this.cur;
+	return res;
+};
+FT_Stream2.prototype.FromFileStream = function(stream) {
+	this.pos = stream.pos;
+	this.cur = stream.cur;
+};
+	FT_Stream2.prototype.XlsbReadRecordType = function() {
+		var nValue = this.GetUChar();
+		if(0 != (nValue & 0x80))
+		{
+			var nPart = this.GetUChar();
+			nValue = (nValue & 0x7F) | ((nPart & 0x7F) << 7);
+		}
+		return nValue;
+	};
+	FT_Stream2.prototype.XlsbSkipRecord = function() {
+		this.Skip2(this.XlsbReadRecordLength());
+	};
+	FT_Stream2.prototype.XlsbReadRecordLength = function() {
+		var nValue = 0;
+		for (var i = 0; i < 4; ++i)
+		{
+			var nPart = this.GetUChar();
+			nValue |= (nPart & 0x7F) << (7 * i);
+			if(0 == (nPart & 0x80))
+			{
+				break;
+			}
+		}
+		return nValue;
+	};
 var gc_nMaxRow = 1048576;
 var gc_nMaxCol = 16384;
 var gc_nMaxRow0 = gc_nMaxRow - 1;
@@ -782,6 +903,9 @@ var g_oCellAddressUtils = new CellAddressUtils();
 	};
 	CellBase.prototype.isEqual = function(cell) {
 		return this.row === cell.row && this.col === cell.col;
+	};
+	CellBase.prototype.isEmpty = function() {
+		return 0 === this.row && 0 === this.col;
 	};
 	CellBase.prototype.getName = function() {
 		return g_oCellAddressUtils.colnumToColstr(this.col + 1) + (this.row + 1);
@@ -1165,6 +1289,83 @@ function isRealObject(obj)
       return _ret;
     }
   }
+	function GetUTF16_fromUnicodeChar(code) {
+		if (code < 0x10000) {
+			return String.fromCharCode(code);
+		} else {
+			code -= 0x10000;
+			return String.fromCharCode(0xD800 | ((code >> 10) & 0x03FF)) +
+				String.fromCharCode(0xDC00 | (code & 0x03FF));
+		}
+	};
+	function GetStringUtf8(reader, len) {
+		if (reader.cur + len > reader.size) {
+			return "";
+		}
+		var _res = "";
+
+		var end = reader.cur + len;
+		var val = 0;
+		while (reader.cur < end) {
+			var byteMain = reader.data[reader.cur];
+			if (0x00 == (byteMain & 0x80)) {
+				// 1 byte
+				_res += GetUTF16_fromUnicodeChar(byteMain);
+				++reader.cur;
+			}
+			else if (0x00 == (byteMain & 0x20)) {
+				// 2 byte
+				val = (((byteMain & 0x1F) << 6) |
+				(reader.data[reader.cur + 1] & 0x3F));
+				_res += GetUTF16_fromUnicodeChar(val);
+				reader.cur += 2;
+			}
+			else if (0x00 == (byteMain & 0x10)) {
+				// 3 byte
+				val = (((byteMain & 0x0F) << 12) |
+				((reader.data[reader.cur + 1] & 0x3F) << 6) |
+				(reader.data[reader.cur + 2] & 0x3F));
+
+				_res += GetUTF16_fromUnicodeChar(val);
+				reader.cur += 3;
+			}
+			else if (0x00 == (byteMain & 0x08)) {
+				// 4 byte
+				val = (((byteMain & 0x07) << 18) |
+				((reader.data[reader.cur + 1] & 0x3F) << 12) |
+				((reader.data[reader.cur + 2] & 0x3F) << 6) |
+				(reader.data[reader.cur + 3] & 0x3F));
+
+				_res += GetUTF16_fromUnicodeChar(val);
+				reader.cur += 4;
+			}
+			else if (0x00 == (byteMain & 0x04)) {
+				// 5 byte
+				val = (((byteMain & 0x03) << 24) |
+				((reader.data[reader.cur + 1] & 0x3F) << 18) |
+				((reader.data[reader.cur + 2] & 0x3F) << 12) |
+				((reader.data[reader.cur + 3] & 0x3F) << 6) |
+				(reader.data[reader.cur + 4] & 0x3F));
+
+				_res += GetUTF16_fromUnicodeChar(val);
+				reader.cur += 5;
+			}
+			else {
+				// 6 byte
+				val = (((byteMain & 0x01) << 30) |
+				((reader.data[reader.cur + 1] & 0x3F) << 24) |
+				((reader.data[reader.cur + 2] & 0x3F) << 18) |
+				((reader.data[reader.cur + 3] & 0x3F) << 12) |
+				((reader.data[reader.cur + 4] & 0x3F) << 6) |
+				(reader.data[reader.cur + 5] & 0x3F));
+
+				_res += GetUTF16_fromUnicodeChar(val);
+				reader.cur += 6;
+			}
+		}
+
+		return _res;
+	};
 
   //----------------------------------------------------------export----------------------------------------------------
   window['AscCommon'] = window['AscCommon'] || {};
@@ -1190,6 +1391,7 @@ function isRealObject(obj)
   window['AscCommon'].CellAddress = CellAddress;
   window['AscCommon'].isRealObject = isRealObject;
   window['AscCommon'].FileStream = FileStream;
+	window['AscCommon'].GetStringUtf8 = GetStringUtf8;
   window['AscCommon'].g_nodeAttributeStart = 0xFA;
   window['AscCommon'].g_nodeAttributeEnd = 0xFB;
 })(window);

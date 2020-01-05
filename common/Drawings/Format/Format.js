@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2019
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -12,8 +12,8 @@
  * warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR  PURPOSE. For
  * details, see the GNU AGPL at: http://www.gnu.org/licenses/agpl-3.0.html
  *
- * You can contact Ascensio System SIA at Lubanas st. 125a-25, Riga, Latvia,
- * EU, LV-1021.
+ * You can contact Ascensio System SIA at 20A-12 Ernesta Birznieka-Upisha
+ * street, Riga, Latvia, EU, LV-1050.
  *
  * The  interactive user interfaces in modified source and object code versions
  * of the Program must display Appropriate Legal Notices, as required under
@@ -39,6 +39,8 @@
 */
 function (window, undefined) {
 
+	var recalcSlideInterval = 30;
+
 // Import
 var CreateAscColor = AscCommon.CreateAscColor;
 var g_oIdCounter = AscCommon.g_oIdCounter;
@@ -55,6 +57,113 @@ var c_oAscStrokeType = Asc.c_oAscStrokeType;
 var asc_CShapeProperty = Asc.asc_CShapeProperty;
 
 
+    function CT_Hyperlink()
+    {
+        this.snd = null;
+        this.id = null;
+        this.invalidUrl = null;
+        this.action = null;
+        this.tgtFrame = null;
+        this.tooltip = null;
+        this.history = null;
+        this.highlightClick = null;
+        this.endSnd = null;
+    }
+
+
+    CT_Hyperlink.prototype.Write_ToBinary = function(w)
+    {
+        var nStartPos = w.GetCurPosition();
+        var nFlags = 0;
+        w.WriteLong(0);
+
+        if(null !== this.snd){
+            nFlags |= 1;
+            w.WriteString2(this.snd);
+        }
+        if(null !== this.id){
+            nFlags |= 2;
+            w.WriteString2(this.id);
+        }
+        if(null !== this.invalidUrl){
+            nFlags |= 4;
+            w.WriteString2(this.invalidUrl);
+        }
+        if(null !== this.action){
+            nFlags |= 8;
+            w.WriteString2(this.action);
+        }
+        if(null !== this.tgtFrame){
+            nFlags |= 16;
+            w.WriteString2(this.tgtFrame);
+        }
+        if(null !== this.tooltip){
+            nFlags |= 32;
+            w.WriteString2(this.tooltip);
+        }
+        if(null !== this.history){
+            nFlags |= 64;
+            w.WriteBool(this.history);
+        }
+        if(null !== this.highlightClick){
+            nFlags |= 128;
+            w.WriteBool(this.highlightClick);
+        }
+        if(null !== this.endSnd){
+            nFlags |= 256;
+            w.WriteBool(this.endSnd);
+        }
+        var nEndPos = w.GetCurPosition();
+        w.Seek(nStartPos);
+        w.WriteLong(nFlags);
+        w.Seek(nEndPos);
+    };
+
+    CT_Hyperlink.prototype.Read_FromBinary = function(r){
+        var nFlags = r.GetLong();
+        if(nFlags & 1){
+            this.snd = r.GetString2();
+        }
+        if(nFlags & 2){
+            this.id = r.GetString2();
+        }
+        if(nFlags & 4){
+            this.invalidUrl = r.GetString2();
+        }
+        if(nFlags & 8){
+            this.action = r.GetString2();
+        }
+        if(nFlags & 16){
+            this.tgtFrame = r.GetString2();
+        }
+        if(nFlags & 32){
+            this.tooltip = r.GetString2();
+        }
+        if(nFlags & 64){
+            this.history = r.GetBool();
+        }
+        if(nFlags & 128){
+            this.highlightClick = r.GetBool();
+        }
+        if(nFlags & 256){
+            this.endSnd = r.GetBool();
+        }
+    };
+
+    CT_Hyperlink.prototype.createDuplicate = function(){
+        var ret = new CT_Hyperlink();
+        ret.snd = this.snd;
+        ret.id = this.id;
+        ret.invalidUrl = this.invalidUrl;
+        ret.action = this.action;
+        ret.tgtFrame = this.tgtFrame;
+        ret.tooltip = this.tooltip;
+        ret.history = this.history;
+        ret.highlightClick = this.highlightClick;
+        ret.endSnd = this.endSnd;
+        return ret;
+    };
+
 
 
     var CChangesDrawingsBool = AscDFH.CChangesDrawingsBool;
@@ -66,6 +175,7 @@ var asc_CShapeProperty = Asc.asc_CShapeProperty;
     var CChangesDrawingsContentNoId = AscDFH.CChangesDrawingsContentNoId;
     var CChangesDrawingsContentLong = AscDFH.CChangesDrawingsContentLong;
     var CChangesDrawingsContentLongMap = AscDFH.CChangesDrawingsContentLongMap;
+    var CChangesDrawingsContent = AscDFH.CChangesDrawingsContent;
 
 
     var drawingsChangesMap = window['AscDFH'].drawingsChangesMap;
@@ -83,6 +193,8 @@ var asc_CShapeProperty = Asc.asc_CShapeProperty;
         drawingsChangesMap[AscDFH.historyitem_CNvPr_SetIsHidden                 ] = function (oClass, value){oClass.isHidden  = value;};
         drawingsChangesMap[AscDFH.historyitem_CNvPr_SetDescr                    ] = function (oClass, value){oClass.descr     = value;};
         drawingsChangesMap[AscDFH.historyitem_CNvPr_SetTitle                    ] = function (oClass, value){oClass.title     = value;};
+        drawingsChangesMap[AscDFH.historyitem_CNvPr_SetHlinkClick                    ] = function (oClass, value){oClass.hlinkClick     = value;};
+        drawingsChangesMap[AscDFH.historyitem_CNvPr_SetHlinkHover                    ] = function (oClass, value){oClass.hlinkHover     = value;};
         drawingsChangesMap[AscDFH.historyitem_NvPr_SetIsPhoto                   ] = function (oClass, value){oClass.isPhoto   = value;};
         drawingsChangesMap[AscDFH.historyitem_NvPr_SetUserDrawn                 ] = function (oClass, value){oClass.userDrawn = value;};
         drawingsChangesMap[AscDFH.historyitem_NvPr_SetPh                        ] = function (oClass, value){oClass.ph        = value;};
@@ -122,12 +234,13 @@ var asc_CShapeProperty = Asc.asc_CShapeProperty;
                 {
                     if(oClass.Fill && oClass.Fill.fill && oClass.Fill.fill.type === c_oAscFill.FILL_TYPE_BLIP && typeof oClass.Fill.fill.RasterImageId === "string" && oClass.Fill.fill.RasterImageId.length > 0)
                     {
-                        AscCommon.CollaborativeEditing.Add_NewImage(AscCommon.getFullImageSrc2(oClass.Fill.fill.RasterImageId));
+                        AscCommon.CollaborativeEditing.Add_NewImage(oClass.Fill.fill.RasterImageId);
                     }
                 }
             }
         };
         drawingsChangesMap[AscDFH.historyitem_SpPr_SetLn                        ] = function (oClass, value){oClass.ln       = value; oClass.handleUpdateLn();};
+        drawingsChangesMap[AscDFH.historyitem_SpPr_SetEffectPr                  ] = function (oClass, value){oClass.effectProps = value; oClass.handleUpdateGeometry();};
         drawingsChangesMap[AscDFH.historyitem_ExtraClrScheme_SetClrScheme       ] = function (oClass, value){oClass.clrScheme = value;};
         drawingsChangesMap[AscDFH.historyitem_ExtraClrScheme_SetClrMap          ] = function (oClass, value){oClass.clrMap    = value;};
         drawingsChangesMap[AscDFH.historyitem_ThemeSetColorScheme               ] = function (oClass, value){
@@ -139,14 +252,22 @@ var asc_CShapeProperty = Asc.asc_CShapeProperty;
                 oWordGraphicObjects.document.Api.textArtPreviewManager.clear();
             }
         };
-        drawingsChangesMap[AscDFH.historyitem_ThemeSetFontScheme                ] = function (oClass, value){oClass.themeElements.fontScheme  = value;};
-        drawingsChangesMap[AscDFH.historyitem_ThemeSetFmtScheme                 ] = function (oClass, value){oClass.themeElements.fmtScheme   = value;};
-        drawingsChangesMap[AscDFH.historyitem_HF_SetDt                          ] = function (oClass, value){oClass.dt     = value;};
-        drawingsChangesMap[AscDFH.historyitem_HF_SetFtr                         ] = function (oClass, value){oClass.ftr    = value;};
-        drawingsChangesMap[AscDFH.historyitem_HF_SetHdr                         ] = function (oClass, value){oClass.hdr    = value;};
-        drawingsChangesMap[AscDFH.historyitem_HF_SetSldNum                      ] = function (oClass, value){oClass.sldNum = value;};
+        drawingsChangesMap[AscDFH.historyitem_ThemeSetFontScheme] = function (oClass, value){oClass.themeElements.fontScheme  = value;};
+        drawingsChangesMap[AscDFH.historyitem_ThemeSetFmtScheme ] = function (oClass, value){oClass.themeElements.fmtScheme   = value;};
+        drawingsChangesMap[AscDFH.historyitem_ThemeSetName ] = function (oClass, value){oClass.name   = value;};
+        drawingsChangesMap[AscDFH.historyitem_ThemeSetIsThemeOverride ] = function (oClass, value){oClass.isThemeOverride   = value;};
+        drawingsChangesMap[AscDFH.historyitem_ThemeSetSpDef ]     = function (oClass, value){oClass.spDef   = value;};
+        drawingsChangesMap[AscDFH.historyitem_ThemeSetLnDef ]     = function (oClass, value){oClass.lnDef   = value;};
+        drawingsChangesMap[AscDFH.historyitem_ThemeSetTxDef ]     = function (oClass, value){oClass.txDef   = value;};
+        drawingsChangesMap[AscDFH.historyitem_HF_SetDt          ] = function (oClass, value){oClass.dt     = value;};
+        drawingsChangesMap[AscDFH.historyitem_HF_SetFtr         ] = function (oClass, value){oClass.ftr    = value;};
+        drawingsChangesMap[AscDFH.historyitem_HF_SetHdr         ] = function (oClass, value){oClass.hdr    = value;};
+        drawingsChangesMap[AscDFH.historyitem_HF_SetSldNum      ] = function (oClass, value){oClass.sldNum = value;};
+        drawingsChangesMap[AscDFH.historyitem_UniNvPr_SetUniSpPr] = function (oClass, value){oClass.nvUniSpPr = value;};
+        drawingsChangesMap[AscDFH.historyitem_NvPr_SetUniMedia] = function (oClass, value){oClass.unimedia = value;};
 
     drawingContentChanges[AscDFH.historyitem_ClrMap_SetClr] = function(oClass){return oClass.color_map};
+    drawingContentChanges[AscDFH.historyitem_ThemeAddExtraClrScheme] =  function(oClass){return oClass.extraClrSchemeLst;};
 
 
     drawingConstructorsMap[AscDFH.historyitem_ClrMap_SetClr] =  CUniColor;
@@ -158,9 +279,14 @@ var asc_CShapeProperty = Asc.asc_CShapeProperty;
     drawingConstructorsMap[AscDFH.historyitem_ShapeStyle_SetFontRef             ] = FontRef;
     drawingConstructorsMap[AscDFH.historyitem_SpPr_SetFill                      ] = CUniFill;
     drawingConstructorsMap[AscDFH.historyitem_SpPr_SetLn                        ] = CLn;
+    drawingConstructorsMap[AscDFH.historyitem_SpPr_SetEffectPr                  ] = CEffectProperties;
     drawingConstructorsMap[AscDFH.historyitem_ThemeSetColorScheme               ] = ClrScheme;
     drawingConstructorsMap[AscDFH.historyitem_ThemeSetFontScheme                ] = FontScheme;
     drawingConstructorsMap[AscDFH.historyitem_ThemeSetFmtScheme                 ] = FmtScheme;
+    drawingConstructorsMap[AscDFH.historyitem_UniNvPr_SetUniSpPr                 ] = CNvUniSpPr;
+
+    drawingConstructorsMap[AscDFH.historyitem_CNvPr_SetHlinkClick] = CT_Hyperlink;
+    drawingConstructorsMap[AscDFH.historyitem_CNvPr_SetHlinkHover] = CT_Hyperlink;
 
 
     AscDFH.changesFactory[AscDFH.historyitem_DefaultShapeDefinition_SetSpPr] = CChangesDrawingsObject;
@@ -172,9 +298,12 @@ var asc_CShapeProperty = Asc.asc_CShapeProperty;
     AscDFH.changesFactory[AscDFH.historyitem_CNvPr_SetIsHidden] = CChangesDrawingsBool;
     AscDFH.changesFactory[AscDFH.historyitem_CNvPr_SetDescr] = CChangesDrawingsString;
     AscDFH.changesFactory[AscDFH.historyitem_CNvPr_SetTitle] = CChangesDrawingsString;
+    AscDFH.changesFactory[AscDFH.historyitem_CNvPr_SetHlinkClick] = CChangesDrawingsObjectNoId;
+    AscDFH.changesFactory[AscDFH.historyitem_CNvPr_SetHlinkHover] = CChangesDrawingsObjectNoId;
     AscDFH.changesFactory[AscDFH.historyitem_NvPr_SetIsPhoto] = CChangesDrawingsBool;
     AscDFH.changesFactory[AscDFH.historyitem_NvPr_SetUserDrawn] = CChangesDrawingsBool;
     AscDFH.changesFactory[AscDFH.historyitem_NvPr_SetPh] = CChangesDrawingsObject;
+    AscDFH.changesFactory[AscDFH.historyitem_NvPr_SetUniMedia] = CChangesDrawingsObjectNoId;
     AscDFH.changesFactory[AscDFH.historyitem_Ph_SetHasCustomPrompt] = CChangesDrawingsBool;
     AscDFH.changesFactory[AscDFH.historyitem_Ph_SetIdx] = CChangesDrawingsString;
     AscDFH.changesFactory[AscDFH.historyitem_Ph_SetOrient] = CChangesDrawingsLong;
@@ -183,6 +312,7 @@ var asc_CShapeProperty = Asc.asc_CShapeProperty;
     AscDFH.changesFactory[AscDFH.historyitem_UniNvPr_SetCNvPr] = CChangesDrawingsObject;
     AscDFH.changesFactory[AscDFH.historyitem_UniNvPr_SetUniPr] = CChangesDrawingsObject;
     AscDFH.changesFactory[AscDFH.historyitem_UniNvPr_SetNvPr] = CChangesDrawingsObject;
+    AscDFH.changesFactory[AscDFH.historyitem_UniNvPr_SetUniSpPr] = CChangesDrawingsObjectNoId;
     AscDFH.changesFactory[AscDFH.historyitem_ShapeStyle_SetLnRef] = CChangesDrawingsObjectNoId;
     AscDFH.changesFactory[AscDFH.historyitem_ShapeStyle_SetFillRef] = CChangesDrawingsObjectNoId;
     AscDFH.changesFactory[AscDFH.historyitem_ShapeStyle_SetFontRef] = CChangesDrawingsObjectNoId;
@@ -205,12 +335,19 @@ var asc_CShapeProperty = Asc.asc_CShapeProperty;
     AscDFH.changesFactory[AscDFH.historyitem_SpPr_SetGeometry] = CChangesDrawingsObject;
     AscDFH.changesFactory[AscDFH.historyitem_SpPr_SetFill] = CChangesDrawingsObjectNoId;
     AscDFH.changesFactory[AscDFH.historyitem_SpPr_SetLn] = CChangesDrawingsObjectNoId;
+    AscDFH.changesFactory[AscDFH.historyitem_SpPr_SetEffectPr] = CChangesDrawingsObjectNoId;
     AscDFH.changesFactory[AscDFH.historyitem_ClrMap_SetClr] = CChangesDrawingsContentLongMap;
-    AscDFH.changesFactory[AscDFH.historyitem_ExtraClrScheme_SetClrScheme] = CChangesDrawingsObject;
+    AscDFH.changesFactory[AscDFH.historyitem_ExtraClrScheme_SetClrScheme] = CChangesDrawingsObjectNoId;
     AscDFH.changesFactory[AscDFH.historyitem_ExtraClrScheme_SetClrMap] = CChangesDrawingsObject;
     AscDFH.changesFactory[AscDFH.historyitem_ThemeSetColorScheme] = CChangesDrawingsObjectNoId;
     AscDFH.changesFactory[AscDFH.historyitem_ThemeSetFontScheme] = CChangesDrawingsObjectNoId;
     AscDFH.changesFactory[AscDFH.historyitem_ThemeSetFmtScheme] = CChangesDrawingsObjectNoId;
+    AscDFH.changesFactory[AscDFH.historyitem_ThemeSetName] = CChangesDrawingsString;
+    AscDFH.changesFactory[AscDFH.historyitem_ThemeSetIsThemeOverride] = CChangesDrawingsBool;
+    AscDFH.changesFactory[AscDFH.historyitem_ThemeSetSpDef] = CChangesDrawingsObject;
+    AscDFH.changesFactory[AscDFH.historyitem_ThemeSetLnDef] = CChangesDrawingsObject;
+    AscDFH.changesFactory[AscDFH.historyitem_ThemeSetTxDef] = CChangesDrawingsObject;
+    AscDFH.changesFactory[AscDFH.historyitem_ThemeAddExtraClrScheme] = CChangesDrawingsContent;
     AscDFH.changesFactory[AscDFH.historyitem_HF_SetDt] = CChangesDrawingsBool;
     AscDFH.changesFactory[AscDFH.historyitem_HF_SetFtr] = CChangesDrawingsBool;
     AscDFH.changesFactory[AscDFH.historyitem_HF_SetHdr] = CChangesDrawingsBool;
@@ -541,12 +678,15 @@ var TYPE_TRACK = {
     GROUP_PASSIVE : 1,
     TEXT : 2,
     EMPTY_PH : 3,
-    CHART_TEXT : 4
+    CHART_TEXT : 4,
+    CROP : 5,
 };
 var TYPE_KIND = {
     SLIDE : 0,
     LAYOUT : 1,
-    MASTER : 2
+    MASTER : 2,
+    NOTES  : 3,
+    NOTES_MASTER: 4
 };
 
 var TYPE_TRACK_SHAPE = 0;
@@ -809,6 +949,8 @@ function CColorModifiers()
 
 CColorModifiers.prototype =
 {
+    isUsePow : (!AscCommon.AscBrowser.isSailfish || !AscCommon.AscBrowser.isEmulateDevicePixelRatio),
+
     getObjectType: function()
     {
         return AscDFH.historyitem_type_ColorModifiers;
@@ -897,8 +1039,8 @@ CColorModifiers.prototype =
 
     RGB2HSL : function(R, G, B, HLS)
     {
-        var iMin = Math.min(R, G, B);
-        var iMax = Math.max(R, G, B);
+        var iMin = (R < G ? R : G); iMin = iMin < B ? iMin : B;//Math.min(R, G, B);
+        var iMax = (R > G ? R : G); iMax = iMax > B ? iMax : B;//Math.max(R, G, B);
         var iDelta = iMax - iMin;
         var dMax = (iMax + iMin)/255.0;
         var dDelta = iDelta/255.0;
@@ -1020,22 +1162,42 @@ CColorModifiers.prototype =
 
     lclGamma: function(nComp, fGamma)
     {
-        return (Math.pow(nComp/MAX_PERCENT, fGamma)*MAX_PERCENT) >> 0;
+        return (Math.pow(nComp/MAX_PERCENT, fGamma)*MAX_PERCENT + 0.5) >> 0;
     },
 
     RgbtoCrgb: function(RGBA)
     {
-        RGBA.R = this.lclGamma(this.lclRgbCompToCrgbComp(RGBA.R), DEC_GAMMA);
-        RGBA.G = this.lclGamma(this.lclRgbCompToCrgbComp(RGBA.G), DEC_GAMMA);
-        RGBA.B = this.lclGamma(this.lclRgbCompToCrgbComp(RGBA.B), DEC_GAMMA);
+        //RGBA.R = this.lclGamma(this.lclRgbCompToCrgbComp(RGBA.R), DEC_GAMMA);
+        //RGBA.G = this.lclGamma(this.lclRgbCompToCrgbComp(RGBA.G), DEC_//GAMMA);
+        //RGBA.B = this.lclGamma(this.lclRgbCompToCrgbComp(RGBA.B), DEC_GAMMA);
+
+        if (this.isUsePow)
+        {
+            RGBA.R = (Math.pow(RGBA.R / 255, DEC_GAMMA) * MAX_PERCENT + 0.5) >> 0;
+            RGBA.G = (Math.pow(RGBA.G / 255, DEC_GAMMA) * MAX_PERCENT + 0.5) >> 0;
+            RGBA.B = (Math.pow(RGBA.B / 255, DEC_GAMMA) * MAX_PERCENT + 0.5) >> 0;
+        }
     },
 
 
     CrgbtoRgb: function(RGBA)
     {
-        RGBA.R = this.lclCrgbCompToRgbComp(this.lclGamma(RGBA.R, INC_GAMMA)) >> 0;
-        RGBA.G = this.lclCrgbCompToRgbComp(this.lclGamma(RGBA.G, INC_GAMMA)) >> 0;
-        RGBA.B = this.lclCrgbCompToRgbComp(this.lclGamma(RGBA.B, INC_GAMMA)) >> 0;
+        //RGBA.R = (this.lclCrgbCompToRgbComp(this.lclGamma(RGBA.R, INC_GAMMA)) + 0.5) >> 0;
+        //RGBA.G = (this.lclCrgbCompToRgbComp(this.lclGamma(RGBA.G, INC_GAMMA)) + 0.5) >> 0;
+        //RGBA.B = (this.lclCrgbCompToRgbComp(this.lclGamma(RGBA.B, INC_GAMMA)) + 0.5) >> 0;
+
+        if (this.isUsePow)
+        {
+            RGBA.R = (Math.pow(RGBA.R / 100000, INC_GAMMA) * 255 + 0.5) >> 0;
+            RGBA.G = (Math.pow(RGBA.G / 100000, INC_GAMMA) * 255 + 0.5) >> 0;
+            RGBA.B = (Math.pow(RGBA.B / 100000, INC_GAMMA) * 255 + 0.5) >> 0;
+        }
+        else
+        {
+            RGBA.R = AscFormat.ClampColor(RGBA.R);
+            RGBA.G = AscFormat.ClampColor(RGBA.G);
+            RGBA.B = AscFormat.ClampColor(RGBA.B);
+        }
     },
 
     Apply : function(RGBA)
@@ -1051,55 +1213,51 @@ CColorModifiers.prototype =
 
             if (colorMod.name == "alpha")
             {
-                RGBA.A = Math.min(255, Math.max(0, 255 * val));
+                RGBA.A = AscFormat.ClampColor(255 * val);
             }
             else if (colorMod.name == "blue")
             {
-                RGBA.B = Math.min(255, Math.max(0, 255 * val));
+                RGBA.B = AscFormat.ClampColor(255 * val);
             }
             else if (colorMod.name == "blueMod")
             {
-                RGBA.B = Math.max(0, (RGBA.B * val) >> 0);
+                RGBA.B = AscFormat.ClampColor(RGBA.B * val);
             }
             else if (colorMod.name == "blueOff")
             {
-                RGBA.B = Math.max(0, (RGBA.B + val * 255)) >> 0;
+                RGBA.B = AscFormat.ClampColor(RGBA.B + val * 255);
             }
             else if (colorMod.name == "green")
             {
-                RGBA.G = Math.min(255, Math.max(0, 255 * val)) >> 0;
+                RGBA.G = AscFormat.ClampColor(255 * val);
             }
             else if (colorMod.name == "greenMod")
             {
-                RGBA.G = Math.max(0, (RGBA.G * val) >> 0);
+                RGBA.G = AscFormat.ClampColor(RGBA.G * val);
             }
             else if (colorMod.name == "greenOff")
             {
-                RGBA.G = Math.max(0, (RGBA.G + val * 255)) >> 0;
+                RGBA.G = AscFormat.ClampColor(RGBA.G + val * 255);
             }
             else if (colorMod.name == "red")
             {
-                RGBA.R = Math.min(255, Math.max(0, 255 * val)) >> 0;
+                RGBA.R = AscFormat.ClampColor(255 * val);
             }
             else if (colorMod.name == "redMod")
             {
-                RGBA.R = Math.max(0, (RGBA.R * val) >> 0);
+                RGBA.R = AscFormat.ClampColor(RGBA.R * val);
             }
             else if (colorMod.name == "redOff")
             {
-                RGBA.R = Math.max(0, (RGBA.R + val * 255) >> 0);
+                RGBA.R = AscFormat.ClampColor(RGBA.R + val * 255);
             }
             else if (colorMod.name == "hueOff")
             {
                 var HSL = {H: 0, S: 0, L: 0};
                 this.RGB2HSL(RGBA.R, RGBA.G, RGBA.B, HSL);
 
-                var res = (HSL.H + (val * 10.0) / 9.0) >> 0;
-                while(res > max_hls)
-                    res = res - max_hls;
-                while(res < 0)
-                    res += max_hls;
-                HSL.H = res;
+                var res = (HSL.H + (val * 10.0) / 9.0 + 0.5) >> 0;
+                HSL.H = AscFormat.ClampColor2(res, 0, max_hls);
 
                 this.HSL2RGB(HSL, RGBA);
             }
@@ -1114,10 +1272,7 @@ CColorModifiers.prototype =
                 var HSL = {H: 0, S: 0, L: 0};
                 this.RGB2HSL(RGBA.R, RGBA.G, RGBA.B, HSL);
 
-                if(HSL.L*val > max_hls)
-                    HSL.L = max_hls;
-                else
-                    HSL.L = Math.max(0, (HSL.L * val) >> 0);
+                HSL.L = AscFormat.ClampColor2(HSL.L * val, 0, max_hls);
                 this.HSL2RGB(HSL, RGBA);
             }
             else if (colorMod.name == "lumOff")
@@ -1125,12 +1280,8 @@ CColorModifiers.prototype =
                 var HSL = {H: 0, S: 0, L: 0};
                 this.RGB2HSL(RGBA.R, RGBA.G, RGBA.B, HSL);
 
-                var res = (HSL.L + val * max_hls) >> 0;
-                while(res > max_hls)
-                    res = res - max_hls;
-                while(res < 0)
-                    res += max_hls;
-                HSL.L = res;
+                var res = (HSL.L + val * max_hls + 0.5) >> 0;
+                HSL.L = AscFormat.ClampColor2(res, 0, max_hls);
 
                 this.HSL2RGB(HSL, RGBA);
             }
@@ -1139,10 +1290,7 @@ CColorModifiers.prototype =
                 var HSL = {H: 0, S: 0, L: 0};
                 this.RGB2HSL(RGBA.R, RGBA.G, RGBA.B, HSL);
 
-                if(HSL.S*val > max_hls)
-                    HSL.S = max_hls;
-                else
-                    HSL.S = Math.max(0, (HSL.S * val) >> 0);
+                HSL.S = AscFormat.ClampColor2(HSL.S * val, 0, max_hls);
                 this.HSL2RGB(HSL, RGBA);
             }
             else if (colorMod.name == "satOff")
@@ -1150,12 +1298,8 @@ CColorModifiers.prototype =
                 var HSL = {H: 0, S: 0, L: 0};
                 this.RGB2HSL(RGBA.R, RGBA.G, RGBA.B, HSL);
 
-                var res = (HSL.S + val * max_hls) >> 0;
-                while(res > max_hls)
-                    res = res - max_hls;
-                while(res < 0)
-                    res += max_hls;
-                HSL.S = res;
+                var res = (HSL.S + val * max_hls + 0.5) >> 0;
+                HSL.S = AscFormat.ClampColor2(res, 0, max_hls);
 
                 this.HSL2RGB(HSL, RGBA);
             }
@@ -1174,10 +1318,7 @@ CColorModifiers.prototype =
                 var HSL = {H: 0, S: 0, L: 0};
                 this.RGB2HSL(RGBA.R, RGBA.G, RGBA.B, HSL);
 
-                if(HSL.L*val_ > max_hls)
-                    HSL.L = max_hls;
-                else
-                    HSL.L = Math.max(0, (HSL.L * val_) >> 0);
+                HSL.L = AscFormat.ClampColor2(HSL.L * val_, 0, max_hls);
                 this.HSL2RGB(HSL, RGBA);
             }
             else if (colorMod.name == "wordTint")
@@ -1191,10 +1332,7 @@ CColorModifiers.prototype =
                 this.RGB2HSL(RGBA.R, RGBA.G, RGBA.B, HSL);
 
                 var L_ = HSL.L*_val + (255 - colorMod.val);
-                if(L_ > max_hls)
-                    HSL.L = max_hls;
-                else
-                    HSL.L = Math.max(0, (L_) >> 0);
+                HSL.L = AscFormat.ClampColor2(L_, 0, max_hls);
                 this.HSL2RGB(HSL, RGBA);
             }
             else if (colorMod.name == "shade")
@@ -1202,9 +1340,9 @@ CColorModifiers.prototype =
                 this.RgbtoCrgb(RGBA);
                 if (val < 0) val = 0;
                 if (val > 1) val = 1;
-                RGBA.R = ((RGBA.R * val)) >> 0;
-                RGBA.G = ((RGBA.G * val)) >> 0;
-                RGBA.B = ((RGBA.B * val)) >> 0;
+                RGBA.R = (RGBA.R * val);
+                RGBA.G = (RGBA.G * val);
+                RGBA.B = (RGBA.B * val);
                 this.CrgbtoRgb(RGBA);
             }
             else if (colorMod.name == "tint")
@@ -1234,16 +1372,6 @@ CColorModifiers.prototype =
                 this.CrgbtoRgb(RGBA);
             }
         }
-    },
-
-    applyGamma : function(c, gamma)
-    {
-        // LO
-        var _max = 256;
-        var _ret = (Math.pow(c / _max, gamma) * _max) >> 0;
-        if (_ret > 255)
-            _ret = 255;
-        return _ret;
     }
 };
 
@@ -1616,7 +1744,7 @@ CSchemeColor.prototype =
         return duplicate;
     },
 
-    Calculate : function(theme, slide, layout, masterSlide, RGBA)
+    Calculate : function(theme, slide, layout, masterSlide, RGBA, colorMap)
     {
         if(theme.themeElements.clrScheme)
         {
@@ -1627,7 +1755,11 @@ CSchemeColor.prototype =
             else
             {
                 var clrMap;
-                if(slide!=null && slide.clrMap!=null)
+                if(colorMap && colorMap.color_map)
+                {
+                    clrMap = colorMap.color_map;
+                }
+                else if(slide!=null && slide.clrMap!=null)
                 {
                     clrMap = slide.clrMap.color_map;
                 }
@@ -1684,6 +1816,15 @@ CUniColor.prototype =
         }
     },
 
+    saveSourceFormatting: function()
+    {
+        var _ret = new CUniColor();
+        _ret.color = new CRGBColor();
+        _ret.color.RGBA.R = this.RGBA.R;
+        _ret.color.RGBA.G = this.RGBA.G;
+        _ret.color.RGBA.B = this.RGBA.B;
+        return _ret;
+    },
 
     addColorMod: function(mod)
     {
@@ -1885,12 +2026,12 @@ CUniColor.prototype =
         return true;
     },
 
-    Calculate : function(theme, slide, layout, masterSlide, RGBA)
+    Calculate : function(theme, slide, layout, masterSlide, RGBA, colorMap)
     {
         if (this.color == null)
             return this.RGBA;
 
-        this.color.Calculate(theme, slide, layout, masterSlide, RGBA);
+        this.color.Calculate(theme, slide, layout, masterSlide, RGBA, colorMap);
 
         this.RGBA = {R:this.color.RGBA.R, G:this.color.RGBA.G, B: this.color.RGBA.B, A: this.color.RGBA.A};
         if(this.Mods)
@@ -1910,6 +2051,25 @@ CUniColor.prototype =
             return _ret;
         }
 
+        if(this.Mods && unicolor.Mods)
+        {
+            var aMods = this.Mods.Mods;
+            var aMods2 = unicolor.Mods.Mods;
+            if(aMods.length === aMods2.length)
+            {
+                for (var i = 0; i < aMods.length; ++i)
+                {
+                    if(aMods2[i].name !== aMods[i].name || aMods2[i].val !== aMods[i].val)
+                    {
+                        break;
+                    }
+                }
+                if(i === aMods.length)
+                {
+                    _ret.Mods = this.Mods.createDuplicate();
+                }
+            }
+        }
         switch(this.color.type)
         {
             case c_oAscColor.COLOR_TYPE_NONE:
@@ -1975,6 +2135,7 @@ CUniColor.prototype =
             }
             case c_oAscColor.COLOR_TYPE_SYS:
             {
+                _ret.color = new CSysColor();
                 if(unicolor.color.id == this.color.id)
                 {
                     _ret.color.id = this.color.id;
@@ -2013,6 +2174,14 @@ function CreateUniColorRGB(r, g, b)
     return ret;
 }
 
+function CreateUniColorRGB2(color)
+{
+    var ret = new CUniColor();
+    ret.setColor(new CRGBColor());
+    ret.color.setColor(ret.RGBA.R = color.getR(), ret.RGBA.G = color.getG(), ret.RGBA.B = color.getB());
+    return ret;
+}
+
 function CreteSolidFillRGB(r, g, b)
 {
     var ret = new CUniFill();
@@ -2030,6 +2199,8 @@ function CreateSolidFillRGBA(r, g, b, a)
     ret.setFill(new CSolidFill());
     ret.fill.setColor(new CUniColor());
     var _uni_color = ret.fill.color;
+    _uni_color.setColor(new CRGBColor());
+    _uni_color.color.setColor(r, g, b);
 	_uni_color.RGBA.R = r;
 	_uni_color.RGBA.G = g;
 	_uni_color.RGBA.B = b;
@@ -2153,7 +2324,6 @@ function CBlipFill()
     this.type = c_oAscFill.FILL_TYPE_BLIP;
 
     this.RasterImageId = "";
-    this.VectorImageBin = null;
 
     this.srcRect = null;
 
@@ -2161,6 +2331,8 @@ function CBlipFill()
     this.tile = null;
 
     this.rotWithShape = null;
+
+    this.Effects = [];
 }
 
 CBlipFill.prototype =
@@ -2170,12 +2342,14 @@ CBlipFill.prototype =
         return this.Id;
     },
 
+    saveSourceFormatting: function()
+    {
+        return this.createDuplicate();
+    },
+
     Write_ToBinary: function(w)
     {
         writeString(w, this.RasterImageId);
-        var srcUrl = AscCommon.g_oDocumentUrls.getImageUrl(this.RasterImageId) || "";
-        writeString(w, srcUrl);
-        writeString(w, this.VectorImageBin);
         if(this.srcRect)
         {
             writeBool(w, true);
@@ -2199,6 +2373,12 @@ CBlipFill.prototype =
             w.WriteBool(false);
         }
         writeBool(w, this.rotWithShape);
+
+        w.WriteLong(this.Effects.length);
+        for(var i = 0; i < this.Effects.length; ++i)
+        {
+            this.Effects[i].Write_ToBinary(w);
+        }
     },
 
     Read_FromBinary: function(r)
@@ -2209,11 +2389,10 @@ CBlipFill.prototype =
         if (null != _correct_id)
             this.RasterImageId = _correct_id;
 
-        var srcUrl = readString(r);
-        if(srcUrl) {
-            AscCommon.g_oDocumentUrls.addImageUrl(this.RasterImageId, srcUrl);
-        }
-        this.VectorImageBin = readString(r);
+        //var srcUrl = readString(r);
+        //if(srcUrl) {
+        //    AscCommon.g_oDocumentUrls.addImageUrl(this.RasterImageId, srcUrl);
+        //}
 
         if(readBool(r))
         {
@@ -2239,6 +2418,16 @@ CBlipFill.prototype =
             this.tile = null;
         }
         this.rotWithShape = readBool(r);
+        var count = r.GetLong();
+        for(var i = 0; i < count; ++i)
+        {
+            var effect = fReadEffect(r);
+            if(!effect)
+            {
+                break;
+            }
+            this.Effects.push(effect);
+        }
     },
 
 
@@ -2278,10 +2467,6 @@ CBlipFill.prototype =
         this.RasterImageId = checkRasterImageId(rasterImageId);
     },
 
-    setVectorImageBin: function(vectorImageBin)
-    {
-        this.VectorImageBin = vectorImageBin;
-    },
 
     setSrcRect: function(srcRect)
     {
@@ -2308,7 +2493,6 @@ CBlipFill.prototype =
     {
         var duplicate = new CBlipFill();
         duplicate.RasterImageId = this.RasterImageId;
-        duplicate.VectorImageBin = this.VectorImageBin;
 
         duplicate.stretch = this.stretch;
         if(isRealObject(this.tile))
@@ -2407,6 +2591,1081 @@ CBlipFill.prototype =
     }
 };
 
+
+//-----Effects-----
+var  EFFECT_TYPE_NONE			=	0;
+var  EFFECT_TYPE_OUTERSHDW		=	1;
+var  EFFECT_TYPE_GLOW			=	2;
+var  EFFECT_TYPE_DUOTONE		=	3;
+var  EFFECT_TYPE_XFRM			=	4;
+var  EFFECT_TYPE_BLUR			=	5;
+var  EFFECT_TYPE_PRSTSHDW		=	6;
+var  EFFECT_TYPE_INNERSHDW		=	7;
+var  EFFECT_TYPE_REFLECTION		=	8;
+var  EFFECT_TYPE_SOFTEDGE		=	9;
+var  EFFECT_TYPE_FILLOVERLAY	=	10;
+var  EFFECT_TYPE_ALPHACEILING	=	11;
+var  EFFECT_TYPE_ALPHAFLOOR		=	12;
+var  EFFECT_TYPE_TINTEFFECT		=	13;
+var  EFFECT_TYPE_RELOFF			=	14;
+var  EFFECT_TYPE_LUM			=	15;
+var  EFFECT_TYPE_HSL			=	16;
+var  EFFECT_TYPE_GRAYSCL		=	17;
+var  EFFECT_TYPE_ELEMENT		=	18;
+var  EFFECT_TYPE_ALPHAREPL		=	19;
+var  EFFECT_TYPE_ALPHAOUTSET	=	20;
+var  EFFECT_TYPE_ALPHAMODFIX	=	21;
+var  EFFECT_TYPE_ALPHABILEVEL	=	22;
+var  EFFECT_TYPE_BILEVEL		=	23;
+var  EFFECT_TYPE_DAG			=	24;
+var  EFFECT_TYPE_FILL			=	25;
+var  EFFECT_TYPE_CLRREPL		=	26;
+var  EFFECT_TYPE_CLRCHANGE		=	27;
+var  EFFECT_TYPE_ALPHAINV		=	28;
+var  EFFECT_TYPE_ALPHAMOD		=	29;
+var  EFFECT_TYPE_BLEND			=	30;
+
+    function fCreateEffectByType(type)
+    {
+        var ret = null;
+        switch (type)
+        {
+            case EFFECT_TYPE_NONE:
+            {
+                break;
+            }
+            case EFFECT_TYPE_OUTERSHDW:
+            {
+                ret = new COuterShdw();
+                break;
+            }
+            case EFFECT_TYPE_GLOW:
+            {
+                ret = new CGlow();
+                break;
+            }
+            case EFFECT_TYPE_DUOTONE:
+            {
+                ret = new CDuotone();
+                break;
+            }
+            case EFFECT_TYPE_XFRM:
+            {
+                ret = new CXfrmEffect();
+                break;
+            }
+            case EFFECT_TYPE_BLUR:
+            {
+                ret = new CBlur();
+                break;
+            }
+            case EFFECT_TYPE_PRSTSHDW:
+            {
+                ret = new CPrstShdw();
+                break;
+            }
+            case EFFECT_TYPE_INNERSHDW:
+            {
+                ret = new CInnerShdw();
+                break;
+            }
+            case EFFECT_TYPE_REFLECTION:
+            {
+                ret = new CReflection();
+                break;
+            }
+            case EFFECT_TYPE_SOFTEDGE:
+            {
+                ret = new CSoftEdge();
+                break;
+            }
+            case EFFECT_TYPE_FILLOVERLAY:
+            {
+                ret = new CFillOverlay();
+                break;
+            }
+            case EFFECT_TYPE_ALPHACEILING:
+            {
+                ret = new CAlphaCeiling();
+                break;
+            }
+            case EFFECT_TYPE_ALPHAFLOOR:
+            {
+                ret = new CAlphaFloor();
+                break;
+            }
+            case EFFECT_TYPE_TINTEFFECT:
+            {
+                ret = new CTintEffect();
+                break;
+            }
+            case EFFECT_TYPE_RELOFF:
+            {
+                ret = new CRelOff();
+                break;
+            }
+            case EFFECT_TYPE_LUM:
+            {
+                ret = new CLumEffect();
+                break;
+            }
+            case EFFECT_TYPE_HSL:
+            {
+                ret = new CHslEffect();
+                break;
+            }
+            case EFFECT_TYPE_GRAYSCL:
+            {
+                ret = new CGrayscl();
+                break;
+            }
+            case EFFECT_TYPE_ELEMENT:
+            {
+                ret = new CEffectElement();
+                break;
+            }
+            case EFFECT_TYPE_ALPHAREPL:
+            {
+                ret = new CAlphaRepl();
+                break;
+            }
+            case EFFECT_TYPE_ALPHAOUTSET:
+            {
+                ret = new CAlphaOutset();
+                break;
+            }
+            case EFFECT_TYPE_ALPHAMODFIX:
+            {
+                ret = new CAlphaModFix();
+                break;
+            }
+            case EFFECT_TYPE_ALPHABILEVEL:
+            {
+                ret = new CAlphaBiLevel();
+                break;
+            }
+            case EFFECT_TYPE_BILEVEL:
+            {
+                ret = new CBiLevel();
+                break;
+            }
+            case EFFECT_TYPE_DAG:
+            {
+                ret = new CEffectContainer();
+                break;
+            }
+            case EFFECT_TYPE_FILL:
+            {
+                ret = new CFillEffect();
+                break;
+            }
+            case EFFECT_TYPE_CLRREPL:
+            {
+                ret = new CClrRepl();
+                break;
+            }
+            case EFFECT_TYPE_CLRCHANGE:
+            {
+                ret = new CClrChange();
+                break;
+            }
+            case EFFECT_TYPE_ALPHAINV:
+            {
+                ret = new CAlphaInv();
+                break;
+            }
+            case EFFECT_TYPE_ALPHAMOD:
+            {
+                ret = new CAlphaMod();
+                break;
+            }
+            case EFFECT_TYPE_BLEND:
+            {
+                ret = new CBlend();
+                break;
+            }
+        }
+        return ret;
+    }
+
+    function fReadEffect(r) {
+        var type = r.GetLong();
+        var ret = fCreateEffectByType(type);
+        ret.Read_FromBinary(r);
+        return ret;
+    }
+
+    function CAlphaBiLevel()
+    {
+        this.tresh = 0;
+    }
+    CAlphaBiLevel.prototype.Type = EFFECT_TYPE_ALPHABILEVEL;
+    CAlphaBiLevel.prototype.Write_ToBinary = function(w)
+    {
+        w.WriteLong(EFFECT_TYPE_ALPHABILEVEL);
+        w.WriteLong(this.tresh);
+    };
+    CAlphaBiLevel.prototype.Read_FromBinary = function(r)
+    {
+        this.tresh = r.GetLong();
+    };
+
+    CAlphaBiLevel.prototype.createDuplicate = function()
+    {
+        var oCopy = new CAlphaBiLevel();
+        oCopy.tresh = this.tresh;
+        return oCopy;
+    };
+
+
+    function CAlphaCeiling()
+    {
+    }
+    CAlphaCeiling.prototype.Type = EFFECT_TYPE_ALPHACEILING;
+    CAlphaCeiling.prototype.Write_ToBinary = function(w)
+    {
+        w.WriteLong(EFFECT_TYPE_ALPHACEILING);
+    };
+    CAlphaCeiling.prototype.Read_FromBinary = function(r)
+    {
+    };
+    CAlphaCeiling.prototype.createDuplicate = function()
+    {
+        var oCopy = new CAlphaCeiling();
+        return oCopy;
+    };
+
+
+    function CAlphaFloor()
+    {}
+    CAlphaFloor.prototype.Type = EFFECT_TYPE_ALPHAFLOOR;
+    CAlphaFloor.prototype.Write_ToBinary = function(w)
+    {
+        w.WriteLong(EFFECT_TYPE_ALPHAFLOOR);
+    };
+    CAlphaFloor.prototype.Read_FromBinary = function(r)
+    {
+    };
+    CAlphaFloor.prototype.createDuplicate = function()
+    {
+        var oCopy = new CAlphaFloor();
+        return oCopy;
+    };
+
+    function CAlphaInv()
+    {
+        this.unicolor = null;
+    }
+    CAlphaInv.prototype.Type = EFFECT_TYPE_ALPHAINV;
+    CAlphaInv.prototype.Write_ToBinary = function(w)
+    {
+        w.WriteLong(EFFECT_TYPE_ALPHAINV);
+        if(this.unicolor)
+        {
+            w.WriteBool(true);
+            this.unicolor.Write_ToBinary(w);
+        }
+        else
+        {
+            w.WriteBool(false);
+        }
+    };
+    CAlphaInv.prototype.Read_FromBinary = function(r)
+    {
+        if(r.GetBool())
+        {
+            this.unicolor = new CUniColor();
+            this.unicolor.Read_FromBinary(r);
+        }
+    };
+    CAlphaInv.prototype.createDuplicate = function()
+    {
+        var oCopy = new CAlphaInv();
+        if(this.unicolor)
+        {
+            oCopy.unicolor = this.unicolor.createDuplicate();
+        }
+        return oCopy;
+    };
+
+    var effectcontainertypeSib  = 0;
+    var effectcontainertypeTree = 1;
+
+    function CEffectContainer()
+    {
+        this.type = null;
+        this.name = null;
+        this.effectList = [];
+    }
+
+    CEffectContainer.prototype.Type = EFFECT_TYPE_DAG;
+    CEffectContainer.prototype.Write_ToBinary = function(w)
+    {
+        w.WriteLong(EFFECT_TYPE_DAG);
+        writeLong(w, this.type);
+        writeString(w, this.name);
+        w.WriteLong(this.effectList.length);
+        for(var i = 0; i < this.effectList.length; ++i)
+        {
+            this.effectList[i].Write_ToBinary(w);
+        }
+    };
+    CEffectContainer.prototype.Read_FromBinary = function(r)
+    {
+        this.type = readLong(r);
+        this.name = readString(r);
+        var count = r.GetLong();
+        for(var i = 0; i < count; ++i)
+        {
+            var effect = fReadEffect(r);
+            if(!effect)
+            {
+                //error
+                break;
+            }
+            this.effectList.push(effect);
+        }
+    };
+
+    CEffectContainer.prototype.createDuplicate = function()
+    {
+        var oCopy = new CEffectContainer();
+        oCopy.type = this.type;
+        oCopy.name = this.name;
+        for(var i = 0; i < this.effectList.length; ++i)
+        {
+            oCopy.effectList.push(this.effectList[i].createDuplicate());
+        }
+        return oCopy;
+    };
+
+    function CAlphaMod()
+    {
+        this.cont = new CEffectContainer();
+    }
+    CAlphaMod.prototype.Type  = EFFECT_TYPE_ALPHAMOD;
+    CAlphaMod.prototype.Write_ToBinary  = function (w) {
+        w.WriteLong(EFFECT_TYPE_ALPHAMOD);
+        this.cont.Write_ToBinary(w);
+    };
+    CAlphaMod.prototype.Read_FromBinary  = function (r) {
+        this.cont.Read_FromBinary(r);
+    };
+    CAlphaMod.prototype.createDuplicate = function()
+    {
+        var oCopy = new CAlphaMod();
+        oCopy.cont = this.cont.createDuplicate();
+        return oCopy;
+    };
+
+    function CAlphaModFix()
+    {
+        this.amt = null;
+    }
+    CAlphaModFix.prototype.Type = EFFECT_TYPE_ALPHAMODFIX;
+    CAlphaModFix.prototype.Write_ToBinary  = function (w) {
+        w.WriteLong(EFFECT_TYPE_ALPHAMODFIX);
+        writeLong(w, this.amt);
+    };
+    CAlphaModFix.prototype.Read_FromBinary  = function (r) {
+        this.amt = readLong(r);
+    };
+    CAlphaModFix.prototype.createDuplicate = function()
+    {
+        var oCopy = new CAlphaModFix();
+        oCopy.amt = this.amt;
+        return oCopy;
+    };
+
+    function CAlphaOutset()
+    {
+        this.rad = null;
+    }
+    CAlphaOutset.prototype.Type = EFFECT_TYPE_ALPHAOUTSET;
+    CAlphaOutset.prototype.Write_ToBinary  = function (w) {
+        w.WriteLong(EFFECT_TYPE_ALPHAOUTSET);
+        writeLong(w, this.rad);
+    };
+    CAlphaOutset.prototype.Read_FromBinary  = function (r) {
+        this.rad = readLong(r);
+    };
+    CAlphaOutset.prototype.createDuplicate = function()
+    {
+        var oCopy = new CAlphaOutset();
+        oCopy.rad = this.rad;
+        return oCopy;
+    };
+
+    function CAlphaRepl()
+    {
+        this.a = null;
+    }
+    CAlphaRepl.prototype.Type  = EFFECT_TYPE_ALPHAREPL;
+    CAlphaRepl.prototype.Write_ToBinary  = function (w) {
+        w.WriteLong(EFFECT_TYPE_ALPHAREPL);
+        writeLong(w, this.a);
+    };
+    CAlphaRepl.prototype.Read_FromBinary  = function (r) {
+        this.a = readLong(r);
+    };
+    CAlphaRepl.prototype.createDuplicate = function()
+    {
+        var oCopy = new CAlphaRepl();
+        oCopy.a = this.a;
+        return oCopy;
+    };
+
+
+    function CBiLevel()
+    {
+        this.thresh = null;
+    }
+    CBiLevel.prototype.Type = EFFECT_TYPE_BILEVEL;
+    CBiLevel.prototype.Write_ToBinary  = function (w) {
+        w.WriteLong(EFFECT_TYPE_BILEVEL);
+        writeLong(w, this.thresh);
+    };
+    CBiLevel.prototype.Read_FromBinary  = function (r) {
+        this.thresh = readLong(r);
+    };
+    CBiLevel.prototype.createDuplicate = function()
+    {
+        var oCopy = new CBiLevel();
+        oCopy.thresh = this.thresh;
+        return oCopy;
+    };
+
+    var blendmodeDarken  = 0;
+    var blendmodeLighten = 1;
+    var blendmodeMult    = 2;
+    var blendmodeOver    = 3;
+    var blendmodeScreen  = 4;
+
+    function CBlend()
+    {
+        this.blend = null;
+        this.cont = new CEffectContainer();
+    }
+    CBlend.prototype.Type = EFFECT_TYPE_BLEND;
+    CBlend.prototype.Write_ToBinary  = function (w) {
+        w.WriteLong(EFFECT_TYPE_BLEND);
+        writeLong(w, this.blend);
+        this.cont.Write_ToBinary(w);
+    };
+    CBlend.prototype.Read_FromBinary  = function (r) {
+        this.blend = readLong(r);
+        this.cont.Read_FromBinary(r);
+    };
+    CBlend.prototype.createDuplicate = function()
+    {
+        var oCopy = new CBlend();
+        oCopy.blend = this.blend;
+        oCopy.cont = this.cont.createDuplicate();
+        return oCopy;
+    };
+
+    function CBlur()
+    {
+        this.rad = null;
+        this.grow = null;
+    }
+
+    CBlur.prototype.Type  = EFFECT_TYPE_BLUR;
+    CBlur.prototype.Write_ToBinary  = function (w) {
+        w.WriteLong(EFFECT_TYPE_BLUR);
+        writeLong(w, this.rad);
+        writeBool(w, this.grow);
+    };
+    CBlur.prototype.Read_FromBinary  = function (r) {
+        this.rad = readLong(r);
+        this.grow = readBool(r);
+    };
+    CBlur.prototype.createDuplicate = function()
+    {
+        var oCopy = new CBlur();
+        oCopy.rad = this.rad;
+        oCopy.grow = this.grow;
+        return oCopy;
+    };
+
+
+    function CClrChange()
+    {
+        this.clrFrom = new CUniColor();
+        this.clrTo =  new CUniColor();
+        this.useA = null;
+    }
+    CClrChange.prototype.Type = EFFECT_TYPE_CLRCHANGE;
+    CClrChange.prototype.Write_ToBinary  = function (w) {
+        w.WriteLong(EFFECT_TYPE_CLRCHANGE);
+        this.clrFrom.Write_ToBinary(w);
+        this.clrTo.Write_ToBinary(w);
+        writeBool(w, this.useA);
+
+    };
+    CClrChange.prototype.Read_FromBinary  = function (r) {
+        this.clrFrom.Read_FromBinary(r);
+        this.clrTo.Read_FromBinary(r);
+        this.useA = readBool(r);
+    };
+    CClrChange.prototype.createDuplicate = function()
+    {
+        var oCopy = new CClrChange();
+        oCopy.clrFrom = this.clrFrom.createDuplicate();
+        oCopy.clrTo = this.clrTo.createDuplicate();
+        oCopy.useA = this.useA;
+        return oCopy;
+    };
+
+    function CClrRepl()
+    {
+        this.color = new CUniColor();
+    }
+    CClrRepl.prototype.Type = EFFECT_TYPE_CLRREPL;
+    CClrRepl.prototype.Write_ToBinary  = function (w) {
+        w.WriteLong(EFFECT_TYPE_CLRREPL);
+        this.color.Write_ToBinary(w);
+
+    };
+    CClrRepl.prototype.Read_FromBinary  = function (r) {
+        this.color.Read_FromBinary(r);
+    };
+    CClrRepl.prototype.createDuplicate = function()
+    {
+        var oCopy = new CClrRepl();
+        oCopy.color = this.color.createDuplicate();
+        return oCopy;
+    };
+
+
+    function CDuotone()
+    {
+        this.colors = [];
+    }
+    CDuotone.prototype.Type  = EFFECT_TYPE_DUOTONE;
+    CDuotone.prototype.Write_ToBinary  = function (w) {
+        w.WriteLong(EFFECT_TYPE_DUOTONE);
+        w.WriteLong(this.colors.length);
+        for(var i = 0; i < this.colors.length; ++i)
+        {
+            this.colors[i].Write_ToBinary(w);
+        }
+
+    };
+    CDuotone.prototype.Read_FromBinary  = function (r) {
+        var count = r.GetLong();
+        for(var i = 0; i < count; ++i)
+        {
+            this.colors[i] = new CUniColor();
+            this.colors[i].Read_FromBinary(r);
+        }
+    };
+    CDuotone.prototype.createDuplicate = function()
+    {
+        var oCopy = new CDuotone();
+        for(var i = 0; i < this.colors.length; ++i)
+        {
+            oCopy.colors[i] = this.colors[i].createDuplicate();
+        }
+        return oCopy;
+    };
+
+
+    function CEffectElement()
+    {
+        this.ref = null;
+    }
+    CEffectElement.prototype.Type = EFFECT_TYPE_ELEMENT;
+    CEffectElement.prototype.Write_ToBinary  = function (w) {
+        w.WriteLong(EFFECT_TYPE_ELEMENT);
+        writeString(w, this.ref);
+    };
+    CEffectElement.prototype.Read_FromBinary  = function (r) {
+        this.ref = readString(r);
+    };
+    CEffectElement.prototype.createDuplicate = function()
+    {
+        var oCopy = new CEffectElement();
+        oCopy.ref = this.ref;
+        return oCopy;
+    };
+
+
+    function CFillEffect()
+    {
+        this.fill = new CUniFill();
+    }
+    CFillEffect.prototype.Type = EFFECT_TYPE_FILL;
+    CFillEffect.prototype.Write_ToBinary  = function (w) {
+        w.WriteLong(EFFECT_TYPE_FILL);
+        this.fill.Write_ToBinary(w);
+    };
+    CFillEffect.prototype.Read_FromBinary  = function (r) {
+        this.fill.Read_FromBinary(r);
+    };
+    CFillEffect.prototype.createDuplicate = function()
+    {
+        var oCopy = new CFillEffect();
+        oCopy.fill = this.fill.createDuplicate();
+        return oCopy;
+    };
+
+    function CFillOverlay()
+    {
+        this.fill = new CUniFill();
+        this.blend = 0;
+    }
+    CFillOverlay.prototype.Type = EFFECT_TYPE_FILLOVERLAY;
+    CFillOverlay.prototype.Write_ToBinary = function (w) {
+        w.WriteLong(EFFECT_TYPE_FILLOVERLAY);
+        this.fill.Write_ToBinary(w);
+        w.WriteLong(this.blend);
+    };
+    CFillOverlay.prototype.Read_FromBinary  = function (r) {
+        this.fill.Read_FromBinary(r);
+        this.blend = r.GetLong();
+    };
+    CFillOverlay.prototype.createDuplicate = function()
+    {
+        var oCopy = new CFillOverlay();
+        oCopy.fill = this.fill.createDuplicate();
+        oCopy.blend = this.blend;
+        return oCopy;
+    };
+
+    function CGlow()
+    {
+        this.color = new CUniColor();
+        this.rad = null;
+    }
+    CGlow.prototype.Type = EFFECT_TYPE_GLOW;
+    CGlow.prototype.Write_ToBinary  = function (w) {
+        w.WriteLong(EFFECT_TYPE_GLOW);
+        this.color.Write_ToBinary(w);
+        writeLong(w, this.rad);
+    };
+    CGlow.prototype.Read_FromBinary  = function (r) {
+        this.color.Read_FromBinary(r);
+        this.rad = readLong(r);
+    };
+    CGlow.prototype.createDuplicate = function()
+    {
+        var oCopy = new CGlow();
+        oCopy.color = this.color.createDuplicate();
+        oCopy.rad = this.rad;
+        return oCopy;
+    };
+
+    function CGrayscl()
+    {
+    }
+    CGrayscl.prototype.Type = EFFECT_TYPE_GRAYSCL;
+    CGrayscl.prototype.Write_ToBinary  = function (w) {
+        w.WriteLong(EFFECT_TYPE_GRAYSCL);
+    };
+    CGrayscl.prototype.Read_FromBinary  = function (r) {
+    };
+    CGrayscl.prototype.createDuplicate = function()
+    {
+        var oCopy = new CGrayscl();
+        return oCopy;
+    };
+
+
+    function CHslEffect()
+    {
+        this.h = null;
+        this.s = null;
+        this.l = null;
+    }
+    CHslEffect.prototype.Type = EFFECT_TYPE_HSL;
+    CHslEffect.prototype.Write_ToBinary  = function (w) {
+        w.WriteLong(EFFECT_TYPE_HSL);
+        writeLong(w, this.h);
+        writeLong(w, this.s);
+        writeLong(w, this.l);
+    };
+    CHslEffect.prototype.Read_FromBinary  = function (r) {
+        this.h = readLong(r);
+        this.s = readLong(r);
+        this.l = readLong(r);
+    };
+    CHslEffect.prototype.createDuplicate = function()
+    {
+        var oCopy = new CHslEffect();
+        oCopy.h = this.h;
+        oCopy.s = this.s;
+        oCopy.l = this.l;
+        return oCopy;
+    };
+
+    function CInnerShdw()
+    {
+        this.color = new CUniColor();
+        this.blurRad = null;
+        this.dir = null;
+        this.dist = null;
+    }
+    CInnerShdw.prototype.Type  = EFFECT_TYPE_INNERSHDW;
+    CInnerShdw.prototype.Write_ToBinary  = function (w) {
+        w.WriteLong(EFFECT_TYPE_INNERSHDW);
+        this.color.Write_ToBinary(w);
+        writeLong(w, this.blurRad);
+        writeLong(w, this.dir);
+        writeLong(w, this.dist);
+    };
+    CInnerShdw.prototype.Read_FromBinary  = function (r) {
+        this.color.Read_FromBinary(r);
+        this.blurRad = readLong(r);
+        this.dir = readLong(r);
+        this.dist = readLong(r);
+    };
+    CInnerShdw.prototype.createDuplicate = function()
+    {
+        var oCopy = new CInnerShdw();
+        oCopy.color = oCopy.color.createDuplicate();
+        oCopy.blurRad = this.blurRad;
+        oCopy.dir = this.dir;
+        oCopy.dist = this.dist;
+        return oCopy;
+    };
+
+    function CLumEffect()
+    {
+        this.bright = null;
+        this.contrast = null;
+    }
+    CLumEffect.prototype.Type = EFFECT_TYPE_LUM;
+    CLumEffect.prototype.Write_ToBinary  = function (w) {
+        w.WriteLong(EFFECT_TYPE_LUM);
+        writeLong(w, this.bright);
+        writeLong(w, this.contrast);
+    };
+    CLumEffect.prototype.Read_FromBinary  = function (r) {
+        this.bright = readLong(r);
+        this.contrast = readLong(r);
+    };
+    CLumEffect.prototype.createDuplicate = function()
+    {
+        var oCopy = new CLumEffect();
+        oCopy.bright = this.bright;
+        oCopy.contrast = this.contrast;
+        return oCopy;
+    };
+
+    function COuterShdw()
+    {
+        this.color = new CUniColor();
+        this.algn = null;
+        this.blurRad = null;
+        this.dir = null;
+        this.dist = null;
+        this.kx = null;
+        this.ky = null;
+        this.rotWithShape = null;
+        this.sx = null;
+        this.sy = null;
+    }
+    COuterShdw.prototype.Type = EFFECT_TYPE_OUTERSHDW;
+    COuterShdw.prototype.Write_ToBinary  = function (w) {
+        w.WriteLong(EFFECT_TYPE_OUTERSHDW);
+        this.color.Write_ToBinary(w);
+        writeLong(w, this.algn);
+        writeLong(w, this.blurRad);
+        writeLong(w, this.dir);
+        writeLong(w, this.dist);
+        writeLong(w, this.kx);
+        writeLong(w, this.ky);
+        writeBool(w, this.rotWithShape);
+        writeLong(w,this.sx);
+        writeLong(w,this.sy);
+    };
+    COuterShdw.prototype.Read_FromBinary  = function (r) {
+        this.color.Read_FromBinary(r);
+        this.algn = readLong(r);
+        this.blurRad = readLong(r);
+        this.dir = readLong(r);
+        this.dist = readLong(r);
+        this.kx = readLong(r);
+        this.ky = readLong(r);
+        this.rotWithShape = readBool(r);
+        this.sx = readLong(r);
+        this.sy = readLong(r);
+    };
+    COuterShdw.prototype.createDuplicate = function()
+    {
+        var oCopy = new COuterShdw();
+        oCopy.color = this.color.createDuplicate();
+        oCopy.algn = this.algn;
+        oCopy.blurRad = this.blurRad;
+        oCopy.dir = this.dir;
+        oCopy.dist = this.dist;
+        oCopy.kx = this.kx;
+        oCopy.ky = this.ky;
+        oCopy.rotWithShape = this.rotWithShape;
+        oCopy.sx = this.sx;
+        oCopy.sy = this.sy;
+        return oCopy;
+    };
+    COuterShdw.prototype.IsIdentical = function(other)
+    {
+        if(!other)
+        {
+            return false;
+        }
+        if(!this.color && other.color || this.color && !other.color || !this.color.IsIdentical(other.color))
+        {
+            return false;
+        }
+        if(other.algn !== this.algn ||
+        other.blurRad !== this.blurRad ||
+        other.dir !== this.dir ||
+        other.dist !== this.dist ||
+        other.kx !== this.kx ||
+        other.ky !== this.ky ||
+        other.rotWithShape !== this.rotWithShape ||
+        other.sx !== this.sx ||
+        other.sy !== this.sy)
+        {
+            return false;
+        }
+        return true;
+    };
+
+
+
+    function asc_CShadowProperty()
+    {
+        COuterShdw.call(this);
+        this.algn = 7;
+        this.blurRad = 50800;
+        this.color = new CUniColor();
+        this.color.color = new CPrstColor();
+        this.color.color.id = "black";
+        this.color.Mods = new CColorModifiers();
+        var oMod =  new CColorMod();
+        oMod.name = "alpha";
+        oMod.val = 40000;
+        this.color.Mods.Mods.push(oMod);
+        this.dir = 2700000
+        this.dist = 38100
+        this.rotWithShape =  false;
+    }
+    asc_CShadowProperty.prototype = Object.create(COuterShdw.prototype);
+    asc_CShadowProperty.prototype.constructor = asc_CShadowProperty;
+
+
+    window['Asc'] = window['Asc'] || {};
+    window['Asc']['asc_CShadowProperty'] = window['Asc'].asc_CShadowProperty = asc_CShadowProperty;
+    function CPrstShdw()
+    {
+        this.color = new CUniColor();
+        this.prst = null;
+        this.dir = null;
+        this.dis = null;
+    }
+    CPrstShdw.prototype.Type  = EFFECT_TYPE_PRSTSHDW;
+    CPrstShdw.prototype.Write_ToBinary  = function (w) {
+        w.WriteLong(EFFECT_TYPE_PRSTSHDW);
+        this.color.Write_ToBinary(w);
+        writeLong(w, this.prst);
+        writeLong(w, this.dir );
+        writeLong(w, this.dis );
+    };
+    CPrstShdw.prototype.Read_FromBinary  = function (r) {
+        this.color.Read_FromBinary(r);
+        this.prst = readLong(r);
+        this.dir = readLong(r);
+        this.dis = readLong(r);
+    };
+    CPrstShdw.prototype.createDuplicate = function()
+    {
+        var oCopy = new CPrstShdw();
+        oCopy.color = this.color.createDuplicate();
+        oCopy.prst = this.prst;
+        oCopy.dir = this.dir;
+        oCopy.dis = this.dis;
+        return oCopy;
+    };
+
+
+    function CReflection()
+    {
+        this.algn = null;
+        this.blurRad = null;
+        this.stA = null;
+        this.endA = null;
+        this.stPos = null;
+        this.endPos = null;
+        this.dir = null;
+        this.fadeDir = null;
+        this.dist = null;
+        this.kx = null;
+        this.ky = null;
+        this.rotWithShape = null;
+        this.sx = null;
+        this.sy = null;
+    }
+    CReflection.prototype.Type  = EFFECT_TYPE_REFLECTION;
+    CReflection.prototype.Write_ToBinary  = function (w) {
+        w.WriteLong(EFFECT_TYPE_REFLECTION);
+        writeLong(w, this.algn);
+        writeLong(w, this.blurRad);
+        writeLong(w, this.stA);
+        writeLong(w, this.endA);
+        writeLong(w, this.stPos);
+        writeLong(w, this.endPos);
+        writeLong(w, this.dir);
+        writeLong(w, this.fadeDir);
+        writeLong(w, this.dist);
+        writeLong(w, this.kx);
+        writeLong(w, this.ky);
+        writeBool(w, this.rotWithShape);
+        writeLong(w, this.sx);
+        writeLong(w, this.sy);
+    };
+    CReflection.prototype.Read_FromBinary  = function (r) {
+        this.algn = readLong(r);
+        this.blurRad = readLong(r);
+        this.stA = readLong(r);
+        this.endA = readLong(r);
+        this.stPos = readLong(r);
+        this.endPos = readLong(r);
+        this.dir = readLong(r);
+        this.fadeDir = readLong(r);
+        this.dist = readLong(r);
+        this.kx = readLong(r);
+        this.ky = readLong(r);
+        this.rotWithShape = readBool(r);
+        this.sx = readLong(r);
+        this.sy = readLong(r);
+    };
+    CReflection.prototype.createDuplicate = function()
+    {
+        var oCopy = new CReflection();
+        oCopy.algn = this.algn;
+        oCopy.blurRad = this.blurRad;
+        oCopy.stA = this.stA;
+        oCopy.endA = this.endA;
+        oCopy.stPos = this.stPos;
+        oCopy.endPos = this.endPos;
+        oCopy.dir = this.dir;
+        oCopy.fadeDir = this.fadeDir;
+        oCopy.dist = this.dist;
+        oCopy.kx = this.kx;
+        oCopy.ky = this.ky;
+        oCopy.rotWithShape = this.rotWithShape;
+        oCopy.sx = this.sx;
+        oCopy.sy = this.sy;
+        return oCopy;
+    };
+
+    function CRelOff()
+    {
+        this.tx = null;
+        this.ty = null;
+    }
+    CRelOff.prototype.Type  = EFFECT_TYPE_RELOFF;
+    CRelOff.prototype.Write_ToBinary  = function (w) {
+        w.WriteLong(EFFECT_TYPE_RELOFF);
+        writeLong(w, this.tx);
+        writeLong(w, this.ty);
+    };
+    CRelOff.prototype.Read_FromBinary  = function (r) {
+        this.tx = readLong(r);
+        this.ty = readLong(r);
+    };
+    CRelOff.prototype.createDuplicate = function()
+    {
+        var oCopy = new CRelOff();
+        oCopy.tx = this.tx;
+        oCopy.ty = this.ty;
+        return oCopy;
+    };
+
+    function CSoftEdge()
+    {
+        this.rad = null;
+    }
+    CSoftEdge.prototype.Type  = EFFECT_TYPE_SOFTEDGE;
+    CSoftEdge.prototype.Write_ToBinary  = function (w) {
+        w.WriteLong(EFFECT_TYPE_SOFTEDGE);
+        writeLong(w, this.rad);
+    };
+    CSoftEdge.prototype.Read_FromBinary  = function (r) {
+        this.rad = readLong(r);
+    };
+    CSoftEdge.prototype.createDuplicate = function()
+    {
+        var oCopy = new CSoftEdge();
+        oCopy.rad = this.rad;
+        return oCopy;
+    };
+
+    function CTintEffect()
+    {
+        this.amt = null;
+        this.hue = null;
+    }
+    CTintEffect.prototype.Type  = EFFECT_TYPE_TINTEFFECT;
+    CTintEffect.prototype.Write_ToBinary  = function (w) {
+        w.WriteLong(EFFECT_TYPE_TINTEFFECT);
+        writeLong(w, this.amt);
+        writeLong(w, this.hue);
+    };
+    CTintEffect.prototype.Read_FromBinary  = function (r) {
+        this.amt = readLong(r);
+        this.hue = readLong(r);
+    };
+    CTintEffect.prototype.createDuplicate = function()
+    {
+        var oCopy = new CTintEffect();
+        oCopy.amt = this.amt;
+        oCopy.hue = this.hue;
+        return oCopy;
+    };
+
+    function CXfrmEffect()
+    {
+        this.kx = null;
+        this.ky = null;
+        this.sx = null;
+        this.sy = null;
+        this.tx = null;
+        this.ty = null;
+    }
+    CXfrmEffect.prototype.Type  = EFFECT_TYPE_XFRM;
+    CXfrmEffect.prototype.Write_ToBinary  = function (w) {
+        w.WriteLong(EFFECT_TYPE_XFRM);
+        writeLong(w, this.kx);
+        writeLong(w, this.ky);
+        writeLong(w, this.sx);
+        writeLong(w, this.sy);
+        writeLong(w, this.tx);
+        writeLong(w, this.ty);
+    };
+    CXfrmEffect.prototype.Read_FromBinary  = function (r) {
+        this.kx = readLong(r);
+        this.ky = readLong(r);
+        this.sx = readLong(r);
+        this.sy = readLong(r);
+        this.tx = readLong(r);
+        this.ty = readLong(r);
+    };
+    CXfrmEffect.prototype.createDuplicate = function()
+    {
+        var oCopy = new CXfrmEffect();
+        oCopy.kx = this.kx;
+        oCopy.ky = this.ky;
+        oCopy.sx = this.sx;
+        oCopy.sy = this.sy;
+        oCopy.tx = this.tx;
+        oCopy.ty = this.ty;
+        return oCopy;
+    };
+//-----------------
+
+
 function CSolidFill()
 {
     this.type = c_oAscFill.FILL_TYPE_SOLID;
@@ -2430,6 +3689,15 @@ CSolidFill.prototype =
         {
             this.color.check(theme, colorMap);
         }
+    },
+
+    saveSourceFormatting: function()
+    {
+        var _ret = new CSolidFill();
+        if(this.color){
+            _ret.color = this.color.saveSourceFormatting();
+        }
+        return _ret;
     },
 
     getObjectType: function()
@@ -2496,7 +3764,11 @@ CSolidFill.prototype =
             return false;
         }
 
-        return this.color.IsIdentical(fill.color);
+        if(this.color)
+        {
+            return this.color.IsIdentical(fill.color);
+        }
+        return (fill.color === null);
 
     },
 
@@ -2516,9 +3788,13 @@ CSolidFill.prototype =
         {
             return null;
         }
-        var _ret = new CSolidFill();
-        _ret.color = this.color.compare(fill.color);
-        return _ret;
+        if(this.color && fill.color)
+        {
+            var _ret = new CSolidFill();
+            _ret.color = this.color.compare(fill.color);
+            return _ret;
+        }
+        return null;
     }
 };
 
@@ -2552,6 +3828,16 @@ CGs.prototype =
     setPos: function(pos)
     {
         this.pos = pos;
+    },
+
+    saveSourceFormatting: function()
+    {
+        var _ret = new CGs();
+        _ret.pos = this.pos;
+        if(this.color){
+            _ret.color = this.color.saveSourceFormatting();
+        }
+        return _ret;
     },
 
     Write_ToBinary: function(w)
@@ -2776,6 +4062,21 @@ CGradFill.prototype =
     },
     Refresh_RecalcData: function()
     {},
+
+    saveSourceFormatting: function()
+    {
+        var _ret = new CGradFill();
+        if(this.lin){
+            _ret.lin = this.lin.createDuplicate();
+        }
+        if(this.path){
+            _ret.path = this.path.createDuplicate();
+        }
+        for(var i = 0; i < this.colors.length; ++i){
+            _ret.colors.push(this.colors[i].saveSourceFormatting());
+        }
+        return _ret;
+    },
 
     check: function(theme, colorMap)
     {
@@ -3022,6 +4323,19 @@ CPattFill.prototype =
 
     },
 
+    saveSourceFormatting: function()
+    {
+        var _ret = new CPattFill();
+        if(this.fgClr){
+            _ret.fgClr = this.fgClr.saveSourceFormatting();
+        }
+        if(this.bgClr){
+            _ret.bgClr = this.bgClr.saveSourceFormatting();
+        }
+        _ret.ftype = this.ftype;
+        return _ret;
+    },
+
     convertToPPTXMods: function()
     {
         this.fgClr && this.fgClr.convertToPPTXMods();
@@ -3172,6 +4486,10 @@ CNoFill.prototype =
     },
 
 
+    saveSourceFormatting: function()
+    {
+        return this.createDuplicate();
+    },
 
     Write_ToBinary: function(w)
     {
@@ -3554,27 +4872,25 @@ CUniFill.prototype =
         }
     },
 
-
-
-    calculate : function(theme, slide, layout, masterSlide, RGBA)
+    calculate : function(theme, slide, layout, masterSlide, RGBA, colorMap)
     {
         if(this.fill )
         {
             if(this.fill.color)
             {
-                this.fill.color.Calculate(theme, slide, layout, masterSlide, RGBA);
+                this.fill.color.Calculate(theme, slide, layout, masterSlide, RGBA, colorMap);
             }
             if(this.fill.colors)
             {
                 for(var i  = 0; i <this.fill.colors.length; ++i )
                 {
-                    this.fill.colors[i].color.Calculate(theme, slide, layout, masterSlide, RGBA);
+                    this.fill.colors[i].color.Calculate(theme, slide, layout, masterSlide, RGBA, colorMap);
                 }
             }
             if (this.fill.fgClr)
-                this.fill.fgClr.Calculate(theme, slide, layout, masterSlide, RGBA);
+                this.fill.fgClr.Calculate(theme, slide, layout, masterSlide, RGBA, colorMap);
             if (this.fill.bgClr)
-                this.fill.bgClr.Calculate(theme, slide, layout, masterSlide, RGBA);
+                this.fill.bgClr.Calculate(theme, slide, layout, masterSlide, RGBA, colorMap);
         }
     },
 
@@ -3584,7 +4900,14 @@ CUniFill.prototype =
         {
             if (this.fill.type == c_oAscFill.FILL_TYPE_SOLID)
             {
-                return this.fill.color.RGBA;
+                if(this.fill.color)
+                {
+                    return this.fill.color.RGBA;
+                }
+                else
+                {
+                    return new FormatRGBAColor();
+                }
             }
             if (this.fill.type == c_oAscFill.FILL_TYPE_GRAD)
             {
@@ -3631,6 +4954,23 @@ CUniFill.prototype =
         return duplicate;
     },
 
+    saveSourceFormatting: function()
+    {
+        var duplicate = new CUniFill();
+        if(this.fill)
+        {
+            if(this.fill.saveSourceFormatting){
+                duplicate.fill = this.fill.saveSourceFormatting();
+            }
+            else{
+                duplicate.fill = this.fill.createDuplicate();
+            }
+
+        }
+        duplicate.transparent = this.transparent;
+        return duplicate;
+    },
+
     merge : function(unifill)
     {
         if(unifill )
@@ -3638,6 +4978,15 @@ CUniFill.prototype =
             if(unifill.fill!=null)
             {
                 this.fill = unifill.fill.createDuplicate();
+                if(this.fill.type === c_oAscFill.FILL_TYPE_PATT){
+                    var _patt_fill = this.fill;
+                    if(!_patt_fill.fgClr){
+                        _patt_fill.setFgColor(CreateUniColorRGB(0, 0, 0));
+                    }
+                    if(!_patt_fill.bgClr){
+                        _patt_fill.bgClr = CreateUniColorRGB(255, 255, 255);
+                    }
+                }
             }
             if(unifill.transparent != null)
             {
@@ -3761,8 +5110,6 @@ function CompareUnifillBool(u1, u2)
                 && AscCommon.getFullImageSrc2(u1.fill.RasterImageId) !== AscCommon.getFullImageSrc2(u2.fill.RasterImageId))
                 return false;
 
-            if(u1.fill.VectorImageBin !== u2.fill.VectorImageBin)
-                return false;
 
             if(u1.fill.srcRect && !u2.fill.srcRect || !u1.fill.srcRect && u2.fill.srcRect)
                 return false;
@@ -3921,6 +5268,30 @@ function CompareShapeProperties(shapeProp1, shapeProp2)
     {
         _result_shape_prop.w = null;
     }
+    if(shapeProp1.rot === shapeProp2.rot)
+    {
+        _result_shape_prop.rot = shapeProp1.rot;
+    }
+    else
+    {
+        _result_shape_prop.rot = null;
+    }
+    if(shapeProp1.flipH === shapeProp2.flipH)
+    {
+        _result_shape_prop.flipH = shapeProp1.flipH;
+    }
+    else
+    {
+        _result_shape_prop.flipH = null;
+    }
+    if(shapeProp1.flipV === shapeProp2.flipV)
+    {
+        _result_shape_prop.flipV = shapeProp1.flipV;
+    }
+    else
+    {
+        _result_shape_prop.flipV = null;
+    }
 
     if(shapeProp1.stroke == null || shapeProp2.stroke == null)
     {
@@ -3966,7 +5337,14 @@ function CompareShapeProperties(shapeProp1, shapeProp2)
     {
         _result_shape_prop.bFromChart = false;
     }
-
+    if(!shapeProp1.bFromImage || !shapeProp2.bFromImage)
+    {
+        _result_shape_prop.bFromImage = false;
+    }
+    else
+    {
+        _result_shape_prop.bFromImage = true;
+    }
     if(shapeProp1.locked || shapeProp2.locked)
     {
         _result_shape_prop.locked = true;
@@ -3979,6 +5357,31 @@ function CompareShapeProperties(shapeProp1, shapeProp2)
     if(shapeProp1.description === shapeProp2.description){
         _result_shape_prop.description = shapeProp1.description;
     }
+    if(shapeProp1.columnNumber === shapeProp2.columnNumber){
+        _result_shape_prop.columnNumber = shapeProp1.columnNumber;
+    }
+    if(shapeProp1.columnSpace === shapeProp2.columnSpace){
+        _result_shape_prop.columnSpace = shapeProp1.columnSpace;
+    }
+
+    if(!shapeProp1.shadow && !shapeProp2.shadow){
+        _result_shape_prop.shadow = null;
+    }
+    else if(shapeProp1.shadow && !shapeProp2.shadow){
+        _result_shape_prop.shadow = null;
+    }
+    else if(!shapeProp1.shadow && shapeProp2.shadow){
+        _result_shape_prop.shadow = null;
+    }
+    else if(shapeProp1.shadow.IsIdentical(shapeProp2.shadow))
+    {
+        _result_shape_prop.shadow = shapeProp1.shadow.createDuplicate();
+    }
+    else
+    {
+        _result_shape_prop.shadow = null;
+    }
+
     return _result_shape_prop;
 }
 
@@ -4085,8 +5488,9 @@ EndArrow.prototype =
         return arrow && arrow.type == this.type &&  arrow.len == this.len && arrow.w  == this.w;
     },
 
-    GetWidth: function(size, _max)
+    GetWidth: function(_size, _max)
     {
+        var size = Math.max(_size, _max ? _max : 2);
         var _ret = 3 * size;
         if (null != this.w)
         {
@@ -4094,30 +5498,35 @@ EndArrow.prototype =
             {
                 case LineEndSize.Large:
                     _ret = 5 * size;
+                    break;
                 case LineEndSize.Small:
                     _ret = 2 * size;
+                    break;
                 default:
                     break;
             }
         }
-        return Math.max(_ret, _max ? _max : 7);
+        return _ret;
     },
-    GetLen: function(size, _max)
+    GetLen: function(_size, _max)
     {
+        var size = Math.max(_size, _max ? _max : 2);
         var _ret = 3 * size;
-        if (null != this.w)
+        if (null != this.len)
         {
-            switch (this.w)
+            switch (this.len)
             {
                 case LineEndSize.Large:
                     _ret = 5 * size;
+                    break;
                 case LineEndSize.Small:
                     _ret = 2 * size;
+                    break;
                 default:
                     break;
             }
         }
-        return Math.max(_ret, _max ? _max : 7);
+        return _ret;
     },
 
     getObjectType: function()
@@ -4365,21 +5774,27 @@ CLn.prototype =
         }
     },
 
-    calculate: function(theme, slide, layout, master, RGBA)
+    calculate: function(theme, slide, layout, master, RGBA, colorMap)
     {
         if(isRealObject(this.Fill))
         {
-            this.Fill.calculate(theme, slide, layout, master, RGBA);
+            this.Fill.calculate(theme, slide, layout, master, RGBA, colorMap);
         }
     },
 
-    createDuplicate:  function()
+    createDuplicate:  function(bSaveFormatting)
     {
         var duplicate = new CLn();
 
         if (null != this.Fill)
         {
-            duplicate.Fill = this.Fill.createDuplicate();
+            if(bSaveFormatting === true){
+                duplicate.Fill = this.Fill.saveSourceFormatting();
+            }
+            else{
+                duplicate.Fill = this.Fill.createDuplicate();
+            }
+
         }
 
         duplicate.prstDash = this.prstDash;
@@ -4451,6 +5866,11 @@ CLn.prototype =
     setW: function(w)
     {
         this.w = w;
+    },
+
+    isVisible: function()
+    {
+        return this.Fill && this.Fill.fill && this.Fill.fill.type !== AscFormat.FILL_TYPE_NONE && this.Fill.fill.type !== AscFormat.FILL_TYPE_NOFILL;
     },
 
     Write_ToBinary: function(w)
@@ -4541,6 +5961,18 @@ DefaultShapeDefinition.prototype=
         return this.Id;
     },
 
+
+    Write_ToBinary2: function (w)
+    {
+        w.WriteLong(this.getObjectType());
+        w.WriteString2(this.Id);
+    },
+
+    Read_FromBinary2: function (r)
+    {
+        this.Id = r.GetString2();
+    },
+
     Refresh_RecalcData: function()
     {},
     getObjectType: function()
@@ -4570,8 +6002,31 @@ DefaultShapeDefinition.prototype=
     {
         History.Add(new CChangesDrawingsObject(this, AscDFH.historyitem_DefaultShapeDefinition_SetStyle, this.style, style));
         this.style = style;
+    },
+
+    createDuplicate: function()
+    {
+        var ret = new DefaultShapeDefinition();
+        if(this.spPr)
+        {
+            ret.setSpPr(this.spPr.createDuplicate());
+        }
+        if(this.bodyPr)
+        {
+            ret.setBodyPr(this.bodyPr.createDuplicate());
+        }
+        if(this.lstStyle)
+        {
+            ret.setLstStyle(this.lstStyle.createDuplicate());
+        }
+        if(this.style)
+        {
+            ret.setStyle(this.style.createDuplicate());
+        }
+        return ret;
     }
 };
+
 
 function CNvPr()
 {
@@ -4580,6 +6035,9 @@ function CNvPr()
     this.isHidden = false;
     this.descr = null;
     this.title = null;
+
+    this.hlinkClick = null;
+    this.hlinkHover = null;
 
     this.Id = g_oIdCounter.Get_NewId();
     g_oTableId.Add(this, this.Id)
@@ -4609,6 +6067,12 @@ CNvPr.prototype =
         duplicate.setIsHidden(this.isHidden);
         duplicate.setDescr(this.descr);
         duplicate.setTitle(this.title);
+        if(this.hlinkClick){
+            duplicate.setHlinkClick(this.hlinkClick.createDuplicate());
+        }
+        if(this.hlinkHover){
+            duplicate.setHlinkClick(this.hlinkHover.createDuplicate());
+        }
         return duplicate;
     },
 
@@ -4634,6 +6098,18 @@ CNvPr.prototype =
     {
         History.Add(new CChangesDrawingsString(this, AscDFH.historyitem_CNvPr_SetDescr , this.descr,  descr));
         this.descr = descr;
+    },
+
+    setHlinkClick: function(pr)
+    {
+        History.Add(new CChangesDrawingsObjectNoId(this, AscDFH.historyitem_CNvPr_SetHlinkClick, this.hlinkClick, pr));
+        this.hlinkClick = pr;
+    },
+
+    setHlinkHover: function(pr)
+    {
+        History.Add(new CChangesDrawingsObjectNoId(this, AscDFH.historyitem_CNvPr_SetHlinkHover, this.hlinkHover, pr));
+        this.hlinkHover = pr;
     },
 
     setTitle: function(title)
@@ -4669,11 +6145,54 @@ CNvPr.prototype =
     }
 };
 
+
+
+var AUDIO_CD = 0;
+var WAV_AUDIO_FILE = 1;
+var AUDIO_FILE = 2;
+var VIDEO_FILE = 3;
+var QUICK_TIME_FILE = 4;
+
+
+function UniMedia() {
+    this.type = null;
+    this.media = null;
+}
+    UniMedia.prototype.Write_ToBinary = function(w){
+        var bType = this.type !== null && this.type !== undefined;
+        var bMedia = typeof this.media === 'string';
+        var nFlags = 0;
+        bType && (nFlags |= 1);
+        bMedia && (nFlags |= 2);
+        w.WriteLong(nFlags);
+        bType && w.WriteLong(this.type);
+        bMedia && w.WriteString2(this.media);
+    };
+    UniMedia.prototype.Read_FromBinary = function(r){
+        var nFlags = r.GetLong();
+        if(nFlags & 1){
+            this.type = r.GetLong();
+        }
+        if(nFlags & 2){
+            this.media = r.GetString2();
+        }
+    };
+
+    UniMedia.prototype.createDuplicate = function(){
+        var _ret = new UniMedia();
+        _ret.type = this.type;
+        _ret.media = this.media;
+        return _ret;
+    };
+
+    drawingConstructorsMap[AscDFH.historyitem_NvPr_SetUniMedia                 ] = UniMedia;
+
 function NvPr()
 {
     this.isPhoto = false;
     this.userDrawn = false;
     this.ph = null;
+    this.unimedia = null;
 
 
     this.Id = g_oIdCounter.Get_NewId();
@@ -4712,6 +6231,10 @@ NvPr.prototype =
         this.ph = ph;
     },
 
+    setUniMedia: function(pr){
+        History.Add(new CChangesDrawingsObjectNoId(this, AscDFH.historyitem_NvPr_SetUniMedia, this.unimedia, pr));
+        this.unimedia = pr;
+    },
 
     createDuplicate: function()
     {
@@ -4721,6 +6244,10 @@ NvPr.prototype =
         if(this.ph != null)
         {
             duplicate.setPh(this.ph.createDuplicate());
+        }
+        if(this.unimedia != null)
+        {
+            duplicate.setUniMedia(this.unimedia.createDuplicate());
         }
         return duplicate;
     },
@@ -4823,11 +6350,88 @@ Ph.prototype =
     }
 };
 
+
+
+function CNvUniSpPr()
+{
+    this.locks = null;
+
+    this.stCnxIdx = null;
+    this.stCnxId  = null;
+
+    this.endCnxIdx = null;
+    this.endCnxId  = null;
+}
+
+    CNvUniSpPr.prototype.Write_ToBinary = function(w){
+        if(AscFormat.isRealNumber(this.locks)){
+            w.WriteBool(true);
+            w.WriteLong(this.locks);
+        }
+        else {
+            w.WriteBool(false);
+        }
+        if(AscFormat.isRealNumber(this.stCnxIdx) && typeof (this.stCnxId) === "string" && this.stCnxId.length > 0){
+            w.WriteBool(true);
+            w.WriteLong(this.stCnxIdx);
+            w.WriteString2(this.stCnxId);
+        }
+        else {
+            w.WriteBool(false);
+        }
+        if(AscFormat.isRealNumber(this.endCnxIdx) && typeof (this.endCnxId) === "string" && this.endCnxId.length > 0){
+            w.WriteBool(true);
+            w.WriteLong(this.endCnxIdx);
+            w.WriteString2(this.endCnxId);
+        }
+        else {
+            w.WriteBool(false);
+        }
+    };
+    CNvUniSpPr.prototype.Read_FromBinary = function(r){
+        var bCnx = r.GetBool();
+        if(bCnx){
+            this.locks = r.GetLong();
+        }
+        else{
+            this.locks = null;
+        }
+        bCnx = r.GetBool();
+        if(bCnx){
+            this.stCnxIdx = r.GetLong();
+            this.stCnxId = r.GetString2();
+        }
+        else{
+            this.stCnxIdx = null;
+            this.stCnxId =  null;
+        }
+        bCnx = r.GetBool();
+        if(bCnx){
+            this.endCnxIdx = r.GetLong();
+            this.endCnxId = r.GetString2();
+        }
+        else{
+            this.endCnxIdx = null;
+            this.endCnxId =  null;
+        }
+    };
+
+    CNvUniSpPr.prototype.copy = function(){
+        var _ret = new CNvUniSpPr();
+        _ret.locks = this.locks;
+        _ret.stCnxId = this.stCnxId;
+        _ret.stCnxIdx = this.stCnxIdx;
+        _ret.endCnxId = this.endCnxId;
+        _ret.endCnxIdx = this.endCnxIdx;
+        return _ret;
+    };
+
 function UniNvPr()
 {
     this.cNvPr = new CNvPr();
     this.UniPr = null;
     this.nvPr = new NvPr();
+    this.nvUniSpPr = new CNvUniSpPr();
     this.Id = g_oIdCounter.Get_NewId();
     g_oTableId.Add(this, this.Id);
 
@@ -4853,6 +6457,11 @@ UniNvPr.prototype =
         this.cNvPr = cNvPr;
     },
 
+    setUniSpPr: function(pr){
+        History.Add(new CChangesDrawingsObjectNoId(this, AscDFH.historyitem_UniNvPr_SetUniSpPr, this.nvUniSpPr, pr));
+        this.nvUniSpPr = pr;
+    },
+
     setUniPr: function(uniPr)
     {
         History.Add(new CChangesDrawingsObject(this, AscDFH.historyitem_UniNvPr_SetUniPr, this.UniPr, uniPr));
@@ -4870,7 +6479,8 @@ UniNvPr.prototype =
     {
         var duplicate = new UniNvPr();
         this.cNvPr && duplicate.setCNvPr(this.cNvPr.createDuplicate());
-        duplicate.nvPr && duplicate.setNvPr(this.nvPr.createDuplicate());
+        this.nvPr && duplicate.setNvPr(this.nvPr.createDuplicate());
+        this.nvUniSpPr && duplicate.setUniSpPr(this.nvUniSpPr.copy());
         return duplicate;
     },
 
@@ -5350,14 +6960,6 @@ CXfrm.prototype =
         return duplicate;
     },
 
-    checkFromSerialize: function()
-    {
-        if(this.parent && this.parent.checkFromSerialize)
-        {
-            this.parent.checkFromSerialize();
-        }
-    },
-
     setParent: function(pr)
     {
         History.Add(new CChangesDrawingsObject(this, AscDFH.historyitem_Xfrm_SetParent, this.parent,  pr));
@@ -5366,77 +6968,66 @@ CXfrm.prototype =
 
     setOffX: function(pr)
     {
-        this.checkFromSerialize();
         History.Add(new CChangesDrawingsDouble(this, AscDFH.historyitem_Xfrm_SetOffX, this.offX,  pr));
         this.offX = pr;
         this.handleUpdatePosition();
     },
     setOffY: function(pr)
     {
-        this.checkFromSerialize();
         History.Add(new CChangesDrawingsDouble(this, AscDFH.historyitem_Xfrm_SetOffY, this.offY,  pr));
         this.offY = pr;
         this.handleUpdatePosition();
     },
     setExtX: function(pr)
     {
-        this.checkFromSerialize();
         History.Add(new CChangesDrawingsDouble(this, AscDFH.historyitem_Xfrm_SetExtX, this.extX,  pr));
         this.extX = pr;
-        this.handleUpdateExtents();
+        this.handleUpdateExtents(true);
     },
     setExtY: function(pr)
     {
-        this.checkFromSerialize();
         History.Add(new CChangesDrawingsDouble(this, AscDFH.historyitem_Xfrm_SetExtY, this.extY,  pr));
         this.extY = pr;
-        this.handleUpdateExtents();
+        this.handleUpdateExtents(false);
     },
     setChOffX: function(pr)
     {
-        this.checkFromSerialize();
         History.Add(new CChangesDrawingsDouble(this, AscDFH.historyitem_Xfrm_SetChOffX, this.chOffX,  pr));
         this.chOffX = pr;
         this.handleUpdateChildOffset();
     },
     setChOffY: function(pr)
     {
-        this.checkFromSerialize();
         History.Add(new CChangesDrawingsDouble(this, AscDFH.historyitem_Xfrm_SetChOffY, this.chOffY,  pr));
         this.chOffY = pr;
         this.handleUpdateChildOffset();
     },
     setChExtX: function(pr)
     {
-        this.checkFromSerialize();
         History.Add(new CChangesDrawingsDouble(this, AscDFH.historyitem_Xfrm_SetChExtX, this.chExtX,  pr));
         this.chExtX = pr;
         this.handleUpdateChildExtents();
     },
     setChExtY: function(pr)
     {
-        this.checkFromSerialize();
         History.Add(new CChangesDrawingsDouble(this, AscDFH.historyitem_Xfrm_SetChExtY, this.chExtY,  pr));
         this.chExtY = pr;
         this.handleUpdateChildExtents();
     },
     setFlipH: function(pr)
     {
-        this.checkFromSerialize();
         History.Add(new CChangesDrawingsBool(this, AscDFH.historyitem_Xfrm_SetFlipH, this.flipH,  pr));
         this.flipH = pr;
         this.handleUpdateFlip();
     },
     setFlipV: function(pr)
     {
-        this.checkFromSerialize();
         History.Add(new CChangesDrawingsBool(this, AscDFH.historyitem_Xfrm_SetFlipV, this.flipV,  pr));
         this.flipV = pr;
         this.handleUpdateFlip();
     },
     setRot: function(pr)
     {
-        this.checkFromSerialize();
         History.Add(new CChangesDrawingsDouble(this, AscDFH.historyitem_Xfrm_SetRot, this.rot,  pr));
         this.rot = pr;
         this.handleUpdateRot();
@@ -5450,11 +7041,11 @@ CXfrm.prototype =
         }
     },
 
-    handleUpdateExtents: function()
+    handleUpdateExtents: function(bExtX)
     {
         if(this.parent && this.parent.handleUpdateExtents)
         {
-            this.parent.handleUpdateExtents();
+            this.parent.handleUpdateExtents(bExtX);
         }
     },
 
@@ -5554,6 +7145,236 @@ CXfrm.prototype =
     }
 };
 
+
+function CEffectProperties()
+{
+    this.EffectDag = null;
+    this.EffectLst = null;
+}
+
+
+CEffectProperties.prototype.createDuplicate = function ()
+{
+    var oCopy = new CEffectProperties();
+    if(this.EffectDag)
+    {
+        oCopy.EffectDag = this.EffectDag.createDuplicate();
+    }
+    if(this.EffectLst)
+    {
+        oCopy.EffectLst = this.EffectLst.createDuplicate();
+    }
+    return oCopy;
+};
+
+CEffectProperties.prototype.Write_ToBinary = function(w)
+{
+    var nFlags = 0;
+    if(this.EffectDag)
+    {
+        nFlags |= 1;
+    }
+    if(this.EffectLst)
+    {
+        nFlags |= 2;
+    }
+    w.WriteLong(nFlags);
+    if(this.EffectDag)
+    {
+        this.EffectDag.Write_ToBinary(w);
+    }
+    if(this.EffectLst)
+    {
+        this.EffectLst.Write_ToBinary(w);
+    }
+};
+CEffectProperties.prototype.Read_FromBinary = function(r)
+{
+    var nFlags = r.GetLong();
+    if(nFlags & 1)
+    {
+        this.EffectDag = new CEffectContainer();
+        this.EffectDag.Read_FromBinary(r);
+    }
+    if(nFlags & 2)
+    {
+        this.EffectLst = new CEffectLst();
+        this.EffectLst.Read_FromBinary(r);
+    }
+};
+
+
+function CEffectLst()
+{
+    this.blur = null;
+    this.fillOverlay = null;
+    this.glow = null;
+    this.innerShdw = null;
+    this.outerShdw = null;
+    this.prstShdw = null;
+    this.reflection = null;
+    this.softEdge = null;
+}
+CEffectLst.prototype.createDuplicate = function()
+{
+    var oCopy = new CEffectLst();
+    if(this.blur)
+    {
+        oCopy.blur = this.blur.createDuplicate();
+    }
+    if(this.fillOverlay)
+    {
+        oCopy.fillOverlay = this.fillOverlay.createDuplicate();
+    }
+    if(this.glow)
+    {
+        oCopy.glow = this.glow.createDuplicate();
+    }
+    if(this.innerShdw)
+    {
+        oCopy.innerShdw = this.innerShdw.createDuplicate();
+    }
+    if(this.outerShdw)
+    {
+        oCopy.outerShdw = this.outerShdw.createDuplicate();
+    }
+    if(this.prstShdw)
+    {
+        oCopy.prstShdw = this.prstShdw.createDuplicate();
+    }
+    if(this.reflection)
+    {
+        oCopy.reflection = this.reflection.createDuplicate();
+    }
+    if(this.softEdge)
+    {
+        oCopy.softEdge = this.softEdge.createDuplicate();
+    }
+    return oCopy;
+};
+CEffectLst.prototype.Write_ToBinary = function(w)
+{
+    var nFlags = 0;
+    if(this.blur)
+    {
+        nFlags |= 1;
+    }
+    if(this.fillOverlay)
+    {
+        nFlags |= 2;
+    }
+    if(this.glow)
+    {
+        nFlags |= 4;
+    }
+    if(this.innerShdw)
+    {
+        nFlags |= 8;
+    }
+    if(this.outerShdw)
+    {
+        nFlags |= 16;
+    }
+    if(this.prstShdw)
+    {
+        nFlags |= 32;
+    }
+    if(this.reflection)
+    {
+        nFlags |= 64;
+    }
+    if(this.softEdge)
+    {
+        nFlags |= 128;
+    }
+    w.WriteLong(nFlags);
+    if(this.blur)
+    {
+        this.blur.Write_ToBinary(w);
+    }
+    if(this.fillOverlay)
+    {
+        this.fillOverlay.Write_ToBinary(w);
+    }
+    if(this.glow)
+    {
+        this.glow.Write_ToBinary(w);
+    }
+    if(this.innerShdw)
+    {
+        this.innerShdw.Write_ToBinary(w);
+    }
+    if(this.outerShdw)
+    {
+        this.outerShdw.Write_ToBinary(w);
+    }
+    if(this.prstShdw)
+    {
+        this.prstShdw.Write_ToBinary(w);
+    }
+    if(this.reflection)
+    {
+        this.reflection.Write_ToBinary(w);
+    }
+    if(this.softEdge)
+    {
+        this.softEdge.Write_ToBinary(w);
+    }
+};
+CEffectLst.prototype.Read_FromBinary = function(r)
+{
+    var nFlags = r.GetLong();
+    if(nFlags & 1)
+    {
+        this.blur = new CBlur();
+        r.GetLong();
+        this.blur.Read_FromBinary(r);
+    }
+    if(nFlags & 2)
+    {
+        this.fillOverlay = new CFillOverlay();
+        r.GetLong();
+        this.fillOverlay.Read_FromBinary(r);
+    }
+    if(nFlags & 4)
+    {
+        this.glow = new CGlow();
+        r.GetLong();
+        this.glow.Read_FromBinary(r);
+    }
+    if(nFlags & 8)
+    {
+        this.innerShdw = new CInnerShdw();
+        r.GetLong();
+        this.innerShdw.Read_FromBinary(r);
+    }
+    if(nFlags & 16)
+    {
+        this.outerShdw = new COuterShdw();
+        r.GetLong();
+        this.outerShdw.Read_FromBinary(r);
+    }
+    if(nFlags & 32)
+    {
+        this.prstShdw = new CPrstShdw();
+        r.GetLong();
+        this.prstShdw.Read_FromBinary(r);
+    }
+    if(nFlags & 64)
+    {
+        this.reflection = new CReflection();
+        r.GetLong();
+        this.reflection.Read_FromBinary(r);
+    }
+    if(nFlags & 128)
+    {
+        this.softEdge = new CSoftEdge();
+        r.GetLong();
+        this.softEdge.Read_FromBinary(r);
+    }
+};
+
+
 function CSpPr()
 {
     this.bwMode    = 0;
@@ -5563,6 +7384,8 @@ function CSpPr()
     this.Fill       = null;
     this.ln         = null;
     this.parent     = null;
+
+    this.effectProps = null;
 
 
     this.Id = g_oIdCounter.Get_NewId();
@@ -5593,6 +7416,7 @@ CSpPr.prototype =
                 break;
             }
             case AscDFH.historyitem_SpPr_SetGeometry:
+            case AscDFH.historyitem_SpPr_SetEffectPr:
             {
                 this.handleUpdateGeometry();
                 break;
@@ -5635,6 +7459,10 @@ CSpPr.prototype =
         {
             duplicate.setLn(this.ln.createDuplicate());
         }
+        if(this.effectProps)
+        {
+            duplicate.setEffectPr(this.effectProps.createDuplicate());
+        }
         return duplicate;
     },
 
@@ -5655,6 +7483,35 @@ CSpPr.prototype =
             var line_image_id = this.checkUniFillRasterImageId(this.ln.Fill);
             if(line_image_id)
                 images.push(line_image_id);
+        }
+    },
+
+    changeShadow: function(oShadow)
+    {
+        if(oShadow)
+        {
+            var oEffectProps = this.effectProps ? this.effectProps.createDuplicate() : new AscFormat.CEffectProperties();
+            if(!oEffectProps.EffectLst)
+            {
+                oEffectProps.EffectLst = new CEffectLst();
+            }
+            oEffectProps.EffectLst.outerShdw = oShadow.createDuplicate();
+            this.setEffectPr(oEffectProps);
+        }
+        else
+        {
+            if(this.effectProps)
+            {
+                if(this.effectProps.EffectLst)
+                {
+                    if(this.effectProps.EffectLst.outerShdw)
+                    {
+                        var oEffectProps = this.effectProps.createDuplicate();
+                        oEffectProps.EffectLst.outerShdw = null;
+                        this.setEffectPr(oEffectProps);
+                    }
+                }
+            }
         }
     },
 
@@ -5696,14 +7553,6 @@ CSpPr.prototype =
     Read_FromBinary2: function (r)
     {
         this.Id = r.GetString2();
-    },
-
-    checkFromSerialize: function()
-    {
-        if(this.parent && this.parent.deleteBFromSerialize)
-        {
-            this.parent.deleteBFromSerialize();
-        }
     },
 
     setParent: function(pr)
@@ -5754,6 +7603,12 @@ CSpPr.prototype =
         }
     },
 
+    setEffectPr: function(pr)
+    {
+        History.Add(new CChangesDrawingsObjectNoId(this, AscDFH.historyitem_SpPr_SetEffectPr, this.effectProps,  pr));
+        this.effectProps = pr;
+    },
+
     handleUpdatePosition: function()
     {
         if(this.parent && this.parent.handleUpdatePosition)
@@ -5762,11 +7617,11 @@ CSpPr.prototype =
         }
     },
 
-    handleUpdateExtents: function()
+    handleUpdateExtents: function(bExtX)
     {
         if(this.parent && this.parent.handleUpdateExtents)
         {
-            this.parent.handleUpdateExtents();
+            this.parent.handleUpdateExtents(bExtX);
         }
     },
 
@@ -5868,23 +7723,29 @@ ClrScheme.prototype =
 {
     isIdentical: function(clrScheme)
     {
-        if(clrScheme == null)
-        {
-            return false;
-        }
         if(!(clrScheme instanceof ClrScheme) )
         {
             return false;
         }
-        if(clrScheme.name != this.name)
+        if(clrScheme.name !== this.name)
         {
             return false;
         }
         for(var _clr_index = g_clr_MIN; _clr_index <= g_clr_MAX; ++_clr_index)
         {
-            if(this.colors[_clr_index] != clrScheme.colors[_clr_index])
+            if(this.colors[_clr_index])
             {
-                return false;
+                if(!this.colors[_clr_index].IsIdentical(clrScheme.colors[_clr_index]))
+                {
+                    return false;
+                }
+            }
+            else
+            {
+                if(clrScheme.colors[_clr_index])
+                {
+                    return false;
+                }
             }
         }
         return true;
@@ -5896,7 +7757,10 @@ ClrScheme.prototype =
         _duplicate.name = this.name;
         for(var _clr_index = 0; _clr_index <= this.colors.length; ++_clr_index)
         {
-            _duplicate.colors[_clr_index] = this.colors[_clr_index];
+            if(this.colors[_clr_index])
+            {
+                _duplicate.colors[_clr_index] = this.colors[_clr_index].createDuplicate();
+            }
         }
         return _duplicate;
     },
@@ -5977,7 +7841,7 @@ ClrMap.prototype =
         var _copy = new ClrMap();
         for(var _color_index = g_clr_MIN; _color_index <= this.color_map.length; ++_color_index)
         {
-            _copy.color_map[_color_index] = this.color_map[_color_index];
+            _copy.setClr(_color_index, this.color_map[_color_index]);
         }
         return _copy;
     },
@@ -6045,7 +7909,7 @@ ExtraClrScheme.prototype =
 
     setClrScheme: function(pr)
     {
-        History.Add(new CChangesDrawingsObject(this, AscDFH.historyitem_ExtraClrScheme_SetClrScheme, this.clrScheme,  pr));
+        History.Add(new CChangesDrawingsObjectNoId(this, AscDFH.historyitem_ExtraClrScheme_SetClrScheme, this.clrScheme,  pr));
         this.clrScheme = pr;
     },
 
@@ -6053,6 +7917,20 @@ ExtraClrScheme.prototype =
     {
         History.Add(new CChangesDrawingsObject(this, AscDFH.historyitem_ExtraClrScheme_SetClrMap, this.clrMap,  pr));
         this.clrMap = pr;
+    },
+
+    createDuplicate: function()
+    {
+        var ret = new ExtraClrScheme();
+        if(this.clrScheme)
+        {
+            ret.setClrScheme(this.clrScheme.createDuplicate())
+        }
+        if(this.clrMap)
+        {
+            ret.setClrMap(this.clrMap.createDuplicate());
+        }
+        return ret;
     },
 
     Write_ToBinary2: function (w)
@@ -6066,6 +7944,8 @@ ExtraClrScheme.prototype =
         this.Id = r.GetString2();
     }
 };
+
+drawingConstructorsMap[AscDFH.historyitem_ExtraClrScheme_SetClrScheme                 ] = ClrScheme;
 
 function FontCollection(fontScheme)
 {
@@ -6169,13 +8049,13 @@ FontScheme.prototype =
     createDuplicate: function()
     {
         var oCopy = new FontScheme();
-        oCopy.majorFont.latin = this.majorFont.latin;
-        oCopy.majorFont.ea = this.majorFont.ea;
-        oCopy.majorFont.cs = this.majorFont.cs;
+        oCopy.majorFont.setLatin(this.majorFont.latin);
+        oCopy.majorFont.setEA(this.majorFont.ea);
+        oCopy.majorFont.setCS(this.majorFont.cs);
 
-        oCopy.minorFont.latin = this.minorFont.latin;
-        oCopy.minorFont.ea = this.minorFont.ea;
-        oCopy.minorFont.cs = this.minorFont.cs;
+        oCopy.minorFont.setLatin(this.minorFont.latin);
+        oCopy.minorFont.setEA(this.minorFont.ea);
+        oCopy.minorFont.setCS(this.minorFont.cs);
         return oCopy;
     },
 
@@ -6444,9 +8324,25 @@ CTheme.prototype =
     createDuplicate: function()
     {
         var oTheme = new CTheme();
-        oTheme.changeColorScheme(this.themeElements.clrScheme.createDuplicate());
+        oTheme.setName(this.name);
+        oTheme.setColorScheme(this.themeElements.clrScheme.createDuplicate());
         oTheme.setFontScheme(this.themeElements.fontScheme.createDuplicate());
         oTheme.setFormatScheme(this.themeElements.fmtScheme.createDuplicate());
+        if(this.spDef){
+            oTheme.setSpDef(this.spDef.createDuplicate());
+        }
+        if(this.lnDef)
+        {
+            oTheme.setLnDef(this.lnDef.createDuplicate());
+        }
+        if(this.txDef)
+        {
+            oTheme.setTxDef(this.txDef.createDuplicate());
+        }
+        for(var i = 0; i < this.extraClrSchemeLst.length; ++i)
+        {
+            oTheme.addExtraClrSceme(this.extraClrSchemeLst[i].createDuplicate());
+        }
         return oTheme;
     },
 
@@ -6511,7 +8407,35 @@ CTheme.prototype =
         return new CLn();
     },
 
+    getExtraClrScheme: function(sName)
+    {
+        for(var i = 0; i < this.extraClrSchemeLst.length; ++i)
+        {
+            if(this.extraClrSchemeLst[i].clrScheme && this.extraClrSchemeLst[i].clrScheme.name === sName)
+            {
+                return this.extraClrSchemeLst[i].clrScheme.createDuplicate();
+            }
+        }
+        return null;
+    },
+
     changeColorScheme: function(clrScheme)
+    {
+        var oCurClrScheme = this.themeElements.clrScheme;
+        this.setColorScheme(clrScheme);
+        if(!AscCommon.getColorSchemeByName(oCurClrScheme.name))
+        {
+            var oExtraClrScheme = new ExtraClrScheme();
+            if(this.clrMap)
+            {
+                oExtraClrScheme.setClrMap(this.clrMap.createDuplicate());
+            }
+            oExtraClrScheme.setClrScheme(oCurClrScheme.createDuplicate());
+            this.addExtraClrSceme(oExtraClrScheme, 0);
+        }
+    },
+
+    setColorScheme: function(clrScheme)
     {
         History.Add(new CChangesDrawingsObjectNoId(this, AscDFH.historyitem_ThemeSetColorScheme, this.themeElements.clrScheme,  clrScheme));
         this.themeElements.clrScheme = clrScheme;
@@ -6528,6 +8452,45 @@ CTheme.prototype =
         History.Add(new CChangesDrawingsObjectNoId(this, AscDFH.historyitem_ThemeSetFmtScheme, this.themeElements.fmtScheme,  fmtScheme));
         this.themeElements.fmtScheme = fmtScheme;
     },
+
+    setName: function(pr)
+    {
+        History.Add(new CChangesDrawingsString(this, AscDFH.historyitem_ThemeSetName, this.name,  pr));
+        this.name = pr;
+    },
+
+    setIsThemeOverride: function(pr)
+    {
+        History.Add(new CChangesDrawingsBool(this, AscDFH.historyitem_ThemeSetIsThemeOverride, this.isThemeOverride,  pr));
+        this.isThemeOverride = pr;
+    },
+
+
+    setSpDef: function(pr){
+        History.Add(new CChangesDrawingsObject(this, AscDFH.historyitem_ThemeSetSpDef, this.spDef, pr));
+        this.spDef = pr;
+    },
+    setLnDef: function(pr){
+        History.Add(new CChangesDrawingsObject(this, AscDFH.historyitem_ThemeSetLnDef, this.spDef, pr));
+        this.lnDef = pr;
+    },
+    setTxDef: function(pr){
+        History.Add(new CChangesDrawingsObject(this, AscDFH.historyitem_ThemeSetTxDef, this.spDef, pr));
+        this.txDef = pr;
+    },
+
+
+    addExtraClrSceme: function(pr, idx)
+    {
+        var pos;
+        if(AscFormat.isRealNumber(idx))
+            pos = idx;
+        else
+            pos = this.extraClrSchemeLst.length;
+        History.Add(new CChangesDrawingsContent(this, AscDFH.historyitem_ThemeAddExtraClrScheme, pos, [pr], true));
+        this.extraClrSchemeLst.splice(pos, 0, pr);
+    },
+
 
     GetWordDrawingObjects: function(){
         var oRet = typeof editor !== "undefined" &&
@@ -6579,10 +8542,10 @@ CTheme.prototype =
 
 function HF()
 {
-    this.dt     = true;
-    this.ftr    = true;
-    this.hdr    = true;
-    this.sldNum = true;
+    this.dt     = null;
+    this.ftr    = null;
+    this.hdr    = null;
+    this.sldNum = null;
 
     this.Id = g_oIdCounter.Get_NewId();
     g_oTableId.Add(this, this.Id);
@@ -6601,6 +8564,24 @@ HF.prototype =
     getObjectType: function()
     {
         return AscDFH.historyitem_type_HF;
+    },
+
+    createDuplicate: function()
+    {
+        var ret = new HF();
+        if(ret.dt !== this.dt){
+            ret.setDt(this.dt);
+        }
+        if(ret.ftr !== this.ftr){
+            ret.setFtr(this.ftr);
+        }
+        if(ret.hdr !== this.hdr){
+            ret.setHdr(this.hdr);
+        }
+        if(ret.sldNum !== this.sldNum){
+            ret.setSldNum(this.sldNum);
+        }
+        return ret;
     },
 
     setDt: function(pr)
@@ -6851,6 +8832,26 @@ CTextStyles.prototype =
         return this.Id;
     },
 
+    createDuplicate: function()
+    {
+        var ret = new CTextStyles();
+        if(isRealObject(this.titleStyle))
+        {
+            ret.titleStyle = this.titleStyle.createDuplicate();
+        }
+
+        if(isRealObject(this.bodyStyle))
+        {
+            ret.bodyStyle = this.bodyStyle.createDuplicate();
+        }
+
+        if(isRealObject(this.otherStyle))
+        {
+            ret.otherStyle = this.otherStyle.createDuplicate();
+        }
+        return ret;
+    },
+
     Refresh_RecalcData: function()
     {},
 
@@ -7045,76 +9046,6 @@ _global_layout_summs_array["_" + _ph_summ__two_obj_and_two_tx] = nSldLtTTwoTxTwo
 _global_layout_summs_array["_" + _ph_summ__tx] = nSldLtTTx;
 _global_layout_summs_array["_" + _ph_summ__tx_and_clip_art] = nSldLtTTxAndClipArt;
 
-
-// ----------------------------------
-
-// NOTEMASTER -----------------------
-
-function NoteMaster()
-{
-    this.cSld = new CSld();
-    this.clrMap = new ClrMap();
-
-    this.hf = new HF();
-    this.notesStyle = null;
-
-    // pointers
-    this.Theme = null;
-    this.TableStyles = null;
-
-}
-
-NoteMaster.prototype =
-{
-    Get_Id: function()
-    {
-        return this.Id;
-    } ,
-
-    Refresh_RecalcData: function()
-    {},
-
-    Calculate: function()
-    {
-        // нужно пробежаться по всем шейпам:
-        // учесть тему во всех заливках
-        // учесть тему во всех текстовых настройках,
-    }
-};
-
-// ----------------------------------
-
-// NOTE -----------------------------
-
-function NoteSlide()
-{
-    this.cSld = new CSld();
-    this.clrMap = null; // override ClrMap
-
-    this.showMasterPhAnim = false;
-    this.showMasterSp = false;
-}
-
-NoteSlide.prototype =
-{
-    Get_Id: function()
-    {
-        return this.Id;
-    },
-
-    Refresh_RecalcData: function()
-    {},
-
-    // pointers
-    Calculate: function()
-    {
-        // нужно пробежаться по всем шейпам:
-        // учесть тему во всех заливках
-        // учесть тему во всех текстовых настройках,
-    }
-};
-
-// ----------------------------------
 
 // SLIDE ----------------------------
 function redrawSlide(slide, presentation, arrInd, pos,  direction, arr_slides)
@@ -7471,7 +9402,7 @@ CBodyPr.prototype =
         w.WriteBool(flag);
         if(flag)
         {
-            w.WriteBool(this.spcCol);
+            w.WriteDouble(this.spcCol);
         }
 
         flag = this.spcFirstLastPara != null;
@@ -7622,7 +9553,7 @@ CBodyPr.prototype =
         flag = r.GetBool();
         if(flag)
         {
-            this.spcCol = r.GetBool();
+            this.spcCol = r.GetDouble();
         }
 
         flag = r.GetBool();
@@ -7940,7 +9871,7 @@ CBodyPr.prototype =
         w.WriteBool(flag);
         if(flag)
         {
-            w.WriteBool(this.spcCol);
+            w.WriteDouble(this.spcCol);
         }
 
         flag = this.spcFirstLastPara != null;
@@ -8089,7 +10020,7 @@ CBodyPr.prototype =
         flag = r.GetBool();
         if(flag)
         {
-            this.spcCol = r.GetBool();
+            this.spcCol = r.GetDouble();
         }
 
         flag = r.GetBool();
@@ -8304,16 +10235,16 @@ CBullet.prototype =
         return this.bulletType != null && this.bulletType.type != null;
     },
 
-    getPresentationBullet: function()
+    getPresentationBullet: function(theme, color)
     {
         var para_pr = new CParaPr();
         para_pr.Bullet = this;
-        return para_pr.Get_PresentationBullet();
+        return para_pr.Get_PresentationBullet(theme, color);
     },
 
-    getBulletType: function()
+    getBulletType: function(theme, color)
     {
-        return this.getPresentationBullet().m_nType;
+        return this.getPresentationBullet(theme, color).m_nType;
     },
 
     Write_ToBinary: function(w)
@@ -8371,13 +10302,19 @@ CBullet.prototype =
             this.bulletType = new CBulletType();
             this.bulletType.Read_FromBinary(r);
         }
+    },
+
+    Get_AllFontNames: function(AllFonts){
+        if(this.bulletTypeface && typeof this.bulletTypeface.typeface === "string" && this.bulletTypeface.typeface.length > 0){
+            AllFonts[this.bulletTypeface.typeface] = true;
+        }
     }
 
 };
 
 function CBulletColor()
 {
-    this.type = AscFormat.BULLET_TYPE_COLOR_NONE;
+    this.type = AscFormat.BULLET_TYPE_COLOR_CLRTX;
     this.UniColor = null;
 
 }
@@ -8695,12 +10632,21 @@ TextListStyle.prototype =
 
     Document_Get_AllFontNames: function(AllFonts){
         for(var i = 0; i < 10; ++i){
-            if(this.levels[i] && this.levels[i].DefaultRunPr){
-                this.levels[i].DefaultRunPr.Document_Get_AllFontNames(AllFonts);
+            if(this.levels[i]){
+                if(this.levels[i].DefaultRunPr){
+                    this.levels[i].DefaultRunPr.Document_Get_AllFontNames(AllFonts);
+                }
+                if(this.levels[i].Bullet){
+                    this.levels[i].Bullet.Get_AllFontNames(AllFonts);
+                }
             }
         }
     }
 };
+
+
+
+
 
 // DEFAULT OBJECTS
 function GenerateDefaultTheme(presentation, opt_fontName)
@@ -8841,6 +10787,9 @@ function GenerateDefaultSlide(layout)
     var slide = new Slide(layout.Master.presentation, layout, 0);
     slide.Master = layout.Master;
     slide.Theme = layout.Master.Theme;
+    slide.setNotes(AscCommonSlide.CreateNotes());
+    slide.notes.setNotesMaster(layout.Master.presentation.notesMasters[0]);
+    slide.notes.setSlide(slide);
     return slide;
 }
 
@@ -9007,6 +10956,12 @@ function CreateAscFill(unifill)
                 ret.fill.GradType = c_oAscFillGradType.GRAD_PATH;
                 ret.fill.PathType = 0;
             }
+            else
+            {
+                ret.fill.GradType = c_oAscFillGradType.GRAD_LINEAR;
+                ret.fill.LinearAngle = 0;
+                ret.fill.LinearScale = false;
+            }
 
             break;
         }
@@ -9094,9 +11049,17 @@ function CorrectUniFill(asc_fill, unifill, editorId)
 
                 var tile = _fill.type;
                 if (tile == c_oAscFillBlipType.STRETCH)
+                {
                     ret.fill.tile = null;
+                    ret.fill.srcRect = null;
+                    ret.fill.stretch = true;
+                }
                 else if (tile == c_oAscFillBlipType.TILE)
+                {
                     ret.fill.tile = new CBlipFillTile();
+                    ret.fill.stretch = false;
+                    ret.fill.srcRect = null;
+                }
                 break;
             }
             case c_oAscFill.FILL_TYPE_PATT:
@@ -9218,8 +11181,11 @@ function CorrectUniFill(asc_fill, unifill, editorId)
                     var _angle = _fill.LinearAngle;
                     var _scale = _fill.LinearScale;
 
-                    if (!ret.fill.lin)
+                    if (!ret.fill.lin){
                         ret.fill.lin = new GradLin();
+                        ret.fill.lin.angle = 0;
+                        ret.fill.lin.scale = false;
+                    }
 
                     if (undefined != _angle)
                         ret.fill.lin.angle = _angle;
@@ -9247,7 +11213,35 @@ function CorrectUniFill(asc_fill, unifill, editorId)
 
     var _alpha = asc_fill.transparent;
     if (null != _alpha)
-        ret.transparent = _alpha;
+	{
+		ret.transparent = _alpha;
+		
+		
+	}
+	
+	if(ret.transparent != null)
+	{
+		
+		if(ret.fill && ret.fill.type === c_oAscFill.FILL_TYPE_BLIP)
+		{
+			
+			for(var i = 0; i < ret.fill.Effects.length; ++i)
+			{
+				if(ret.fill.Effects[i].Type = EFFECT_TYPE_ALPHAMODFIX)
+				{
+					ret.fill.Effects[i].amt = ((ret.transparent * 100000 / 255) >> 0);
+					break;
+				}  
+			}
+			if(i === ret.fill.Effects.length)
+			{
+				var oEffect = new CAlphaModFix();
+				oEffect.amt = ((ret.transparent * 100000 / 255) >> 0);
+				ret.fill.Effects.push(oEffect);
+			}
+		}
+	}
+        
 
     return ret;
 }
@@ -9456,7 +11450,7 @@ function CreateAscShapeProp(shape)
     if(shape.textBoxContent)
     {
         var body_pr = shape.bodyPr;
-        paddings = new asc_CPaddings();
+        paddings = new Asc.asc_CPaddings();
         if(typeof body_pr.lIns === "number")
             paddings.Left = body_pr.lIns;
         else
@@ -9503,8 +11497,12 @@ function CreateAscShapePropFromProp(shapeProp)
         obj.canFill = shapeProp.canFill;
     }
     obj.bFromChart = shapeProp.bFromChart;
+    obj.bFromImage = shapeProp.bFromImage;
     obj.w = shapeProp.w;
     obj.h = shapeProp.h;
+    obj.rot = shapeProp.rot;
+    obj.flipH = shapeProp.flipH;
+    obj.flipV = shapeProp.flipV;
     obj.vert = shapeProp.vert;
     obj.verticalTextAlign = shapeProp.verticalTextAlign;
     if(shapeProp.textArtProperties)
@@ -9513,6 +11511,13 @@ function CreateAscShapePropFromProp(shapeProp)
     }
     obj.title = shapeProp.title;
     obj.description = shapeProp.description;
+    obj.columnNumber = shapeProp.columnNumber;
+    obj.columnSpace = shapeProp.columnSpace;
+    obj.shadow = shapeProp.shadow;
+    if(shapeProp.signatureId)
+    {
+        obj.signatureId = shapeProp.signatureId;
+    }
     return obj;
 }
 
@@ -9671,11 +11676,14 @@ function CorrectUniColor(asc_color, unicolor, flag)
 
 
     /* Common Functions For Builder*/
-    function builder_CreateShape(sType, nWidth, nHeight, oFill, oStroke, oParent, oTheme, oDrawingDocument, bWord){
+    function builder_CreateShape(sType, nWidth, nHeight, oFill, oStroke, oParent, oTheme, oDrawingDocument, bWord, worksheet){
         var oShapeTrack = new AscFormat.NewShapeTrack(sType, 0, 0, oTheme, null, null, null, 0);
         oShapeTrack.track({}, nWidth, nHeight);
         var oShape = oShapeTrack.getShape(bWord === true, oDrawingDocument, null);
         oShape.setParent(oParent);
+        if(worksheet){
+            oShape.setWorksheet(worksheet);
+        }
         if(bWord){
             oShape.createTextBoxContent();
         }
@@ -9688,7 +11696,7 @@ function CorrectUniColor(asc_color, unicolor, flag)
     }
 
     function builder_CreateChart(nW, nH, sType, aCatNames, aSeriesNames, aSeries, nStyleIndex){
-        var settings = new AscCommon.asc_ChartSettings();
+        var settings = new Asc.asc_ChartSettings();
         switch (sType)
         {
             case "bar" :
@@ -9916,7 +11924,7 @@ function CorrectUniColor(asc_color, unicolor, flag)
 
     function builder_CreateGradientStop(oUniColor, nPos){
         var Gs = new AscFormat.CGs();
-        Gs.pos = pos;
+        Gs.pos = nPos;
         Gs.color = oUniColor;
         return Gs;
     }
@@ -9934,7 +11942,12 @@ function CorrectUniColor(asc_color, unicolor, flag)
     function builder_CreateLinearGradient(aGradientStop, Angle){
         var oUniFill = builder_CreateGradient(aGradientStop);
         oUniFill.fill.lin = new AscFormat.GradLin();
-        oUniFill.fill.lin.angle = Angle;
+        if(!AscFormat.isRealNumber(Angle)){
+            oUniFill.fill.lin.angle = 0;
+        }
+        else{
+            oUniFill.fill.lin.angle = Angle;
+        }
         return oUniFill;
     }
 
@@ -9948,8 +11961,8 @@ function CorrectUniColor(asc_color, unicolor, flag)
         var oUniFill = new AscFormat.CUniFill();
         oUniFill.fill = new AscFormat.CPattFill();
         oUniFill.fill.ftype = AscCommon.global_hatch_offsets[sPatternType];
-        oUniFill.fill.fgClr = FgColor.Unicolor;
-        oUniFill.fill.bgClr = BgColor.Unicolor;
+        oUniFill.fill.fgClr = FgColor && FgColor.Unicolor;
+        oUniFill.fill.bgClr = BgColor && BgColor.Unicolor;
         return oUniFill;
     }
 
@@ -9987,7 +12000,7 @@ function CorrectUniColor(asc_color, unicolor, flag)
             var oTextBody = AscFormat.CreateTextBodyFromString(sTitle, oDrawingDocument, oTitle.tx);
             if(AscFormat.isRealNumber(nFontSize)){
                 oTextBody.content.Set_ApplyToAll(true);
-                oTextBody.content.Paragraph_Add(new ParaTextPr({ FontSize : nFontSize, Bold: bIsBold}));
+                oTextBody.content.AddToParagraph(new ParaTextPr({ FontSize : nFontSize, Bold: bIsBold}));
                 oTextBody.content.Set_ApplyToAll(false);
             }
             oTitle.tx.setRich(oTextBody);
@@ -10006,7 +12019,7 @@ function CorrectUniColor(asc_color, unicolor, flag)
             var oTextBody = AscFormat.CreateTextBodyFromString(sTitle, oChartSpace.getDrawingDocument(), oTitle.tx);
             if(AscFormat.isRealNumber(nFontSize)){
                 oTextBody.content.Set_ApplyToAll(true);
-                oTextBody.content.Paragraph_Add(new ParaTextPr({ FontSize : nFontSize, Bold: bIsBold}));
+                oTextBody.content.AddToParagraph(new ParaTextPr({ FontSize : nFontSize, Bold: bIsBold}));
                 oTextBody.content.Set_ApplyToAll(false);
             }
             oTitle.tx.setRich(oTextBody);
@@ -10064,7 +12077,7 @@ function CorrectUniColor(asc_color, unicolor, flag)
             if(verAxis)
             {
                 if(!verAxis.scaling)
-                    verAxis.setScaling(new CScaling());
+                    verAxis.setScaling(new AscFormat.CScaling());
                 var scaling = verAxis.scaling;
                 if(bIsMinMax){
                     scaling.setOrientation(AscFormat.ORIENTATION_MIN_MAX);
@@ -10081,7 +12094,7 @@ function CorrectUniColor(asc_color, unicolor, flag)
             var horAxis = oChartSpace.chart.plotArea.getHorizontalAxis();
             if(horAxis){
                 if(!horAxis.scaling)
-                    horAxis.setScaling(new CScaling());
+                    horAxis.setScaling(new AscFormat.CScaling());
                 var scaling = horAxis.scaling;
                 if(bIsMinMax){
                     scaling.setOrientation(AscFormat.ORIENTATION_MIN_MAX);
@@ -10181,6 +12194,56 @@ function CorrectUniColor(asc_color, unicolor, flag)
 
     function builder_SetVerAxisFontSize(oChartSpace, nFontSize){
         builder_SetObjectFontSize(oChartSpace.chart.plotArea.getVerticalAxis(), nFontSize, oChartSpace.getDrawingDocument());
+    }
+
+
+    function builder_SetShowPointDataLabel(oChartSpace, nSeriesIndex, nPointIndex, bShowSerName, bShowCatName, bShowVal, bShowPerecent){
+        if(oChartSpace && oChartSpace.chart && oChartSpace.chart.plotArea && oChartSpace.chart.plotArea.charts[0]){
+            var oChart =  oChartSpace.chart.plotArea.charts[0];
+            var bPieChart = oChart.getObjectType() === AscDFH.historyitem_type_PieChart || oChart.getObjectType() === AscDFH.historyitem_type_DoughnutChart;
+            var ser = oChart.series[nSeriesIndex];
+            if(ser){
+                {
+                    if(!ser.dLbls){
+                        if(oChart.dLbls){
+                            ser.setDLbls(oChart.dLbls.createDuplicate());
+                        }
+                        else{
+                            ser.setDLbls(new AscFormat.CDLbls());
+                            ser.dLbls.setSeparator(",");
+                            ser.dLbls.setShowSerName(false);
+                            ser.dLbls.setShowCatName(false);
+                            ser.dLbls.setShowVal(false);
+                            ser.dLbls.setShowLegendKey(false);
+                            if(bPieChart){
+                                ser.dLbls.setShowPercent(false);
+                            }
+                            ser.dLbls.setShowBubbleSize(false);
+                        }
+                    }
+                    var dLbl  = ser.dLbls.findDLblByIdx(nPointIndex);
+                    if(!dLbl)
+                    {
+                        dLbl = new AscFormat.CDLbl();
+                        dLbl.setIdx(nPointIndex);
+                        if(ser.dLbls.txPr)
+                        {
+                            dLbl.merge(ser.dLbls);
+                        }
+                        ser.dLbls.addDLbl(dLbl);
+                    }
+                    dLbl.setSeparator(",");
+                    dLbl.setShowSerName(true == bShowSerName);
+                    dLbl.setShowCatName(true == bShowCatName);
+                    dLbl.setShowVal(true == bShowVal);
+                    dLbl.setShowLegendKey(false);
+                    if(bPieChart){
+                        dLbl.setShowPercent(true === bShowPerecent);
+                    }
+                    dLbl.setShowBubbleSize(false);
+                }
+            }
+        }
     }
 
     function builder_SetShowDataLabels(oChartSpace, bShowSerName, bShowCatName, bShowVal, bShowPerecent){
@@ -10386,6 +12449,7 @@ function CorrectUniColor(asc_color, unicolor, flag)
     window['AscFormat'].CSchemeColor = CSchemeColor;
     window['AscFormat'].CUniColor = CUniColor;
     window['AscFormat'].CreateUniColorRGB = CreateUniColorRGB;
+    window['AscFormat'].CreateUniColorRGB2 = CreateUniColorRGB2;
     window['AscFormat'].CreteSolidFillRGB = CreteSolidFillRGB;
     window['AscFormat'].CreateSolidFillRGBA = CreateSolidFillRGBA;
     window['AscFormat'].CSrcRect = CSrcRect;
@@ -10417,6 +12481,8 @@ function CorrectUniColor(asc_color, unicolor, flag)
     window['AscFormat'].CShapeStyle = CShapeStyle;
     window['AscFormat'].CreateDefaultShapeStyle = CreateDefaultShapeStyle;
     window['AscFormat'].CXfrm = CXfrm;
+    window['AscFormat'].CEffectProperties = CEffectProperties;
+    window['AscFormat'].CEffectLst = CEffectLst;
     window['AscFormat'].CSpPr = CSpPr;
     window['AscFormat'].ClrScheme = ClrScheme;
     window['AscFormat'].ClrMap = ClrMap;
@@ -10458,6 +12524,9 @@ function CorrectUniColor(asc_color, unicolor, flag)
     window['AscFormat'].CreateUnifillFromAscColor = CreateUnifillFromAscColor;
     window['AscFormat'].CorrectUniColor = CorrectUniColor;
     window['AscFormat'].deleteDrawingBase = deleteDrawingBase;
+    window['AscFormat'].CNvUniSpPr = CNvUniSpPr;
+    window['AscFormat'].UniMedia = UniMedia;
+    window['AscFormat'].CT_Hyperlink = CT_Hyperlink;
 
 
     window['AscFormat'].builder_CreateShape = builder_CreateShape;
@@ -10493,6 +12562,7 @@ function CorrectUniColor(asc_color, unicolor, flag)
     window['AscFormat'].builder_SetVerAxisMinorGridlines = builder_SetVerAxisMinorGridlines;
     window['AscFormat'].builder_SetHorAxisFontSize = builder_SetHorAxisFontSize;
     window['AscFormat'].builder_SetVerAxisFontSize = builder_SetVerAxisFontSize;
+    window['AscFormat'].builder_SetShowPointDataLabel = builder_SetShowPointDataLabel;
 
 
 
@@ -10604,6 +12674,43 @@ function CorrectUniColor(asc_color, unicolor, flag)
     window['AscFormat'].BULLET_TYPE_BULLET_CHAR = BULLET_TYPE_BULLET_CHAR;
     window['AscFormat'].BULLET_TYPE_BULLET_AUTONUM = BULLET_TYPE_BULLET_AUTONUM;
     window['AscFormat'].BULLET_TYPE_BULLET_BLIP = BULLET_TYPE_BULLET_BLIP;
+
+    window['AscFormat'].AUDIO_CD = AUDIO_CD;
+    window['AscFormat'].WAV_AUDIO_FILE = WAV_AUDIO_FILE;
+    window['AscFormat'].AUDIO_FILE = AUDIO_FILE;
+    window['AscFormat'].VIDEO_FILE = VIDEO_FILE;
+    window['AscFormat'].QUICK_TIME_FILE = QUICK_TIME_FILE;
+    window['AscFormat'].fCreateEffectByType = fCreateEffectByType;
+        window['AscFormat'].COuterShdw = COuterShdw;
+        window['AscFormat'].CGlow = CGlow;
+        window['AscFormat'].CDuotone = CDuotone;
+        window['AscFormat'].CXfrmEffect = CXfrmEffect;
+        window['AscFormat'].CBlur = CBlur;
+        window['AscFormat'].CPrstShdw = CPrstShdw;
+        window['AscFormat'].CInnerShdw = CInnerShdw;
+        window['AscFormat'].CReflection = CReflection;
+        window['AscFormat'].CSoftEdge = CSoftEdge;
+        window['AscFormat'].CFillOverlay = CFillOverlay;
+        window['AscFormat'].CAlphaCeiling = CAlphaCeiling;
+        window['AscFormat'].CAlphaFloor = CAlphaFloor;
+        window['AscFormat'].CTintEffect = CTintEffect;
+        window['AscFormat'].CRelOff = CRelOff;
+        window['AscFormat'].CLumEffect = CLumEffect;
+        window['AscFormat'].CHslEffect = CHslEffect;
+        window['AscFormat'].CGrayscl = CGrayscl;
+        window['AscFormat'].CEffectElement = CEffectElement;
+        window['AscFormat'].CAlphaRepl = CAlphaRepl;
+        window['AscFormat'].CAlphaOutset = CAlphaOutset;
+        window['AscFormat'].CAlphaModFix = CAlphaModFix;
+        window['AscFormat'].CAlphaBiLevel = CAlphaBiLevel;
+        window['AscFormat'].CBiLevel = CBiLevel;
+        window['AscFormat'].CEffectContainer = CEffectContainer;
+        window['AscFormat'].CFillEffect = CFillEffect;
+        window['AscFormat'].CClrRepl = CClrRepl;
+        window['AscFormat'].CClrChange = CClrChange;
+        window['AscFormat'].CAlphaInv = CAlphaInv;
+        window['AscFormat'].CAlphaMod = CAlphaMod;
+        window['AscFormat'].CBlend = CBlend;
 
     window['AscFormat'].DEFAULT_COLOR_MAP = GenerateDefaultColorMap();
 })(window);

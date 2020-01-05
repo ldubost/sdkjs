@@ -1,5 +1,5 @@
 /*
- * (c) Copyright Ascensio System SIA 2010-2017
+ * (c) Copyright Ascensio System SIA 2010-2019
  *
  * This program is a free software product. You can redistribute it and/or
  * modify it under the terms of the GNU Affero General Public License (AGPL)
@@ -12,8 +12,8 @@
  * warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR  PURPOSE. For
  * details, see the GNU AGPL at: http://www.gnu.org/licenses/agpl-3.0.html
  *
- * You can contact Ascensio System SIA at Lubanas st. 125a-25, Riga, Latvia,
- * EU, LV-1021.
+ * You can contact Ascensio System SIA at 20A-12 Ernesta Birznieka-Upisha
+ * street, Riga, Latvia, EU, LV-1050.
  *
  * The  interactive user interfaces in modified source and object code versions
  * of the Program must display Appropriate Legal Notices, as required under
@@ -31,7 +31,6 @@
  */
 
 var editor = undefined;
-var window = {};
 var navigator = {};
 navigator.userAgent = "chrome";
 window.navigator = navigator;
@@ -285,10 +284,6 @@ document.createComment = function() { return undefined; };
 document.documentElement = _null_object;
 document.body = _null_object;
 
-var native = CreateNativeEngine();
-window.native = native;
-window["native"] = native;
-
 var _api = null;
 
 window.NativeSupportTimeouts = true;
@@ -300,7 +295,7 @@ function setTimeout(func, interval) {
 
     var id = window["native"]["GenerateTimeoutId"](interval);
     window.NativeTimeoutObject["" + id] = {"func": func, repeat: false};
-   
+
     return id;
 }
 
@@ -318,7 +313,7 @@ function setInterval(func, interval) {
 
     var id = window["native"]["GenerateTimeoutId"](interval);
     window.NativeTimeoutObject["" + id] = {func: func, repeat: true, interval: interval};
-    
+
     return id;
 }
 function clearInterval(id) {
@@ -334,26 +329,26 @@ function offline_timeoutFire(id) {
         return;
 
     var prop = "" + id;
-    
+
     if (undefined === window.NativeTimeoutObject[prop]) {
         return;
     }
-    
+
     var func = window.NativeTimeoutObject[prop].func;
     var repeat = window.NativeTimeoutObject[prop].repeat;
     var interval = window.NativeTimeoutObject[prop].interval;
-   
+
     window.NativeTimeoutObject[prop] = undefined;
 
     if (!func)
         return;
 
     func.call(null);
-    
+
     if (repeat) {
         setInterval(func, interval);
     }
-    
+
     func = null;
 }
 
@@ -363,7 +358,7 @@ window.clearInterval = clearInterval;
 window.setInterval = setInterval;
 
 var console = {
-    log : function(param) { window.native.consoleLog(param); },
+    log : function(param) { window["native"]["consoleLog"](param); },
     time : function (param) {},
     timeEnd : function (param) {}
 };
