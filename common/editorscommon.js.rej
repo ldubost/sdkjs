@@ -1,0 +1,10 @@
+***************
+*** 4859,4862 ****
+      	// сейва не будет. сами посылаем callback
+          window["AscDesktopEditor"]["OnSave"]();
+      }
+- };--- 4863,4866 ----
+      	// сейва не будет. сами посылаем callback
+          window["AscDesktopEditor"]["OnSave"]();
+      }
++ };

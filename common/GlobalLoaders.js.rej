@@ -1,0 +1,34 @@
+***************
+*** 494,502 ****
+                  }
+              }
+          };
+-         
+          this.LoadDocumentImages = function(_images, isUrl)
+          {
+              // сначала заполним массив
+              if (this.ThemeLoader == null)
+                  this.Api.asyncImagesDocumentStartLoaded();
+--- 494,515 ----
+                  }
+              }
+          };
++ 
++         this.LoadDocumentImagesCallback = function() {
++ 
++            if (this.ThemeLoader == null)
++               this.Api.asyncImagesDocumentEndLoaded();
++           else
++               this.ThemeLoader.asyncImagesEndLoaded();
++         }
++ 
+          this.LoadDocumentImages = function(_images, isUrl)
+          {
++             // CryptPad added logging
++             console.log("Loading images");
++             console.log(_images);
++             // CryptPad end logging
++ 
+              // сначала заполним массив
+              if (this.ThemeLoader == null)
+                  this.Api.asyncImagesDocumentStartLoaded();

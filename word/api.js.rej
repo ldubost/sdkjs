@@ -1,0 +1,10 @@
+***************
+*** 10074,10077 ****
+          AscCommon.g_font_loader.LoadDocumentFonts2(_fonts);
+  	};
+  
+- })(window, window.document);--- 10082,10085 ----
+          AscCommon.g_font_loader.LoadDocumentFonts2(_fonts);
+  	};
+  
++ })(window, window.document);
